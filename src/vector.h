@@ -2,6 +2,9 @@
 #define STA_VECTOR
 
 #include "common.h"
+
+class Mat43 {};
+
 class Mat33 {
 public:
   union {
