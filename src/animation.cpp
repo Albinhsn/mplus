@@ -13,6 +13,67 @@
     ADVANCE(buffer);                                                                                                                                                                                   \
   }
 
+void free_xml_node(XML_Node* node)
+{
+  if (node->type == XML_PARENT)
+  {
+    XML_Node* child = node->child;
+    while (child != 0)
+    {
+      XML_Node* next = child->next;
+      free_xml_node(child);
+      child = next;
+    }
+  }
+
+  deallocate(node->header.tags, sizeof(XML_Tag) * node->header.tag_capacity);
+  deallocate(node, sizeof(XML_Node));
+}
+
+bool remove_xml_key(XML_Node* xml, const char* node_name, u64 node_name_length)
+{
+
+  XML_Node* prev = xml->child;
+  XML_Node* curr = xml->child;
+  while (curr != 0)
+  {
+    if (curr->header.name_length == node_name_length && strncmp(curr->header.name, node_name, node_name_length) == 0)
+    {
+      if (curr == xml->child)
+      {
+        xml->child = curr->next;
+        if (xml->child == 0)
+        {
+          xml->type = XML_CLOSED;
+        }
+      }
+      else
+      {
+
+        prev->next = curr->next;
+      }
+      free_xml_node(curr);
+      return true;
+    }
+    prev = curr;
+    curr = curr->next;
+  }
+  return false;
+}
+XML_Node* find_xml_key(XML_Node* xml, const char* node_name, u64 node_name_length)
+{
+  XML_Node* curr = xml->child;
+  while (curr != 0)
+  {
+    if (curr->header.name_length == node_name_length && strncmp(curr->header.name, node_name, node_name_length) == 0)
+    {
+      return curr;
+    }
+    curr = curr->next;
+  }
+  return 0;
+}
+
 bool match(Buffer* buffer, char target)
 {
   return CURRENT_CHAR(buffer) == target;
@@ -43,14 +104,19 @@ void debug_xml_node(XML_Node* xml)
   printf(">\n");
   if (xml->type == XML_PARENT)
   {
-    debug_xml_node(xml->child);
+    XML_Node* child = xml->child;
+    debug_xml_node(child);
+    while (child->next)
+    {
+      debug_xml_node(child->next);
+      child = child->next;
+    }
   }
   else if (xml->content_length != 0)
   {
     printf("%.*s\n", (i32)xml->content_length, xml->content);
   }
   printf("</%.*s>\n", (i32)header->name_length, header->name);
-  debug_xml_node(xml->next);
 }
 
 void debug_xml(XML* xml)
@@ -72,11 +138,9 @@ static void write_xml_node(XML_Node* xml, FILE* ptr, int tabs)
     return;
   }
   XML_Header* header = &xml->header;
-  for (int i = 0; i < tabs; i++)
-  {
-    fprintf(ptr, "\t");
-  }
-  fprintf(ptr, "<%.*s", (i32)header->name_length, header->name);
+  char        t[tabs];
+  memset(t, '\t', tabs);
+  fprintf(ptr, "%.*s<%.*s", tabs, t, (i32)header->name_length, header->name);
   for (unsigned int i = 0; i < header->tag_count; i++)
   {
     XML_Tag* tag = &header->tags[i];
@@ -88,29 +152,24 @@ static void write_xml_node(XML_Node* xml, FILE* ptr, int tabs)
   }
   else if (xml->type == XML_PARENT)
   {
-    fprintf(ptr, ">");
-    fprintf(ptr, "\n");
-    write_xml_node(xml->child, ptr, tabs + 1);
-    for (int i = 0; i < tabs; i++)
-    {
-      fprintf(ptr, "\t");
-    }
-    fprintf(ptr, "</%.*s>\n", (i32)header->name_length, header->name);
+    fprintf(ptr, ">\n");
+
+    XML_Node* child = xml->child;
+    write_xml_node(child, ptr, tabs + 1);
+
+    char t[tabs];
+    memset(t, '\t', tabs);
+    fprintf(ptr, "%.*s</%.*s>\n", tabs, t, (i32)header->name_length, header->name);
   }
   else if (xml->content_length != 0)
   {
-    fprintf(ptr, ">");
-    fprintf(ptr, "%.*s", (i32)xml->content_length, xml->content);
-    fprintf(ptr, "</%.*s>\n", (i32)header->name_length, header->name);
+    fprintf(ptr, ">%.*s</%.*s>\n", (i32)xml->content_length, xml->content, (i32)header->name_length, header->name);
   }
   else
   {
-    fprintf(ptr, ">");
-    for (int i = 0; i < tabs; i++)
-    {
-      fprintf(ptr, "\t");
-    }
-    fprintf(ptr, "</%.*s>\n", (i32)header->name_length, header->name);
+    char t[tabs];
+    memset(t, '\t', tabs);
+    fprintf(ptr, ">%.*s</%.*s>\n", tabs, t, (i32)header->name_length, header->name);
   }
   write_xml_node(xml->next, ptr, tabs);
 }
@@ -138,7 +197,7 @@ static bool compare_string(XML_Header* xml, Buffer* buffer, u64 index)
   u64 len = buffer->index - index;
   if (len != xml->name_length)
   {
-    printf("Not the same length! %ld %ld %ld %ld %.*s\n", len, xml->name_length, buffer->index, index, (i32)len, &buffer->buffer[index]);
+    printf("Not the same length!\n");
     return false;
   }
   return strncmp(xml->name, &buffer->buffer[index], len) == 0;
@@ -354,7 +413,8 @@ bool parse_version_and_encoding(XML* xml, Buffer* buffer)
     }
   } while (!match(buffer, '?'));
   ADVANCE(buffer);
-  if(!match(buffer, '>')){
+  if (!match(buffer, '>'))
+  {
     return false;
   }
   ADVANCE(buffer);

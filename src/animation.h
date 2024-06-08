@@ -123,6 +123,9 @@ struct SkinnedVertex
 };
 
 bool sta_parse_collada_file(XML* xml, const char* filename);
+void debug_xml_node(XML_Node* xml);
+XML_Node* find_xml_key(XML_Node* xml, const char* node_name, u64 node_name_length);
+bool remove_xml_key(XML_Node* xml, const char* node_name, u64 node_name_length);
 void debug_xml(XML* xml);
 void write_xml_to_file(XML* xml, const char* filename);
 
