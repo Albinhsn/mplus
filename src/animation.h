@@ -6,7 +6,8 @@
 enum XML_TYPE
 {
   XML_PARENT,
-  XML_CONTENT
+  XML_CONTENT,
+  XML_CLOSED
 };
 
 struct XML_Tag
@@ -25,15 +26,19 @@ struct XML_Header
   u64         tag_capacity;
 };
 
-struct XML
+enum XML_Encoding{
+  UTF_8,
+  UNKNOWN
+};
+struct XML_Node
 {
-  XML*       next;
-  XML*       parent;
+  XML_Node*       next;
+  XML_Node*       parent;
   XML_TYPE   type;
   XML_Header header;
   union
   {
-    XML* child;
+    XML_Node* child;
     struct
     {
       const char* content;
@@ -41,6 +46,15 @@ struct XML
     };
   };
 };
+
+struct XML{
+ XML_Node head;
+  XML_Tag * version_and_encoding;
+  u64 version_and_encoding_length;
+  u64 version_and_encoding_capacity;
+
+};
+
 
 struct Quaternion
 {
@@ -110,5 +124,6 @@ struct SkinnedVertex
 
 bool sta_parse_collada_file(XML* xml, const char* filename);
 void debug_xml(XML* xml);
+void write_xml_to_file(XML* xml, const char* filename);
 
 #endif
