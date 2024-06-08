@@ -18,8 +18,7 @@ bool should_quit()
   }
   return false;
 }
-
-bool debug_me(ModelData* obj, ModelData* collada)
+bool debug_me(ModelData* obj, AnimationModel* collada)
 {
   const float EPSILON = 0.0001f;
   for (u64 i = 0; i < obj->vertex_count; i++)
@@ -30,23 +29,23 @@ bool debug_me(ModelData* obj, ModelData* collada)
     {
       printf("Wrong index @%ld, %ld vs %ld\n", i, obj_index, collada_index);
     }
-    VertexData obj_vertex     = obj->vertices[i];
-    VertexData collada_vertex = collada->vertices[i];
-    if (std::abs(obj_vertex.uv.x - collada_vertex.uv.x) > EPSILON)
+    VertexData    obj_vertex     = obj->vertices[i];
+    SkinnedVertex collada_vertex = collada->vertices[i];
+    if (std::abs(obj_vertex.vertex.x - collada_vertex.position.x) > EPSILON)
     {
-      printf("Failed x @%ld, %f vs %f\n", i, obj_vertex.uv.x, collada_vertex.uv.x);
+      printf("Failed x @%ld, %f vs %f\n", i, obj_vertex.vertex.x, collada_vertex.position.x);
       // return false;
     }
-    if (std::abs(obj_vertex.uv.y - collada_vertex.uv.y) > EPSILON)
+    if (std::abs(obj_vertex.vertex.y - collada_vertex.position.y) > EPSILON)
     {
-      printf("Failed y @%ld, %f vs %f\n", i, obj_vertex.uv.y, collada_vertex.uv.y);
+      printf("Failed y @%ld, %f vs %f\n", i, obj_vertex.vertex.y, collada_vertex.position.y);
       // return false;
     }
-    // if (std::abs(obj_vertex.uv.z - collada_vertex.uv.z) > EPSILON)
-    // {
-    //   printf("Failed normal x @%ld, %f vs %f\n", i, obj_vertex.uv.x, collada_vertex.uv.x);
-    //   return false;
-    // }
+    if (std::abs(obj_vertex.vertex.z - collada_vertex.position.z) > EPSILON)
+    {
+      printf("Failed normal x @%ld, %f vs %f\n", i, obj_vertex.vertex.x, collada_vertex.position.x);
+      return false;
+    }
   }
   return true;
 }
@@ -71,7 +70,13 @@ int main()
     printf("Failed to read model!\n");
     return 1;
   }
-  model = animation.model_data;
+
+  result = debug_me(&model, &animation);
+  if (!result)
+  {
+    printf("Failed\n");
+  }
+  return 0;
 
   TargaImage image = {};
   result           = sta_read_targa_from_file(&image, "./data/unarmed_man/Peasant_Man_diffuse.tga");
@@ -88,17 +93,22 @@ int main()
 
   sta_glBindVertexArray(vao);
   sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(VertexData) * model.vertex_count, model.vertices, GL_STATIC_DRAW);
+  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(SkinnedVertex) * animation.vertex_count, animation.vertices, GL_STATIC_DRAW);
 
   sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-  sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * model.vertex_count, model.indices, GL_STATIC_DRAW);
+  sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * animation.vertex_count, animation.indices, GL_STATIC_DRAW);
 
-  sta_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-  sta_glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-  sta_glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(5 * sizeof(float)));
+  int size = sizeof(float) * 12;
+  sta_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, size, (void*)0);
+  sta_glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, size, (void*)(3 * sizeof(float)));
+  sta_glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, size, (void*)(5 * sizeof(float)));
+  sta_glVertexAttribIPointer(3, 1, GL_INT, size, (void*)(8 * sizeof(float)));
+  sta_glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, size, (void*)(9 * sizeof(float)));
   sta_glEnableVertexAttribArray(0);
   sta_glEnableVertexAttribArray(1);
   sta_glEnableVertexAttribArray(2);
+  sta_glEnableVertexAttribArray(3);
+  sta_glEnableVertexAttribArray(4);
 
   unsigned int texture0;
   sta_glGenTextures(1, &texture0);
@@ -136,7 +146,7 @@ int main()
     }
     sta_gl_clear_buffer(0.0f, 0.0f, 0.0f, 1.0f);
 
-    glDrawElements(GL_TRIANGLES, model.vertex_count, GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_TRIANGLES, animation.vertex_count, GL_UNSIGNED_INT, 0);
     sta_gl_render(window);
   }
 }

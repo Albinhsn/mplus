@@ -29,6 +29,7 @@ PFNGLBINDBUFFERPROC               glBindBuffer               = NULL;
 PFNGLBUFFERDATAPROC               glBufferData               = NULL;
 PFNGLENABLEVERTEXATTRIBARRAYPROC  glEnableVertexAttribArray  = NULL;
 PFNGLVERTEXATTRIBPOINTERPROC      glVertexAttribPointer      = NULL;
+PFNGLVERTEXATTRIBIPOINTERPROC     glVertexAttribIPointer     = NULL;
 PFNGLDISABLEVERTEXATTRIBARRAYPROC glDisableVertexAttribArray = NULL;
 PFNGLDELETEBUFFERSPROC            glDeleteBuffers            = NULL;
 PFNGLDELETEVERTEXARRAYSPROC       glDeleteVertexArrays       = NULL;
@@ -82,6 +83,7 @@ void                              loadExtensions()
   glBufferData               = (PFNGLBUFFERDATAPROC)SDL_GL_GetProcAddress("glBufferData");
   glEnableVertexAttribArray  = (PFNGLENABLEVERTEXATTRIBARRAYPROC)SDL_GL_GetProcAddress("glEnableVertexAttribArray");
   glVertexAttribPointer      = (PFNGLVERTEXATTRIBPOINTERPROC)SDL_GL_GetProcAddress("glVertexAttribPointer");
+  glVertexAttribIPointer     = (PFNGLVERTEXATTRIBIPOINTERPROC)SDL_GL_GetProcAddress("glVertexAttribIPointer");
   glDisableVertexAttribArray = (PFNGLDISABLEVERTEXATTRIBARRAYPROC)SDL_GL_GetProcAddress("glDisableVertexAttribArray");
   glDeleteBuffers            = (PFNGLDELETEBUFFERSPROC)SDL_GL_GetProcAddress("glDeleteBuffers");
   glDeleteVertexArrays       = (PFNGLDELETEVERTEXARRAYSPROC)SDL_GL_GetProcAddress("glDeleteVertexArrays");
@@ -200,6 +202,12 @@ void sta_glVertexAttribPointer(GLuint index, GLint size, GLenum type, GLboolean 
 {
   glVertexAttribPointer(index, size, type, normalized, stride, pointer);
 }
+
+void sta_glVertexAttribIPointer(GLuint index, GLint size, GLenum type, GLsizei stride, const GLvoid* pointer)
+{
+  glVertexAttribIPointer(index, size, type, stride, pointer);
+}
+
 void sta_glDisableVertexAttribArray(GLuint index)
 {
   glDisableVertexAttribArray(index);

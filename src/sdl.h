@@ -94,6 +94,7 @@ void      sta_glBindBuffer(GLenum target, GLuint buffer);
 void      sta_glBufferData(GLenum target, ptrdiff_t size, const GLvoid* data, GLenum usage);
 void      sta_glEnableVertexAttribArray(GLuint index);
 void      sta_glVertexAttribPointer(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid* pointer);
+void sta_glVertexAttribIPointer(GLuint index, GLint size, GLenum type, GLsizei stride, const GLvoid* pointer);
 void      sta_glDisableVertexAttribArray(GLuint index);
 void      sta_glDeleteBuffers(GLsizei n, const GLuint* buffers);
 void      sta_glDeleteVertexArrays(GLsizei n, const GLuint* arrays);

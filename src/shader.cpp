@@ -50,6 +50,12 @@ void Shader::set_mat4(const char *name, float *v) {
   sta_glUniformMatrix4fv(sta_glGetUniformLocation(this->id, name), 1, GL_FALSE,
                          v);
 }
+void Shader::set_mat4(const char *name, float *v, int count) {
+
+  sta_glUniformMatrix4fv(sta_glGetUniformLocation(this->id, name), count, GL_FALSE,
+                         v);
+}
+
 void Shader::use() { sta_glUseProgram(this->id); }
 Shader::Shader(const char *vertex_path, const char *fragment_path) {
 

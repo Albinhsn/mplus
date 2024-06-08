@@ -3,19 +3,81 @@
 #include "platform.h"
 #include <assert.h>
 #include <cfloat>
+#include <cmath>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
-static u64 skipWhitespaceJson(char* buffer)
+int parse_int_from_string(Buffer* buffer)
 {
-  u64 res = 0;
-  while (buffer[res] == ' ' || buffer[res] == '\n')
+  bool sign = false;
+  if (CURRENT_CHAR(buffer) == '-')
   {
-    res++;
+    ADVANCE(buffer);
+    sign = true;
   }
-  return res;
+  u64 value = 0;
+  while (isdigit(CURRENT_CHAR(buffer)))
+  {
+    value *= 10;
+    value += CURRENT_CHAR(buffer) - '0';
+    ADVANCE(buffer);
+  }
+  return sign ? -value : value;
 }
+
+float parse_float_from_string(Buffer* buffer)
+{
+  bool sign = false;
+  if (CURRENT_CHAR(buffer) == '-')
+  {
+    ADVANCE(buffer);
+    sign = true;
+  }
+  float value = 0;
+  while (isdigit(CURRENT_CHAR(buffer)))
+  {
+    value *= 10;
+    value += CURRENT_CHAR(buffer) - '0';
+    ADVANCE(buffer);
+  }
+
+  float decimal       = 0.0f;
+  int   decimal_count = 0;
+  if (CURRENT_CHAR(buffer) == '.')
+  {
+    ADVANCE(buffer);
+    while (isdigit(CURRENT_CHAR(buffer)))
+    {
+      decimal_count++;
+      decimal += (CURRENT_CHAR(buffer) - '0') / pow(10, decimal_count);
+      ADVANCE(buffer);
+    }
+  }
+  value += decimal;
+
+  return sign ? -value : value;
+}
+
+bool match(Buffer* buffer, char target)
+{
+  return CURRENT_CHAR(buffer) == target;
+}
+bool consume(Buffer* buffer, char target)
+{
+  if (!match(buffer, target))
+  {
+    return false;
+  }
+  ADVANCE(buffer);
+  return true;
+}
+
+void skip_whitespace(Buffer* buffer)
+{
+  SKIP(buffer, match(buffer, ' ') || match(buffer, '\n') || match(buffer, '\t'));
+}
+
 
 void sta_save_targa(TargaImage* image, const char* filename)
 {
@@ -424,15 +486,6 @@ static inline bool parse_end_of_csv_field(Buffer* s, u64* curr)
   return s->buffer[*curr] == '\n' && !quoted;
 }
 
-static inline u64 skip_whitespace_string(Buffer* s, u64 curr)
-{
-  while (curr < s->len && (s->buffer[curr] == ' ' || s->buffer[curr] == '\n'))
-  {
-    curr++;
-  }
-  return curr;
-}
-
 static void free_csv(CSV* csv)
 {
 
@@ -548,18 +601,15 @@ bool sta_write_csv_to_file(CSV* csv, Buffer fileLocation)
   return fclose(filePtr) == 0;
 }
 
-#define CURRENT_CHAR(buffer, curr) (buffer[*curr])
-#define ADVANCE(curr)              ((*curr)++)
+static void serialize_json_value(JsonValue* value, FILE* filePtr);
+static void serialize_json_object(JsonObject* object, FILE* filePtr);
 
-static void serializeJsonValue(JsonValue* value, FILE* filePtr);
-static void serializeJsonObject(JsonObject* object, FILE* filePtr);
-
-static void serializeJsonArray(JsonArray* arr, FILE* filePtr)
+static void serialize_json_array(JsonArray* arr, FILE* filePtr)
 {
   fwrite("[", 1, 1, filePtr);
   for (u32 i = 0; i < arr->arraySize; i++)
   {
-    serializeJsonValue(&arr->values[i], filePtr);
+    serialize_json_value(&arr->values[i], filePtr);
     if (i != arr->arraySize - 1)
     {
       fwrite(",", 1, 1, filePtr);
@@ -568,13 +618,13 @@ static void serializeJsonArray(JsonArray* arr, FILE* filePtr)
   fwrite("]", 1, 1, filePtr);
 }
 
-static void serializeJsonObject(JsonObject* object, FILE* filePtr)
+static void serialize_json_object(JsonObject* object, FILE* filePtr)
 {
   fwrite("{", 1, 1, filePtr);
   for (u32 i = 0; i < object->size; i++)
   {
     fprintf(filePtr, "\"%s\":", object->keys[i]);
-    serializeJsonValue(&object->values[i], filePtr);
+    serialize_json_value(&object->values[i], filePtr);
     if (i != object->size - 1)
     {
       fwrite(",", 1, 1, filePtr);
@@ -583,13 +633,13 @@ static void serializeJsonObject(JsonObject* object, FILE* filePtr)
   fwrite("}", 1, 1, filePtr);
 }
 
-static void serializeJsonValue(JsonValue* value, FILE* filePtr)
+static void serialize_json_value(JsonValue* value, FILE* filePtr)
 {
   switch (value->type)
   {
   case JSON_OBJECT:
   {
-    serializeJsonObject(value->obj, filePtr);
+    serialize_json_object(value->obj, filePtr);
     break;
   }
   case JSON_BOOL:
@@ -616,7 +666,7 @@ static void serializeJsonValue(JsonValue* value, FILE* filePtr)
   }
   case JSON_ARRAY:
   {
-    serializeJsonArray(value->arr, filePtr);
+    serialize_json_array(value->arr, filePtr);
     break;
   }
   case JSON_STRING:
@@ -645,17 +695,17 @@ bool sta_serialize_json_to_file(Json* json, const char* filename)
   {
   case JSON_OBJECT:
   {
-    serializeJsonObject(&json->obj, filePtr);
+    serialize_json_object(&json->obj, filePtr);
     break;
   }
   case JSON_ARRAY:
   {
-    serializeJsonArray(&json->array, filePtr);
+    serialize_json_array(&json->array, filePtr);
     break;
   }
   case JSON_VALUE:
   {
-    serializeJsonValue(&json->value, filePtr);
+    serialize_json_value(&json->value, filePtr);
     break;
   }
   default:
@@ -747,34 +797,6 @@ static void debugJsonArray(JsonArray* arr)
   printf("]");
 }
 
-// static void debugJson(Json* json)
-// {
-//   switch (json->headType)
-//   {
-//   case JSON_OBJECT:
-//   {
-//     debugJsonObject(&json->obj);
-//     break;
-//   }
-//   case JSON_ARRAY:
-//   {
-//     debugJsonArray(&json->array);
-//     break;
-//   }
-//   case JSON_VALUE:
-//   {
-//     debugJsonValue(&json->value);
-//     break;
-//   }
-//   default:
-//   {
-//     printf("HOW IS THIS THE HEAD TYPE? %d\n", json->headType);
-//     break;
-//   }
-//   }
-//   printf("\n");
-// }
-
 static inline void resizeObject(JsonObject* obj)
 {
   if (obj->cap == 0)
@@ -791,105 +813,68 @@ static inline void resizeObject(JsonObject* obj)
   }
 }
 
-static bool parseNumber(f32* number, char* buffer, u64* curr)
+static bool json_parse_string(char** key, Buffer* buffer)
 {
-  u64 start = *curr;
-  ADVANCE(curr);
-  char line[32];
-  while (isdigit(CURRENT_CHAR(buffer, curr)))
-  {
-    ADVANCE(curr);
-  }
-  if (CURRENT_CHAR(buffer, curr) == '.')
-  {
-    ADVANCE(curr);
-    while (isdigit(CURRENT_CHAR(buffer, curr)))
-    {
-      ADVANCE(curr);
-    }
-  }
-  u64 size = (*curr) - start;
-  strncpy(&line[0], &buffer[start], size);
-  line[size] = '\0';
-  *number    = strtof(line, NULL);
+  ADVANCE(buffer);
+  u64 start = buffer->index;
+  SKIP(buffer, CURRENT_CHAR(buffer) != '"');
+  u64 len     = (buffer->index - start);
 
-  return true;
-}
-static bool parseBuffer(char** key, char* buffer, u64* curr)
-{
-  ADVANCE(curr);
-  u64 start = *curr;
-  while (buffer[*curr] != '"')
-  {
-    (*curr)++;
-  }
-  u64 len     = ((*curr) - start);
   *key        = (char*)malloc(sizeof(char) * (1 + len));
   (*key)[len] = '\0';
-  strncpy(*key, &buffer[start], len);
-  (*curr)++;
+  strncpy(*key, &buffer->buffer[start], len);
+  ADVANCE(buffer);
   return true;
 }
 
-static bool consumeToken(char got, char expected, u64* curr)
-{
-  if (expected != got)
-  {
-    printf("Expected '%c' but got '%c'\n", expected, got);
-    return false;
-  }
-  (*curr)++;
-  return true;
-}
+static bool parseJsonValue(JsonValue* value, Buffer* buffer);
+static bool parseJsonArray(JsonArray* arr, Buffer* buffer);
 
-static bool parseJsonValue(JsonValue* value, char* buffer, u64* curr);
-static bool parseJsonArray(JsonArray* arr, char* buffer, u64* curr);
-
-static bool parseKeyValuePair(JsonObject* obj, char* buffer, u64* curr)
+static bool parseKeyValuePair(JsonObject* obj, Buffer* buffer)
 {
   resizeObject(obj);
 
-  parseBuffer(&obj->keys[obj->size], buffer, curr);
-  *curr += skipWhitespaceJson(&buffer[*curr]);
+  json_parse_string(&obj->keys[obj->size], buffer);
+  skip_whitespace(buffer);
 
-  if (!consumeToken(buffer[*curr], ':', curr))
+  if (!consume(buffer, ':'))
   {
     return false;
   }
 
-  bool res = parseJsonValue(&obj->values[obj->size], buffer, curr);
+  bool res = parseJsonValue(&obj->values[obj->size], buffer);
   if (!res)
   {
     return false;
   }
   obj->size++;
 
-  *curr += skipWhitespaceJson(&buffer[*curr]);
+  skip_whitespace(buffer);
   return true;
 }
 
-static bool parseJsonObject(JsonObject* obj, char* buffer, u64* curr)
+static bool parseJsonObject(JsonObject* obj, Buffer* buffer)
 {
-  ADVANCE(curr);
-  (*curr) = *curr + skipWhitespaceJson(&buffer[*curr]);
+  ADVANCE(buffer);
+  skip_whitespace(buffer);
   // end or string
-  while (buffer[*curr] != '}')
+  while (CURRENT_CHAR(buffer) != '}')
   {
-    bool res = parseKeyValuePair(obj, buffer, curr);
+    bool res = parseKeyValuePair(obj, buffer);
     if (!res)
     {
       return false;
     }
 
-    (*curr) += skipWhitespaceJson(&buffer[*curr]);
-    if (buffer[*curr] == ',')
+    skip_whitespace(buffer);
+    if (match(buffer, ','))
     {
       // It's illegal to have a ',' and then end it
-      ADVANCE(curr);
+      ADVANCE(buffer);
     }
-    (*curr) += skipWhitespaceJson(&buffer[*curr]);
+    skip_whitespace(buffer);
   }
-  ADVANCE(curr);
+  ADVANCE(buffer);
   return true;
 }
 
@@ -906,51 +891,55 @@ static inline void resizeArray(JsonArray* arr)
     arr->values = (JsonValue*)realloc(arr->values, arr->arrayCap * sizeof(JsonValue));
   }
 }
-static bool parseJsonArray(JsonArray* arr, char* buffer, u64* curr)
+static bool parseJsonArray(JsonArray* arr, Buffer* buffer)
 {
-  (*curr)++;
-  *curr += skipWhitespaceJson(&buffer[*curr]);
+  ADVANCE(buffer);
+  skip_whitespace(buffer);
   bool res;
-  while (buffer[*curr] != ']')
+  while (CURRENT_CHAR(buffer) != ']')
   {
     resizeArray(arr);
-    res = parseJsonValue(&arr->values[arr->arraySize], buffer, curr);
+    res = parseJsonValue(&arr->values[arr->arraySize], buffer);
     if (!res)
     {
       return false;
     }
     arr->arraySize++;
-    *curr += skipWhitespaceJson(&buffer[*curr]);
-    if (buffer[*curr] == ',')
-    {
-      ADVANCE(curr);
-    }
+    skip_whitespace(buffer);
+    (void)consume(buffer, ',');
   }
-  ADVANCE(curr);
+
+  ADVANCE(buffer);
 
   return true;
 }
-static bool parseJsonValue(JsonValue* value, char* buffer, u64* curr)
+static bool parseNumber(f32* number, Buffer* buffer)
 {
-  *curr += skipWhitespaceJson(&buffer[*curr]);
-  if (isdigit(buffer[*curr]) || buffer[*curr] == '-')
+  *number = parse_float_from_string(buffer);
+  return true;
+}
+
+static bool parseJsonValue(JsonValue* value, Buffer* buffer)
+{
+  skip_whitespace(buffer);
+  if (isdigit(CURRENT_CHAR(buffer)) || CURRENT_CHAR(buffer) == '-')
   {
     value->type = JSON_NUMBER;
-    return parseNumber(&value->number, buffer, curr);
+    return parseNumber(&value->number, buffer);
   }
-  switch (buffer[*curr])
+  switch (CURRENT_CHAR(buffer))
   {
   case '\"':
   {
     value->type = JSON_STRING;
-    return parseBuffer(&value->string, buffer, curr);
+    return json_parse_string(&value->string, buffer);
   }
   case '{':
   {
     value->type      = JSON_OBJECT;
     value->obj->cap  = 0;
     value->obj->size = 0;
-    return parseJsonObject(value->obj, buffer, curr);
+    return parseJsonObject(value->obj, buffer);
   }
   case '[':
   {
@@ -958,15 +947,15 @@ static bool parseJsonValue(JsonValue* value, char* buffer, u64* curr)
     value->arr            = (JsonArray*)malloc(sizeof(JsonArray));
     value->arr->arrayCap  = 0;
     value->arr->arraySize = 0;
-    return parseJsonArray(value->arr, buffer, curr);
+    return parseJsonArray(value->arr, buffer);
   }
   case 't':
   {
-    if (buffer[*curr + 1] == 'r' && buffer[*curr + 2] == 'u' && buffer[*curr + 3] == 'e')
+    if (strncmp(&buffer->buffer[buffer->index + 1], "rue", 3) == 0)
     {
       value->type = JSON_BOOL;
       value->b    = true;
-      (*curr) += 4;
+      buffer->index += 4;
       return true;
     }
     printf("Got 't' but wasn't true?\n");
@@ -974,11 +963,11 @@ static bool parseJsonValue(JsonValue* value, char* buffer, u64* curr)
   }
   case 'f':
   {
-    if (buffer[*curr + 1] == 'a' && buffer[*curr + 2] == 'l' && buffer[*curr + 3] == 's' && buffer[*curr + 4] == 'e')
+    if (strncmp(&buffer->buffer[buffer->index + 1], "alse", 4))
     {
       value->type = JSON_BOOL;
       value->b    = false;
-      (*curr) += 5;
+      buffer->index += 5;
       return true;
     }
     printf("Got 'f' but wasn't false?\n");
@@ -986,10 +975,10 @@ static bool parseJsonValue(JsonValue* value, char* buffer, u64* curr)
   }
   case 'n':
   {
-    if (buffer[*curr + 1] == 'u' && buffer[*curr + 2] == 'l' && buffer[*curr + 3] == 'l')
+    if (strncmp(&NEXT_CHAR(buffer), "ull", 3))
     {
       value->type = JSON_NULL;
-      (*curr) += 4;
+      buffer->index += 4;
       return true;
     }
     printf("Got 'n' but wasn't null?\n");
@@ -997,7 +986,7 @@ static bool parseJsonValue(JsonValue* value, char* buffer, u64* curr)
   }
   default:
   {
-    printf("Unknown value token '%c'\n", buffer[*curr]);
+    printf("Unknown value token '%c'\n", CURRENT_CHAR(buffer));
     return false;
   }
   }
@@ -1025,7 +1014,7 @@ bool sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filena
       json->headType = JSON_OBJECT;
       json->obj.cap  = 0;
       json->obj.size = 0;
-      res            = parseJsonObject(&json->obj, fileContent.buffer, &curr);
+      res            = parseJsonObject(&json->obj, &fileContent);
       first          = true;
       break;
     }
@@ -1034,7 +1023,7 @@ bool sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filena
       json->headType        = JSON_ARRAY;
       json->array.arrayCap  = 0;
       json->array.arraySize = 0;
-      res                   = parseJsonArray(&json->array, fileContent.buffer, &curr);
+      res                   = parseJsonArray(&json->array, &fileContent);
       first                 = true;
       break;
     }
@@ -1053,7 +1042,7 @@ bool sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filena
     {
       printf("Default: %c\n", fileContent.buffer[curr]);
       json->headType = JSON_VALUE;
-      res            = parseJsonValue(&json->value, fileContent.buffer, &curr);
+      res            = parseJsonValue(&json->value, &fileContent);
       first          = true;
       break;
     }
@@ -1071,47 +1060,32 @@ bool sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filena
   return true;
 }
 
-static u8 skipWhitespace(const char* line)
+static void skip_digit(Buffer* buffer)
 {
-  u8 curr = 0;
-  while (curr < strlen(line) && !(isdigit(line[curr]) || (line[curr] == '-')))
-  {
-    curr++;
-  }
-  return curr;
-}
-f32 parseFloatFromString(const char* source, u8* length)
-{
-  char number[32];
-  u8   pos = 0;
-
-  while (pos < strlen(source) && source[pos] != ' ')
-  {
-    pos++;
-  }
-  memcpy(number, source, pos);
-  *length = pos;
-  return strtof(number, NULL);
+  SKIP(buffer, buffer->index < buffer->len && !(isdigit(CURRENT_CHAR(buffer)) || (CURRENT_CHAR(buffer) == '-')));
 }
 
-static void parseWavefrontTexture(WavefrontObject* obj, const char* line)
+static void parse_wavefront_texture(WavefrontObject* obj, const char* line)
 {
-  u8 step;
-  u8 curr = 2 + skipWhitespace(&line[2]);
+  Buffer buffer = {};
+  buffer.len    = strlen(line);
+  buffer.buffer = (char*)line;
+
+  skip_digit(&buffer);
+
   obj->texture_coordinate_count++;
   RESIZE_ARRAY(obj->texture_coordinates, Vector3, obj->texture_coordinate_count, obj->texture_coordinate_capacity);
 
   for (i32 i = 0; i < 2; i++)
   {
-    obj->texture_coordinates[obj->texture_coordinate_count - 1].v[i] = parseFloatFromString(&line[curr], &step);
-    curr += step;
-    curr += skipWhitespace(&line[curr]);
+    obj->texture_coordinates[obj->texture_coordinate_count - 1].v[i] = parse_float_from_string(&buffer);
+    skip_digit(&buffer);
   }
 
   // Parse optional w
-  if (curr < strlen(line))
+  if (buffer.index < strlen(line))
   {
-    obj->texture_coordinates[obj->texture_coordinate_count - 1].z = parseFloatFromString(line, &step);
+    obj->texture_coordinates[obj->texture_coordinate_count - 1].z = parse_float_from_string(&buffer);
   }
   else
   {
@@ -1121,71 +1095,49 @@ static void parseWavefrontTexture(WavefrontObject* obj, const char* line)
 static void parseWavefrontNormal(WavefrontObject* obj, const char* line)
 {
 
-  u8 step;
-  u8 curr = 2 + skipWhitespace(&line[2]);
+  Buffer buffer = {};
+  buffer.len    = strlen(line);
+  buffer.buffer = (char*)line;
+
+  skip_digit(&buffer);
   obj->normal_count++;
   RESIZE_ARRAY(obj->normals, Vector3, obj->normal_count, obj->normal_capacity);
 
   // Parse x,y,z
   for (i32 i = 0; i < 3; i++)
   {
-    obj->normals[obj->normal_count - 1].v[i] = parseFloatFromString(&line[curr], &step);
-    curr += step;
-    curr += skipWhitespace(&line[curr]);
-  }
-}
-static inline void resizeVertices(WavefrontObject* obj)
-{
-  if (obj->vertex_count >= obj->vertex_capacity)
-  {
-    obj->vertex_capacity *= 2;
-    obj->vertices = (Vector4*)realloc(obj->vertices, sizeof(Vector4) * obj->vertex_capacity);
+    obj->normals[obj->normal_count - 1].v[i] = parse_float_from_string(&buffer);
+    skip_digit(&buffer);
   }
 }
 static void parseWavefrontVertex(WavefrontObject* obj, const char* line)
 {
-  u8 step;
-  u8 curr = 1 + skipWhitespace(&line[1]);
+  Buffer buffer = {};
+  buffer.len    = strlen(line);
+  buffer.buffer = (char*)line;
   obj->vertex_count++;
   RESIZE_ARRAY(obj->vertices, Vector4, obj->vertex_count, obj->vertex_capacity);
 
   // Parse x,y,z
   for (i32 i = 0; i < 3; i++)
   {
-    obj->vertices[obj->vertex_count - 1].v[i] = parseFloatFromString(&line[curr], &step);
-    curr += step;
-    curr += skipWhitespace(&line[curr]);
+    skip_digit(&buffer);
+    obj->vertices[obj->vertex_count - 1].v[i] = parse_float_from_string(&buffer);
   }
+    skip_digit(&buffer);
 
   // Parse optional w
-  if (curr < strlen(line))
+  if (buffer.index < strlen(line))
   {
-    obj->vertices[obj->vertex_count - 1].w = parseFloatFromString(line, &step);
-  }
-  else
-  {
-    obj->vertices[obj->vertex_count - 1].w = 0;
+    obj->vertices[obj->vertex_count - 1].w = parse_float_from_string(&buffer);
   }
 }
-static i32 parseIntFromString(const char* source, u8* length)
-{
-  char number[32];
-  memset(number, 0, 32);
-
-  u8 pos = 0;
-  while (pos < strlen(source) && isdigit(source[pos]))
-  {
-    pos++;
-  }
-  memcpy(number, source, pos);
-  *length = pos;
-  return atoi(number);
-}
-
 static void parseWavefrontFace(WavefrontObject* obj, const char* line)
 {
-  u8 step;
-  u8 curr = 1 + skipWhitespace(&line[1]);
+  Buffer buffer = {};
+  buffer.len    = strlen(line);
+  buffer.buffer = (char*)line;
+  buffer.index  = 0;
   obj->face_count++;
   RESIZE_ARRAY(obj->faces, WavefrontFace, obj->face_count, obj->face_capacity);
 
@@ -1193,28 +1145,27 @@ static void parseWavefrontFace(WavefrontObject* obj, const char* line)
   u32            vertexCap = 8;
   face->count              = 0;
   face->vertices           = (WavefrontVertexData*)allocate(sizeof(WavefrontVertexData) * vertexCap);
-  while (curr < strlen(line))
+  ADVANCE(&buffer);
+  while (buffer.index < buffer.len)
   {
     face->count++;
     RESIZE_ARRAY(face->vertices, WavefrontVertexData, face->count, vertexCap);
 
-    face->vertices[face->count - 1].vertex_idx = parseIntFromString(&line[curr], &step);
-    curr += step;
-    curr++;
-    face->vertices[face->count - 1].texture_idx = parseIntFromString(&line[curr], &step);
-    curr += step;
-    curr++;
-    face->vertices[face->count - 1].normal_idx = parseIntFromString(&line[curr], &step);
+    skip_digit(&buffer);
+    face->vertices[face->count - 1].vertex_idx = parse_int_from_string(&buffer);
 
-    curr += step + skipWhitespace(&line[curr]);
-    curr++;
+    skip_digit(&buffer);
+    face->vertices[face->count - 1].texture_idx = parse_int_from_string(&buffer);
+
+    skip_digit(&buffer);
+    face->vertices[face->count - 1].normal_idx = parse_int_from_string(&buffer);
   }
 }
 static inline void parseWavefrontLine(WavefrontObject* obj, const char* line)
 {
   if (line[0] == 'v' && line[1] == 't')
   {
-    parseWavefrontTexture(obj, line);
+    parse_wavefront_texture(obj, line);
   }
   else if (line[0] == 'v' && line[1] == 'n')
   {

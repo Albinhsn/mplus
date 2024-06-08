@@ -62,70 +62,49 @@ struct Quaternion
   f32 x, y, z, w;
 };
 
-// struct Joint {
-//   Mat43 m_invBindPose;
-//   const char *m_name;
-//   u8 m_iParent;
-// };
-
-// A skeleton contains a hierarchy of joints
-// Bone/Joint is the thing we move that vertex positions are tied to
-
 struct Joint
 {
-  f32 position[3];
-  f32 normal[3];
-  f32 u, v;
-  u8  jointIndex[4];
-  f32 jointWeight[3];
+  Mat44 m_invBindPose;
+  char* m_name;
+  u8    m_iParent;
 };
 
 struct Skeleton
 {
-  u32    m_jointCount;
-  Joint* m_aJoint;
+  u32    joint_count;
+  Joint* joints;
 };
 
+// just an affine transformation
 struct JointPose
 {
-  Quaternion m_rot;
-  Vector3    m_trans;
-  f32        m_scale;
+  float* t;
+  Mat44* local_transform;
+  u32 steps;
 };
 
-struct SkeletonPose
+struct Animation
 {
-  Skeleton*  m_pSkeleton;
-  JointPose* m_aLocalPose;
-  Mat44*     m_aGlobalPose;
-};
-
-struct AnimationSample
-{
-  JointPose* m_aJointPose;
-};
-
-struct AnimationClip
-{
-  Skeleton*        m_pSkeleton;
-  f32              m_framesPerSecond;
-  u32              m_frameCount;
-  AnimationSample* m_aSamples;
-  bool             m_isLooping;
+  JointPose* poses;
 };
 
 struct SkinnedVertex
 {
-  float position[3];
-  float normal[3];
-  float u, v;
-  u8    jointIndex[4];
-  float jointWeight[3];
+  Vector3 position;
+  Vector2 uv;
+  Vector3 normal;
+  u8      joint_index[4];
+  float   joint_weight[3];
 };
 
 struct AnimationModel
 {
-  ModelData model_data;
+  SkinnedVertex* vertices;
+  u32*           indices;
+  Animation      animations;
+  Skeleton       skeleton;
+  u64            vertex_count;
+  u8             clip_count;
 };
 
 bool      sta_collada_parse_from_file(AnimationModel* animation, const char* filename);
