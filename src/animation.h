@@ -1,6 +1,7 @@
 #ifndef ANIMATION_H
 #define ANIMATION_H
 
+#include "files.h"
 #include "vector.h"
 
 enum XML_TYPE
@@ -26,14 +27,15 @@ struct XML_Header
   u64         tag_capacity;
 };
 
-enum XML_Encoding{
+enum XML_Encoding
+{
   UTF_8,
   UNKNOWN
 };
 struct XML_Node
 {
-  XML_Node*       next;
-  XML_Node*       parent;
+  XML_Node*  next;
+  XML_Node*  parent;
   XML_TYPE   type;
   XML_Header header;
   union
@@ -47,14 +49,13 @@ struct XML_Node
   };
 };
 
-struct XML{
- XML_Node head;
-  XML_Tag * version_and_encoding;
-  u64 version_and_encoding_length;
-  u64 version_and_encoding_capacity;
-
+struct XML
+{
+  XML_Node head;
+  XML_Tag* version_and_encoding;
+  u64      version_and_encoding_length;
+  u64      version_and_encoding_capacity;
 };
-
 
 struct Quaternion
 {
@@ -122,11 +123,16 @@ struct SkinnedVertex
   float jointWeight[3];
 };
 
-bool sta_parse_collada_file(XML* xml, const char* filename);
-void debug_xml_node(XML_Node* xml);
-XML_Node* find_xml_key(XML_Node* xml, const char* node_name, u64 node_name_length);
-bool remove_xml_key(XML_Node* xml, const char* node_name, u64 node_name_length);
-void debug_xml(XML* xml);
-void write_xml_to_file(XML* xml, const char* filename);
+struct AnimationModel
+{
+  ModelData model_data;
+};
+
+bool      sta_collada_parse_from_file(AnimationModel* animation, const char* filename);
+void      debug_xml_node(XML_Node* xml);
+XML_Node* sta_xml_find_key(XML_Node* xml, const char* node_name);
+bool      remove_xml_key(XML_Node* xml, const char* node_name);
+void      debug_xml(XML* xml);
+void      write_xml_to_file(XML* xml, const char* filename);
 
 #endif

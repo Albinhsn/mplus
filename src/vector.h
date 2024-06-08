@@ -36,6 +36,9 @@ public:
     this->x = x;
     this->y = y;
   }
+  void debug(){
+    printf("%f %f\n", x, y);
+  }
   float x;
   float y;
   float len();
@@ -68,6 +71,9 @@ public:
     float v[3];
   };
 
+  void debug(){
+    printf("%f %f %f\n", x, y, z);
+  }
   float len();
   float dot(Vector3 v);
   Vector3 cross(Vector3 v);

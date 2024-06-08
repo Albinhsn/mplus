@@ -4,6 +4,7 @@
 #include "shader.h"
 #include <GL/glext.h>
 #include <SDL2/SDL_events.h>
+#include <cstdlib>
 
 bool should_quit()
 {
@@ -18,8 +19,43 @@ bool should_quit()
   return false;
 }
 
+bool debug_me(ModelData* obj, ModelData* collada)
+{
+  const float EPSILON = 0.0001f;
+  for (u64 i = 0; i < obj->vertex_count; i++)
+  {
+    u64 obj_index     = obj->indices[i];
+    u64 collada_index = collada->indices[i];
+    if (obj_index != collada_index)
+    {
+      printf("Wrong index @%ld, %ld vs %ld\n", i, obj_index, collada_index);
+    }
+    VertexData obj_vertex     = obj->vertices[i];
+    VertexData collada_vertex = collada->vertices[i];
+    if (std::abs(obj_vertex.uv.x - collada_vertex.uv.x) > EPSILON)
+    {
+      printf("Failed x @%ld, %f vs %f\n", i, obj_vertex.uv.x, collada_vertex.uv.x);
+      // return false;
+    }
+    if (std::abs(obj_vertex.uv.y - collada_vertex.uv.y) > EPSILON)
+    {
+      printf("Failed y @%ld, %f vs %f\n", i, obj_vertex.uv.y, collada_vertex.uv.y);
+      // return false;
+    }
+    // if (std::abs(obj_vertex.uv.z - collada_vertex.uv.z) > EPSILON)
+    // {
+    //   printf("Failed normal x @%ld, %f vs %f\n", i, obj_vertex.uv.x, collada_vertex.uv.x);
+    //   return false;
+    // }
+  }
+  return true;
+}
+
 int main()
 {
+
+  AnimationModel animation = {};
+  sta_collada_parse_from_file(&animation, "./data/unarmed_man/unarmed_opt.dae");
 
   const int     screen_width  = 620;
   const int     screen_height = 480;
@@ -35,6 +71,7 @@ int main()
     printf("Failed to read model!\n");
     return 1;
   }
+  model = animation.model_data;
 
   TargaImage image = {};
   result           = sta_read_targa_from_file(&image, "./data/unarmed_man/Peasant_Man_diffuse.tga");

@@ -2,6 +2,8 @@
 #include "files.h"
 #include "platform.h"
 #include <cctype>
+#include <cfloat>
+#include <cmath>
 #include <cstring>
 
 #define CURRENT_CHAR(buf) ((buf)->buffer[(buf)->index])
@@ -12,6 +14,63 @@
   {                                                                                                                                                                                                    \
     ADVANCE(buffer);                                                                                                                                                                                   \
   }
+
+float parse_float_from_string(Buffer* buffer)
+{
+  bool sign = false;
+  if (CURRENT_CHAR(buffer) == '-')
+  {
+    ADVANCE(buffer);
+    sign = true;
+  }
+  float value = 0;
+  while (isdigit(CURRENT_CHAR(buffer)))
+  {
+    value *= 10;
+    value += CURRENT_CHAR(buffer) - '0';
+    ADVANCE(buffer);
+  }
+
+  float decimal       = 0.0f;
+  int   decimal_count = 0;
+  if (CURRENT_CHAR(buffer) == '.')
+  {
+    ADVANCE(buffer);
+    while (isdigit(CURRENT_CHAR(buffer)))
+    {
+      decimal_count++;
+      decimal += (CURRENT_CHAR(buffer) - '0') / pow(10, decimal_count);
+      ADVANCE(buffer);
+    }
+  }
+  value += decimal;
+
+  return sign ? -value : value;
+}
+int parse_int_from_string(Buffer* buffer)
+{
+  bool sign = false;
+  if (CURRENT_CHAR(buffer) == '-')
+  {
+    ADVANCE(buffer);
+    sign = true;
+  }
+  u64 value = 0;
+  while (isdigit(CURRENT_CHAR(buffer)))
+  {
+    value *= 10;
+    value += CURRENT_CHAR(buffer) - '0';
+    ADVANCE(buffer);
+  }
+  return sign ? -value : value;
+}
+int parse_int_from_string(const char* str)
+{
+  Buffer buffer = {};
+  buffer.len    = strlen(str);
+  buffer.buffer = (char*)str;
+  return parse_int_from_string(&buffer);
+}
 
 void free_xml_node(XML_Node* node)
 {
@@ -60,9 +119,10 @@ bool remove_xml_key(XML_Node* xml, const char* node_name, u64 node_name_length)
   }
   return false;
 }
-XML_Node* find_xml_key(XML_Node* xml, const char* node_name, u64 node_name_length)
+XML_Node* sta_xml_find_key(XML_Node* xml, const char* node_name)
 {
-  XML_Node* curr = xml->child;
+  u64       node_name_length = strlen(node_name);
+  XML_Node* curr             = xml->child;
   while (curr != 0)
   {
     if (curr->header.name_length == node_name_length && strncmp(curr->header.name, node_name, node_name_length) == 0)
@@ -74,6 +134,21 @@ XML_Node* find_xml_key(XML_Node* xml, const char* node_name, u64 node_name_lengt
   return 0;
 }
 
+XML_Tag* sta_xml_find_tag(XML_Node* xml, const char* tag_name)
+{
+  XML_Tag*           tags            = xml->header.tags;
+  const unsigned int tag_name_length = strlen(tag_name);
+  for (unsigned int i = 0; i < xml->header.tag_count; i++)
+  {
+    XML_Tag* tag = &tags[i];
+    if (tag->name_length == tag_name_length && strncmp(tag_name, tag->name, tag_name_length) == 0)
+    {
+      return tag;
+    }
+  }
+  return 0;
+}
+
 bool match(Buffer* buffer, char target)
 {
   return CURRENT_CHAR(buffer) == target;
@@ -81,7 +156,7 @@ bool match(Buffer* buffer, char target)
 
 void skip_whitespace(Buffer* buffer)
 {
-  SKIP(buffer, match(buffer, ' ') || match(buffer, '\n'));
+  SKIP(buffer, match(buffer, ' ') || match(buffer, '\n') || match(buffer, '\t'));
 }
 
 void debug_tag(XML_Tag* tag)
@@ -306,6 +381,7 @@ bool parse_content(XML_Node* xml, Buffer* buffer, u64 index)
   ADVANCE(buffer);
   if (!match(buffer, '/'))
   {
+    debug_xml_node(xml);
     printf("Should be closing?\n");
     return false;
   }
@@ -421,20 +497,260 @@ bool parse_version_and_encoding(XML* xml, Buffer* buffer)
 
   return true;
 }
+static void parse_vector2_array(Buffer* buffer, Vector2* vectors, u64 count)
+{
+  for (unsigned int i = 0; i < count; i++)
+  {
+    Vector2* position = &vectors[i];
+    skip_whitespace(buffer);
+    position->x = parse_float_from_string(buffer);
+    skip_whitespace(buffer);
+    position->y = parse_float_from_string(buffer);
+  }
+}
 
-bool sta_parse_collada_file(XML* xml, const char* filename)
+static void parse_vector3_array(Buffer* buffer, Vector3* vectors, u64 count)
+{
+  for (unsigned int i = 0; i < count; i++)
+  {
+    Vector3* position = &vectors[i];
+    skip_whitespace(buffer);
+    position->x = parse_float_from_string(buffer);
+    skip_whitespace(buffer);
+    position->y = parse_float_from_string(buffer);
+    skip_whitespace(buffer);
+    position->z = parse_float_from_string(buffer);
+  }
+}
+
+bool sta_collada_parse_model_data(ModelData* model, XML_Node* node)
+{
+  XML_Node* geometry = sta_xml_find_key(node, "geometry");
+  if (geometry == 0)
+  {
+    printf("Failed to find geometry\n");
+    return false;
+  }
+  XML_Node* mesh = sta_xml_find_key(geometry, "mesh");
+  if (mesh == 0)
+  {
+    printf("Failed to find mesh\n");
+    return false;
+  }
+  XML_Node* position_source = sta_xml_find_key(mesh, "source");
+  if (position_source == 0)
+  {
+    printf("Failed to find position source\n");
+    return false;
+  }
+  XML_Node* position_array = sta_xml_find_key(position_source, "float_array");
+  if (position_array == 0)
+  {
+    printf("Failed to find position array\n");
+    return false;
+  }
+  XML_Tag* position_count_tag = sta_xml_find_tag(position_array, "count");
+  if (position_count_tag == 0)
+  {
+    printf("Failed to find count\n");
+    return false;
+  }
+
+  int      position_count = parse_int_from_string(position_count_tag->value) / 3;
+  Vector3* positions      = (Vector3*)allocate(sizeof(Vector3) * position_count);
+  Buffer   buffer         = {};
+  buffer.buffer           = (char*)position_array->content;
+  buffer.len              = position_array->content_length;
+  parse_vector3_array(&buffer, positions, position_count);
+
+  XML_Node* normal_source = position_source->next;
+  if (normal_source == 0)
+  {
+    printf("Failed to find normal source\n");
+    return false;
+  }
+  XML_Node* normal_array = sta_xml_find_key(normal_source, "float_array");
+  if (normal_array == 0)
+  {
+    printf("Failed to find position array\n");
+    return false;
+  }
+  XML_Tag* normal_count_tag = sta_xml_find_tag(normal_array, "count");
+  if (normal_count_tag == 0)
+  {
+    printf("Failed to find normal count\n");
+    return false;
+  }
+  int      normal_count = parse_int_from_string(normal_count_tag->value) / 3;
+  Vector3* normals      = (Vector3*)allocate(sizeof(Vector3) * normal_count);
+  buffer.index          = 0;
+  buffer.buffer         = (char*)normal_array->content;
+  buffer.len            = normal_array->content_length;
+  parse_vector3_array(&buffer, normals, normal_count);
+
+  XML_Node* uv_source = normal_source->next;
+  if (uv_source == 0)
+  {
+    printf("Failed to find normal source\n");
+    return false;
+  }
+  XML_Node* uv_array = sta_xml_find_key(uv_source, "float_array");
+  if (uv_array == 0)
+  {
+    printf("Failed to find position array\n");
+    return false;
+  }
+  XML_Tag* uv_count_tag = sta_xml_find_tag(uv_array, "count");
+  if (uv_count_tag == 0)
+  {
+    printf("Failed to find normal count\n");
+    return false;
+  }
+  int      uv_count = parse_int_from_string(uv_count_tag->value) / 2;
+  Vector2* uvs      = (Vector2*)allocate(sizeof(Vector2) * uv_count);
+  buffer.index      = 0;
+  buffer.buffer     = (char*)uv_array->content;
+  buffer.len        = uv_array->content_length;
+  parse_vector2_array(&buffer, uvs, uv_count);
+
+  XML_Node* polylist = sta_xml_find_key(mesh, "polylist");
+  if (polylist == 0)
+  {
+    printf("Failed to find polylist\n");
+    return false;
+  }
+  XML_Tag* p_count_tag = sta_xml_find_tag(polylist, "count");
+  if (p_count_tag == 0)
+  {
+    printf("Failed to find p_count_tag\n");
+    return false;
+  }
+
+  buffer.index         = 0;
+  buffer.buffer        = (char*)p_count_tag->value;
+  buffer.len           = p_count_tag->value_length;
+  unsigned int p_count = parse_int_from_string(&buffer);
+
+  const unsigned int face_count = 3;
+  model->vertex_count = p_count * face_count;
+  model->vertices     = (VertexData*)allocate(sizeof(VertexData) * p_count * face_count);
+  model->indices      = (u32*)allocate(sizeof(u32) * p_count * face_count);
+  float     low = FLT_MAX, high = -FLT_MAX;
+
+  XML_Node* p = sta_xml_find_key(polylist, "p");
+  if (p == 0)
+  {
+    printf("Failed to find p\n");
+    return false;
+  }
+  buffer.buffer = (char*)p->content;
+  buffer.len    = p->content_length;
+  buffer.index  = 0;
+
+  for (unsigned int i = 0; i < p_count; i++)
+  {
+    for (unsigned int j = 0; j < face_count; j++)
+    {
+      u64         index  = i * face_count + j;
+      VertexData* vertex = &model->vertices[index];
+      skip_whitespace(&buffer);
+      u64 position_index = parse_int_from_string(&buffer);
+      skip_whitespace(&buffer);
+      u64 normals_index = parse_int_from_string(&buffer);
+      skip_whitespace(&buffer);
+      u64 uv_index = parse_int_from_string(&buffer);
+
+      Vector3 v = positions[position_index];
+      if (low > v.x)
+      {
+        low = v.x;
+      }
+      if (low > v.y)
+      {
+        low = v.y;
+      }
+      if (low > v.z)
+      {
+        low = v.z;
+      }
+      if (high < v.x)
+      {
+        high = v.x;
+      }
+      if (high < v.y)
+      {
+        high = v.y;
+      }
+      if (high < v.z)
+      {
+        high = v.z;
+      }
+
+      model->indices[index] = index;
+      vertex->vertex        = v;
+      vertex->normal        = normals[normals_index];
+      vertex->uv            = uvs[uv_index];
+    }
+  }
+
+  float diff = high - low;
+  for (unsigned int i = 0; i < model->vertex_count; i++)
+  {
+    VertexData* vertex = &model->vertices[i];
+    Vector3*    v      = &vertex->vertex;
+    if (low < 0)
+    {
+      v->x = ((v->x - low) / diff) * 2.0f - 1.0f;
+      v->y = ((v->y - low) / diff) * 2.0f - 1.0f;
+      v->z = ((v->z - low) / diff) * 2.0f - 1.0f;
+    }
+    else
+    {
+      v->x = ((v->x + low) / diff) * 2.0f - 1.0f;
+      v->y = ((v->y + low) / diff) * 2.0f - 1.0f;
+      v->z = ((v->z + low) / diff) * 2.0f - 1.0f;
+    }
+  }
+
+  return true;
+}
+
+bool sta_collada_parse_from_file(AnimationModel* animation, const char* filename)
 {
 
+  XML    xml    = {};
   Buffer buffer = {};
   if (!sta_read_file(&buffer, filename))
   {
     return 0;
   }
 
-  if (!parse_version_and_encoding(xml, &buffer))
+  if (!parse_version_and_encoding(&xml, &buffer))
   {
     return false;
   }
 
-  return parse_xml(&xml->head, &buffer);
+  if (!parse_xml(&xml.head, &buffer))
+  {
+    return false;
+  };
+
+  // parse geometry
+  XML_Node* geometry = sta_xml_find_key(&xml.head, "library_geometries");
+  if (!geometry)
+  {
+    printf("Couldn't find %s\n", "library_geometries");
+    return false;
+  }
+  sta_collada_parse_model_data(&animation->model_data, geometry);
+
+  // parse animations
+  // parse controls
+  XML_Node* animations = sta_xml_find_key(&xml.head, "library_animations");
+  if (!animations)
+  {
+    printf("Couldn't find %s\n", "library_animations");
+    return false;
+  }
+  return true;
 }
