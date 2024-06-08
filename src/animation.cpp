@@ -7,6 +7,21 @@
 #define CURRENT_CHAR(buf) ((buf)->buffer[(buf)->index])
 #define NEXT_CHAR(buf)    ((buf)->buffer[(buf)->index + 1])
 #define ADVANCE(buffer)   ((buffer)->index++)
+#define SKIP(buffer, cond)                                                                                                                                                                             \
+  while (cond)                                                                                                                                                                                         \
+  {                                                                                                                                                                                                    \
+    ADVANCE(buffer);                                                                                                                                                                                   \
+  }
+
+bool match(Buffer* buffer, char target)
+{
+  return CURRENT_CHAR(buffer) == target;
+}
+
+void skip_whitespace(Buffer* buffer)
+{
+  SKIP(buffer, match(buffer, ' ') || match(buffer, '\n'));
+}
 
 void debug_tag(XML_Tag* tag)
 {
@@ -38,14 +53,6 @@ void debug_xml(XML* xml)
   debug_xml(xml->next);
 }
 
-void skip_whitespace(Buffer* buffer)
-{
-  while (CURRENT_CHAR(buffer) == ' ' || CURRENT_CHAR(buffer) == '\n')
-  {
-    ADVANCE(buffer);
-  }
-}
-
 static bool compare_string(XML_Header* xml, Buffer* buffer, u64 index)
 {
   u64 len = buffer->index - index;
@@ -63,6 +70,34 @@ enum XML_Header_Result
   XML_HEADER_ERROR,
   XML_HEADER_CLOSED
 };
+
+bool parse_tag(Buffer* buffer, XML_Tag* current_tag)
+{
+
+  // parse name
+  u64 index         = buffer->index;
+  current_tag->name = &CURRENT_CHAR(buffer);
+
+  // very robust yes
+  SKIP(buffer, !match(buffer, '='));
+  current_tag->name_length = buffer->index - index;
+
+  ADVANCE(buffer);
+  if (!match(buffer, '\"'))
+  {
+    printf("Expected '\"' for tag content?\n");
+    return false;
+  }
+  ADVANCE(buffer);
+  current_tag->value = &CURRENT_CHAR(buffer);
+  index              = buffer->index;
+
+  SKIP(buffer, CURRENT_CHAR(buffer) != '\"');
+
+  current_tag->value_length = buffer->index - index;
+  ADVANCE(buffer);
+  return true;
+}
 XML_Header_Result parse_header(XML* xml, Buffer* buffer)
 {
   const int initial_tag_capacity = 8;
@@ -72,10 +107,7 @@ XML_Header_Result parse_header(XML* xml, Buffer* buffer)
   header->tag_capacity = initial_tag_capacity;
   header->tags         = (XML_Tag*)allocate(sizeof(XML_Tag) * initial_tag_capacity);
   u64 index            = buffer->index;
-  while (CURRENT_CHAR(buffer) != ' ' && CURRENT_CHAR(buffer) != '>' && CURRENT_CHAR(buffer) != '/')
-  {
-    ADVANCE(buffer);
-  }
+  SKIP(buffer, CURRENT_CHAR(buffer) != ' ' && CURRENT_CHAR(buffer) != '>' && CURRENT_CHAR(buffer) != '/');
   header->name_length = buffer->index - index;
 
   // parse tags
@@ -85,44 +117,18 @@ XML_Header_Result parse_header(XML* xml, Buffer* buffer)
     if (isalpha(CURRENT_CHAR(buffer)))
     {
       RESIZE_ARRAY(header->tags, XML_Tag, header->tag_count, header->tag_capacity);
-      XML_Tag* current_tag = &header->tags[header->tag_count++];
-
-      // parse name
-      u64 index         = buffer->index;
-      current_tag->name = &CURRENT_CHAR(buffer);
-
-      // very robust yes
-      while (CURRENT_CHAR(buffer) != '=')
+      if (!parse_tag(buffer, &header->tags[header->tag_count++]))
       {
-        ADVANCE(buffer);
-      }
-      current_tag->name_length = buffer->index - index;
-
-      ADVANCE(buffer);
-      if (CURRENT_CHAR(buffer) != '\"')
-      {
-        printf("Expected '\"' for tag content?\n");
         return XML_HEADER_ERROR;
       }
-      ADVANCE(buffer);
-      current_tag->value = &CURRENT_CHAR(buffer);
-      index              = buffer->index;
-
-      while (CURRENT_CHAR(buffer) != '\"')
-      {
-        ADVANCE(buffer);
-      }
-
-      current_tag->value_length = buffer->index - index;
-      ADVANCE(buffer);
     }
-    else if (CURRENT_CHAR(buffer) == '/' && NEXT_CHAR(buffer) == '>')
+    else if (match(buffer, '/') && NEXT_CHAR(buffer) == '>')
     {
       ADVANCE(buffer);
       ADVANCE(buffer);
       return XML_HEADER_CLOSED;
     }
-    else if (CURRENT_CHAR(buffer) == '>')
+    else if (match(buffer, '>'))
     {
       ADVANCE(buffer);
       return XML_HEADER_OKAY;
@@ -140,10 +146,8 @@ bool close_xml(XML* xml, Buffer* buffer)
 
   ADVANCE(buffer);
   u64 index = buffer->index;
-  while (CURRENT_CHAR(buffer) != '>')
-  {
-    ADVANCE(buffer);
-  }
+  SKIP(buffer, CURRENT_CHAR(buffer) != '>');
+
   if (!compare_string(&xml->header, buffer, index))
   {
     printf("Closed the wrong thing?\n");
@@ -157,13 +161,11 @@ bool parse_content(XML* xml, Buffer* buffer, u64 index)
 {
   xml->type    = XML_CONTENT;
   xml->content = &CURRENT_CHAR(buffer);
-  while (CURRENT_CHAR(buffer) != '<')
-  {
-    ADVANCE(buffer);
-  }
+  SKIP(buffer, CURRENT_CHAR(buffer) != '<');
+
   xml->content_length = buffer->index - index;
   ADVANCE(buffer);
-  if (CURRENT_CHAR(buffer) != '/')
+  if (!match(buffer, '/'))
   {
     printf("Should be closing?\n");
     return false;
@@ -173,10 +175,8 @@ bool parse_content(XML* xml, Buffer* buffer, u64 index)
 
 bool parse_xml(XML* xml, Buffer* buffer)
 {
-  // parse first thing?
-
   skip_whitespace(buffer);
-  if (CURRENT_CHAR(buffer) != '<')
+  if (!match(buffer, '<'))
   {
     printf("Unknown char? %c %ld\n", buffer->buffer[buffer->index], buffer->index);
     return false;
@@ -195,7 +195,7 @@ bool parse_xml(XML* xml, Buffer* buffer)
 
   skip_whitespace(buffer);
   u64 index = buffer->index;
-  if (CURRENT_CHAR(buffer) == '<')
+  if (match(buffer, '<'))
   {
     // check empty
     if (NEXT_CHAR(buffer) == '/')
@@ -212,16 +212,16 @@ bool parse_xml(XML* xml, Buffer* buffer)
       return false;
     }
 
-    printf("Next? %c\n", CURRENT_CHAR(buffer));
     XML* next = xml->child;
     for (;;)
     {
       skip_whitespace(buffer);
-      if (CURRENT_CHAR(buffer) != '<')
+      if (!match(buffer, '<'))
       {
         return true;
       }
-      if(NEXT_CHAR(buffer) == '/'){
+      if (NEXT_CHAR(buffer) == '/')
+      {
         ADVANCE(buffer);
         return close_xml(xml, buffer);
       }
