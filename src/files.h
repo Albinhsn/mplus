@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+
 struct VertexData {
   Vector3 vertex;
   Vector2 uv;
@@ -140,6 +141,7 @@ struct WavefrontObject {
   WavefrontFace *faces;
 };
 
+struct ColladaFile {};
 bool sta_deserialize_json_from_file(Arena *arena, Json *json,
                                     const char *filename);
 bool sta_serialize_json_to_file(Json *json, const char *filename);

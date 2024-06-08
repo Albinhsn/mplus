@@ -1,3 +1,4 @@
+#include "animation.h"
 #include "files.h"
 #include "sdl.h"
 #include "shader.h"
@@ -16,6 +17,15 @@ bool should_quit() {
 }
 
 int main() {
+
+  XML xml = {};
+  bool res = sta_parse_collada_file(&xml, "./data/unarmed.dae");
+  if(!res){
+    return 1;
+  }
+  debug_xml(&xml);
+  return res;
+
   const int screen_width = 620;
   const int screen_height = 480;
 

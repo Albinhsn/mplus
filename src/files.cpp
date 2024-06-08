@@ -1161,7 +1161,6 @@ bool convert_obj_to_model(const char *input_filename,
                           const char *output_filename) {
   ModelData model = {};
   sta_parse_wavefront_object_from_file(&model, input_filename);
-  // vertex count
   FILE *file_ptr = fopen(output_filename, "w");
   if (file_ptr == 0) {
     return false;
@@ -1186,3 +1185,4 @@ bool convert_obj_to_model(const char *input_filename,
 
   return true;
 }
+
