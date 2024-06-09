@@ -34,6 +34,9 @@ enum XML_Encoding
 };
 struct XML_Node
 {
+public:
+  XML_Node*  find_key(const char* key_name);
+  XML_Tag*   find_tag(const char* tag_name);
   XML_Node*  next;
   XML_Node*  parent;
   XML_TYPE   type;
@@ -64,6 +67,8 @@ struct Quaternion
 
 struct Joint
 {
+public:
+  void  debug();
   Mat44 m_invBindPose;
   char* m_name;
   u8    m_iParent;
@@ -74,44 +79,87 @@ struct Skeleton
   u32    joint_count;
   Joint* joints;
 };
+// struct JointPose
+// {
+//  Quaternion m_rot;
+//  Vector3 m_trans;
+//  F32 m_scale;
+// };
 
 // just an affine transformation
 struct JointPose
 {
+public:
+  void   debug();
   float* t;
+  char*  name;
   Mat44* local_transform;
-  u32 steps;
+  u32    steps;
 };
 
 struct Animation
 {
+  // f32 times_per_second
+  // bool is_looping
   JointPose* poses;
+  u32        pose_count;
 };
 
 struct SkinnedVertex
 {
+public:
+  void    debug();
   Vector3 position;
   Vector2 uv;
   Vector3 normal;
-  u8      joint_index[4];
   float   joint_weight[4];
+  u32     joint_index[4];
 };
 
 struct AnimationModel
 {
+public:
   SkinnedVertex* vertices;
   u32*           indices;
   Animation      animations;
   Skeleton       skeleton;
   u64            vertex_count;
   u8             clip_count;
+  void           debug();
+};
+struct ColladaFaceIndexOrder
+{
+  int position_index;
+  int normal_index;
+  int uv_index;
+};
+struct ColladaGeometry
+{
+  Vector3*               vertices;
+  Vector2*               uv;
+  Vector3*               normals;
+  ColladaFaceIndexOrder* faces;
+  int                    face_count;
 };
 
-bool      sta_collada_parse_from_file(AnimationModel* animation, const char* filename);
-void      debug_xml_node(XML_Node* xml);
-XML_Node* sta_xml_find_key(XML_Node* xml, const char* node_name);
-bool      remove_xml_key(XML_Node* xml, const char* node_name);
-void      debug_xml(XML* xml);
-void      write_xml_to_file(XML* xml, const char* filename);
+struct ColladaJointAndWeightData
+{
+  int joint_index[4];
+  f32 weight[4];
+  int count;
+};
+struct ColladaControllers
+{
+  int                        vertex_weights_count; // vertex_count?
+  ColladaJointAndWeightData* joint_and_weight_idx;
+  Joint*                     joints;
+  u32                        joint_count;
+};
+
+bool sta_collada_parse_from_file(AnimationModel* animation, const char* filename);
+void debug_xml_node(XML_Node* xml);
+bool remove_xml_key(XML_Node* xml, const char* node_name);
+void debug_xml(XML* xml);
+void write_xml_to_file(XML* xml, const char* filename);
 
 #endif

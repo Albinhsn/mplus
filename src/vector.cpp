@@ -8,6 +8,105 @@ float Mat22::determinant()
   return this->rc[0][0] * this->rc[1][1] - this->rc[0][1] * this->rc[1][0];
 }
 
+Mat44 Mat44::inverse()
+{
+  Mat33 m00 = {
+      .rc = {{this->rc[1][1], this->rc[1][2], this->rc[1][3]}, //
+ {this->rc[2][1], this->rc[2][2], this->rc[2][3]}, //
+ {this->rc[3][1], this->rc[3][2], this->rc[3][3]}}  //
+  };
+  Mat33 m01 = {
+      .rc = {{this->rc[1][0], this->rc[1][2], this->rc[1][3]}, //
+ {this->rc[2][0], this->rc[2][2], this->rc[2][3]}, //
+ {this->rc[3][0], this->rc[3][2], this->rc[3][3]}}  //
+  };
+  Mat33 m02 = {
+      .rc = {{this->rc[1][0], this->rc[1][1], this->rc[1][3]}, //
+ {this->rc[2][0], this->rc[2][1], this->rc[2][3]}, //
+ {this->rc[3][0], this->rc[3][1], this->rc[3][3]}}
+  }; //
+  Mat33 m03 = {
+      .rc = {{this->rc[1][0], this->rc[1][1], this->rc[1][2]}, //
+ {this->rc[2][0], this->rc[2][1], this->rc[2][2]}, //
+ {this->rc[3][0], this->rc[3][1], this->rc[3][2]}}  //
+  };
+
+  Mat33 m10 = {
+      .rc = {{this->rc[0][1], this->rc[0][2], this->rc[0][3]}, //
+ {this->rc[2][1], this->rc[2][2], this->rc[2][3]}, //
+ {this->rc[3][1], this->rc[3][2], this->rc[3][3]}}  //
+  };
+  Mat33 m11 = {
+      .rc = {{this->rc[0][0], this->rc[0][2], this->rc[0][3]}, //
+ {this->rc[2][0], this->rc[2][2], this->rc[2][3]}, //
+ {this->rc[3][0], this->rc[3][2], this->rc[3][3]}}  //
+  };
+  Mat33 m12 = {
+      .rc = {{this->rc[0][0], this->rc[0][1], this->rc[0][3]}, //
+ {this->rc[2][0], this->rc[2][1], this->rc[2][3]}, //
+ {this->rc[3][0], this->rc[3][1], this->rc[3][3]}}  //
+  };
+  Mat33 m13 = {
+      .rc = {{this->rc[0][0], this->rc[0][1], this->rc[0][2]}, //
+ {this->rc[2][0], this->rc[2][1], this->rc[2][2]}, //
+ {this->rc[3][0], this->rc[3][1], this->rc[3][2]}}  //
+  };
+
+  Mat33 m20 = {
+      .rc = {{this->rc[0][1], this->rc[0][2], this->rc[0][3]}, //
+ {this->rc[1][1], this->rc[1][2], this->rc[1][3]}, //
+ {this->rc[3][1], this->rc[3][2], this->rc[3][3]}}  //
+  };
+
+  Mat33 m21 = {
+      .rc = {{this->rc[0][0], this->rc[0][2], this->rc[0][3]}, //
+ {this->rc[1][0], this->rc[1][2], this->rc[1][3]}, //
+ {this->rc[3][0], this->rc[3][2], this->rc[3][3]}}  //
+  };
+  Mat33 m22 = {
+      .rc = {{this->rc[0][0], this->rc[0][1], this->rc[0][3]}, //
+ {this->rc[1][0], this->rc[1][1], this->rc[1][3]}, //
+ {this->rc[3][0], this->rc[3][1], this->rc[3][3]}}  //
+  };
+  Mat33 m23 = {
+      .rc = {{this->rc[0][0], this->rc[0][1], this->rc[0][2]}, //
+ {this->rc[1][0], this->rc[1][1], this->rc[1][2]}, //
+ {this->rc[3][0], this->rc[3][1], this->rc[3][2]}}  //
+  };
+  Mat33 m30 = {
+      .rc = {{this->rc[0][1], this->rc[0][2], this->rc[0][3]}, //
+ {this->rc[1][1], this->rc[1][2], this->rc[1][3]}, //
+ {this->rc[2][1], this->rc[2][2], this->rc[2][3]}}  //
+  };
+  Mat33 m31 = {
+      .rc = {{this->rc[0][0], this->rc[0][2], this->rc[0][3]}, //
+ {this->rc[1][0], this->rc[1][2], this->rc[1][3]}, //
+ {this->rc[2][0], this->rc[2][2], this->rc[2][3]}}  //
+  };
+  Mat33 m32 = {
+      .rc = {{this->rc[0][0], this->rc[0][1], this->rc[0][3]}, //
+ {this->rc[1][0], this->rc[1][1], this->rc[1][3]}, //
+ {this->rc[2][0], this->rc[2][1], this->rc[2][3]}}  //
+  };
+  Mat33 m33 = {
+      .rc = {{this->rc[0][0], this->rc[0][1], this->rc[0][2]}, //
+ {this->rc[1][0], this->rc[1][1], this->rc[1][2]}, //
+ {this->rc[2][0], this->rc[2][1], this->rc[2][2]}}  //
+  };
+  Mat44 res = {
+      .rc = {{m00.determinant(), -m01.determinant(), m02.determinant(), -m03.determinant()},
+             {-m10.determinant(), m11.determinant(), -m12.determinant(), m13.determinant()},
+             {m20.determinant(), -m21.determinant(), m22.determinant(), -m23.determinant()},
+             {-m30.determinant(), m31.determinant(), -m32.determinant(), m33.determinant()}}
+  };
+  // debugmat4x4(res);
+
+  f32 det   = this->determinant();
+  f32 scale = 1.0f / det;
+  res.scale(Vector3(scale, scale, scale));
+  return res;
+}
+
 Mat44 Mat44::rotate_x(f32 degrees)
 {
   float r = DEGREES_TO_RADIANS(degrees);
@@ -187,11 +286,35 @@ Mat44 Mat44::translate(Vector3 v)
 
 void Mat44::identity()
 {
-  memset(&this->m[0], 0, 16);
+  memset(&this->m[0], 0, 16 * sizeof(float));
   this->rc[0][0] = 1.0f;
   this->rc[1][1] = 1.0f;
   this->rc[2][2] = 1.0f;
   this->rc[3][3] = 1.0f;
+}
+
+float Mat44::determinant()
+{
+  Mat33 m00 = {
+      .rc = {{this->rc[1][1], this->rc[1][2], this->rc[1][3]}, {this->rc[2][1], this->rc[2][2], this->rc[2][3]}, {this->rc[3][1], this->rc[3][2], this->rc[3][3]}},
+  };
+  Mat33 m01 = {
+      .rc = {{this->rc[1][0], this->rc[1][2], this->rc[1][3]}, {this->rc[2][0], this->rc[2][2], this->rc[2][3]}, {this->rc[3][0], this->rc[3][2], this->rc[3][3]}},
+  };
+  Mat33 m02 = {
+      .rc = {{this->rc[1][0], this->rc[1][1], this->rc[1][3]}, {this->rc[2][0], this->rc[2][1], this->rc[2][3]}, {this->rc[3][0], this->rc[3][1], this->rc[3][3]}},
+  };
+  Mat33 m03 = {
+      .rc = {{this->rc[1][0], this->rc[1][1], this->rc[1][2]}, //
+ {this->rc[2][0], this->rc[2][1], this->rc[2][2]}, //
+ {this->rc[3][0], this->rc[3][1], this->rc[3][2]}}, //
+  };
+
+  f32 d0 = this->rc[0][0] * m00.determinant();
+  f32 d1 = this->rc[0][1] * m01.determinant();
+  f32 d2 = this->rc[0][2] * m02.determinant();
+  f32 d3 = this->rc[0][3] * m03.determinant();
+  return (d0 - d1 + d2 - d3);
 }
 
 float Mat33::determinant()

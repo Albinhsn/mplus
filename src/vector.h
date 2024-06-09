@@ -2,6 +2,7 @@
 #define STA_VECTOR
 
 #include "common.h"
+#include <cstdio>
 
 class Mat43 {};
 
@@ -90,6 +91,9 @@ public:
     this->y = y;
     this->z = z;
     this->w = w;
+  }
+  void debug(){
+    printf("%f %f %f %f\n", x, y, z, w);
   }
   union {
     struct {

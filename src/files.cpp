@@ -8,6 +8,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+static inline Vector2 cast_vec3_to_vec2(Vector3 v)
+{
+  return (Vector2){v.x, v.y};
+}
+
+static inline Vector3 cast_vec4_to_vec3(Vector4 v)
+{
+  return (Vector3){v.x, v.y, v.z};
+}
+
 int parse_int_from_string(Buffer* buffer)
 {
   bool sign = false;
@@ -54,7 +64,29 @@ float parse_float_from_string(Buffer* buffer)
       ADVANCE(buffer);
     }
   }
+
   value += decimal;
+  if (CURRENT_CHAR(buffer) == 'e' || CURRENT_CHAR(buffer) == 'E')
+  {
+    ADVANCE(buffer);
+    bool sign_exp = false;
+    if (CURRENT_CHAR(buffer) == '-')
+    {
+      ADVANCE(buffer);
+      sign_exp = true;
+    }
+    u32 exp = (CURRENT_CHAR(buffer) - '0');
+    ADVANCE(buffer);
+
+    if (sign_exp)
+    {
+      value *= pow(10, exp);
+    }
+    else
+    {
+      value /= pow(10, exp);
+    }
+  }
 
   return sign ? -value : value;
 }
@@ -228,17 +260,7 @@ bool sta_read_file(Arena* arena, Buffer* string, const char* fileName)
 
   return true;
 }
-void read_safe(void* target, u64 size, FILE* ptr, const char* caller)
-{
-  u64 read = fread(target, 1, size, ptr);
-  if (read != size)
-  {
-    printf("Didn't read correctly? :) %ld %ld %s\n", read, size, caller);
-    exit(1);
-  }
-}
-
-void read_safe(void* target, u64 size, FILE* ptr)
+static inline void read_safe(void* target, u64 size, FILE* ptr)
 {
   u64 read = fread(target, 1, size, ptr);
   if (read != size)
@@ -248,36 +270,38 @@ void read_safe(void* target, u64 size, FILE* ptr)
   }
 }
 
-bool sta_read_targa_from_file(TargaImage* image, const char* filename)
+bool sta_read_targa_from_file_rgba(TargaImage* image, const char* filename)
 {
 
-  TargaHeader   targaFileHeader;
+  TargaHeader   targa_file_header;
+  FILE*         file_ptr;
+  unsigned long image_size;
+  const int     RGB          = 24;
+  const int     RGBA         = 32;
+  const int     UNCOMPRESSED = 2;
+  const int     RLE          = 10;
 
-  FILE*         filePtr;
-  unsigned long imageSize;
-
-  filePtr = fopen(filename, "rb");
-  if (filePtr == NULL)
+  file_ptr                   = fopen(filename, "rb");
+  if (file_ptr == NULL)
   {
     printf("ERROR: file doesn't exist %s\n", filename);
     return false;
   }
 
-  read_safe((void*)&targaFileHeader, sizeof(TargaHeader), filePtr);
+  read_safe((void*)&targa_file_header, sizeof(TargaHeader), file_ptr);
+  image->width  = targa_file_header.width;
+  image->height = targa_file_header.height;
+  image->bpp    = targa_file_header.imagePixelSize;
 
-  image->width  = targaFileHeader.width;
-  image->height = targaFileHeader.height;
-  image->bpp    = targaFileHeader.imagePixelSize;
-
-  if (targaFileHeader.imageType == 2)
+  if (targa_file_header.imageType == UNCOMPRESSED)
   {
-    imageSize   = image->width * image->height * 4;
-    image->data = (unsigned char*)allocate(imageSize);
+    image_size  = image->width * image->height * 4;
+    image->data = (unsigned char*)allocate(image_size);
     if (image->bpp == 24)
     {
       long size     = image->width * image->height * 3;
       u8*  rgb_data = (u8*)allocate(size);
-      read_safe((void*)rgb_data, size, filePtr);
+      read_safe((void*)rgb_data, size, file_ptr);
       for (int i = 0; i < size / 3; i++)
       {
         image->data[i * 4 + 0] = rgb_data[i * 3 + 0];
@@ -288,28 +312,28 @@ bool sta_read_targa_from_file(TargaImage* image, const char* filename)
     }
     else
     {
-      read_safe((void*)image->data, imageSize, filePtr);
+      read_safe((void*)image->data, image_size, file_ptr);
     }
   }
-  else if (targaFileHeader.imageType == 10)
+  else if (targa_file_header.imageType == RLE)
   {
-    imageSize   = image->width * image->height * 4;
+    image_size  = image->width * image->height * 4;
     u64 bpp     = 4;
-    image->data = (unsigned char*)allocate(imageSize);
+    image->data = (unsigned char*)allocate(image_size);
 
-    if (targaFileHeader.imagePixelSize == 24)
+    if (targa_file_header.imagePixelSize == RGB)
     {
       u64 imageIndex = 0;
       u8  byte;
-      while (imageIndex < imageSize)
+      while (imageIndex < image_size)
       {
-        read_safe((void*)&byte, sizeof(u8), filePtr);
+        read_safe((void*)&byte, sizeof(u8), file_ptr);
         u8* curr = &image->data[imageIndex];
         if (byte >= 128)
         {
           u8 repeated = byte - 127;
           u8 color[3];
-          read_safe((void*)&color, ArrayCount(color), filePtr);
+          read_safe((void*)&color, ArrayCount(color), file_ptr);
 
           for (i32 j = 0; j < repeated; j++)
           {
@@ -326,7 +350,7 @@ bool sta_read_targa_from_file(TargaImage* image, const char* filename)
           for (i32 j = 0; j < repeated; j++)
           {
             u8 color[3];
-            read_safe((void*)&color, ArrayCount(color), filePtr);
+            read_safe((void*)&color, ArrayCount(color), file_ptr);
 
             curr[j * bpp + 0] = color[0];
             curr[j * bpp + 1] = color[1];
@@ -341,16 +365,16 @@ bool sta_read_targa_from_file(TargaImage* image, const char* filename)
     {
       u64 imageIndex = 0;
       u8  byte;
-      while (imageIndex < imageSize)
+      while (imageIndex < image_size)
       {
-        read_safe((void*)&byte, sizeof(u8), filePtr);
+        read_safe((void*)&byte, sizeof(u8), file_ptr);
         u8* curr = &image->data[imageIndex];
         if (byte >= 128)
         {
           u8 repeated = byte - 127;
 
           u8 color[4];
-          read_safe((void*)&color, ArrayCount(color), filePtr);
+          read_safe((void*)&color, ArrayCount(color), file_ptr);
 
           for (i32 j = 0; j < repeated; j++)
           {
@@ -368,7 +392,7 @@ bool sta_read_targa_from_file(TargaImage* image, const char* filename)
           for (i32 j = 0; j < repeated; j++)
           {
             u8 color[4];
-            read_safe((void*)&color, ArrayCount(color), filePtr);
+            read_safe((void*)&color, ArrayCount(color), file_ptr);
 
             curr[j * bpp + 0] = color[0];
             curr[j * bpp + 1] = color[1];
@@ -385,15 +409,16 @@ bool sta_read_targa_from_file(TargaImage* image, const char* filename)
     assert(0 && "Can't parse this targa type");
   }
 
+  // reminder that tga stores it as GBRA not RGBA
   for (u64 idx = 0; idx < image->height * image->width * 4; idx += 4)
   {
     unsigned char tmp    = image->data[idx];
     image->data[idx]     = image->data[idx + 2];
     image->data[idx + 2] = tmp;
   }
-  image->bpp = 32;
+  image->bpp = RGBA;
 
-  if (fclose(filePtr) != 0)
+  if (fclose(file_ptr) != 0)
   {
     printf("Failed to close file\n");
     return false;
@@ -1163,19 +1188,6 @@ static inline void parseWavefrontLine(WavefrontObject* obj, Buffer* buffer)
   {
     parseWavefrontFace(obj, buffer);
   }
-  // else
-  // {
-  //   // printf("Don't know how to parse '%.*s'\n", (i32)buffer->len, buffer->buffer);
-  // }
-}
-static inline Vector2 cast_vec3_to_vec2(Vector3 v)
-{
-  return (Vector2){v.x, v.y};
-}
-
-static inline Vector3 cast_vec4_to_vec3(Vector4 v)
-{
-  return (Vector3){v.x, v.y, v.z};
 }
 
 bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename)
@@ -1272,8 +1284,6 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
   deallocate(obj.vertices, sizeof(Vector4) * obj.vertex_capacity);
   deallocate(obj.faces, sizeof(WavefrontFace) * obj.face_capacity);
   deallocate(obj.normals, sizeof(Vector3) * obj.normal_capacity);
-
-  // printf("Low: %.3f, High: %.3f\n", low, high);
 
   float diff = high - low;
   for (unsigned int i = 0; i < model->vertex_count; i++)

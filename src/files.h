@@ -31,9 +31,10 @@ struct ModelData
 
 struct TargaImage
 {
-  u64            width, height;
-  i32            bpp;
+  
   unsigned char* data;
+  i32            bpp;
+  u16            width, height;
 };
 typedef struct TargaImage TargaImage;
 
@@ -178,7 +179,7 @@ void  sta_save_targa(TargaImage* image, const char* filename);
 
 bool  sta_write_ppm(const char* filename, u8* data, u64 width, u64 height);
 void  sta_draw_rect_to_image(u8* data, u64 image_width, u64 x, u64 y, u64 width, u64 height, u8 r, u8 g, u8 b, u8 a);
-bool  sta_read_targa_from_file(TargaImage* image, const char* filename);
+bool  sta_read_targa_from_file_rgba(TargaImage* image, const char* filename);
 bool  sta_read_targa_from_file(Arena* arena, TargaImage* image, const char* filename);
 bool  sta_read_file(Arena* arena, Buffer* string, const char* fileName);
 bool  sta_read_file(Buffer* buffer, const char* fileName);
