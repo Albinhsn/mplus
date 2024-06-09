@@ -78,7 +78,6 @@ void skip_whitespace(Buffer* buffer)
   SKIP(buffer, match(buffer, ' ') || match(buffer, '\n') || match(buffer, '\t'));
 }
 
-
 void sta_save_targa(TargaImage* image, const char* filename)
 {
   printf("Saving at '%s'\n", filename);
@@ -1060,84 +1059,68 @@ bool sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filena
   return true;
 }
 
-static void skip_digit(Buffer* buffer)
+static void skip_until_digit(Buffer* buffer)
 {
   SKIP(buffer, buffer->index < buffer->len && !(isdigit(CURRENT_CHAR(buffer)) || (CURRENT_CHAR(buffer) == '-')));
 }
 
-static void parse_wavefront_texture(WavefrontObject* obj, const char* line)
+static void parse_wavefront_texture(WavefrontObject* obj, Buffer* buffer)
 {
-  Buffer buffer = {};
-  buffer.len    = strlen(line);
-  buffer.buffer = (char*)line;
-
-  skip_digit(&buffer);
 
   obj->texture_coordinate_count++;
   RESIZE_ARRAY(obj->texture_coordinates, Vector3, obj->texture_coordinate_count, obj->texture_coordinate_capacity);
 
   for (i32 i = 0; i < 2; i++)
   {
-    obj->texture_coordinates[obj->texture_coordinate_count - 1].v[i] = parse_float_from_string(&buffer);
-    skip_digit(&buffer);
+    skip_until_digit(buffer);
+    obj->texture_coordinates[obj->texture_coordinate_count - 1].v[i] = parse_float_from_string(buffer);
   }
 
   // Parse optional w
-  if (buffer.index < strlen(line))
+  skip_until_digit(buffer);
+  if (buffer->index < buffer->len)
   {
-    obj->texture_coordinates[obj->texture_coordinate_count - 1].z = parse_float_from_string(&buffer);
+    obj->texture_coordinates[obj->texture_coordinate_count - 1].z = parse_float_from_string(buffer);
   }
   else
   {
     obj->texture_coordinates[obj->texture_coordinate_count - 1].z = 0;
   }
 }
-static void parseWavefrontNormal(WavefrontObject* obj, const char* line)
+static void parseWavefrontNormal(WavefrontObject* obj, Buffer* buffer)
 {
 
-  Buffer buffer = {};
-  buffer.len    = strlen(line);
-  buffer.buffer = (char*)line;
-
-  skip_digit(&buffer);
   obj->normal_count++;
   RESIZE_ARRAY(obj->normals, Vector3, obj->normal_count, obj->normal_capacity);
 
   // Parse x,y,z
   for (i32 i = 0; i < 3; i++)
   {
-    obj->normals[obj->normal_count - 1].v[i] = parse_float_from_string(&buffer);
-    skip_digit(&buffer);
+    skip_until_digit(buffer);
+    obj->normals[obj->normal_count - 1].v[i] = parse_float_from_string(buffer);
   }
 }
-static void parseWavefrontVertex(WavefrontObject* obj, const char* line)
+static void parseWavefrontVertex(WavefrontObject* obj, Buffer* buffer)
 {
-  Buffer buffer = {};
-  buffer.len    = strlen(line);
-  buffer.buffer = (char*)line;
   obj->vertex_count++;
   RESIZE_ARRAY(obj->vertices, Vector4, obj->vertex_count, obj->vertex_capacity);
 
   // Parse x,y,z
   for (i32 i = 0; i < 3; i++)
   {
-    skip_digit(&buffer);
-    obj->vertices[obj->vertex_count - 1].v[i] = parse_float_from_string(&buffer);
+    skip_until_digit(buffer);
+    obj->vertices[obj->vertex_count - 1].v[i] = parse_float_from_string(buffer);
   }
-    skip_digit(&buffer);
 
   // Parse optional w
-  if (buffer.index < strlen(line))
+  skip_until_digit(buffer);
+  if (buffer->index < buffer->len)
   {
-    obj->vertices[obj->vertex_count - 1].w = parse_float_from_string(&buffer);
+    obj->vertices[obj->vertex_count - 1].w = parse_float_from_string(buffer);
   }
 }
-static void parseWavefrontFace(WavefrontObject* obj, const char* line)
+static void parseWavefrontFace(WavefrontObject* obj, Buffer* buffer)
 {
-  Buffer buffer = {};
-  buffer.len    = strlen(line);
-  buffer.buffer = (char*)line;
-  buffer.index  = 0;
   obj->face_count++;
   RESIZE_ARRAY(obj->faces, WavefrontFace, obj->face_count, obj->face_capacity);
 
@@ -1145,44 +1128,45 @@ static void parseWavefrontFace(WavefrontObject* obj, const char* line)
   u32            vertexCap = 8;
   face->count              = 0;
   face->vertices           = (WavefrontVertexData*)allocate(sizeof(WavefrontVertexData) * vertexCap);
-  ADVANCE(&buffer);
-  while (buffer.index < buffer.len)
+  ADVANCE(buffer);
+  skip_until_digit(buffer);
+  while (buffer->index < buffer->len)
   {
     face->count++;
     RESIZE_ARRAY(face->vertices, WavefrontVertexData, face->count, vertexCap);
 
-    skip_digit(&buffer);
-    face->vertices[face->count - 1].vertex_idx = parse_int_from_string(&buffer);
+    face->vertices[face->count - 1].vertex_idx = parse_int_from_string(buffer);
 
-    skip_digit(&buffer);
-    face->vertices[face->count - 1].texture_idx = parse_int_from_string(&buffer);
+    skip_until_digit(buffer);
+    face->vertices[face->count - 1].texture_idx = parse_int_from_string(buffer);
 
-    skip_digit(&buffer);
-    face->vertices[face->count - 1].normal_idx = parse_int_from_string(&buffer);
+    skip_until_digit(buffer);
+    face->vertices[face->count - 1].normal_idx = parse_int_from_string(buffer);
+    skip_until_digit(buffer);
   }
 }
-static inline void parseWavefrontLine(WavefrontObject* obj, const char* line)
+static inline void parseWavefrontLine(WavefrontObject* obj, Buffer* buffer)
 {
-  if (line[0] == 'v' && line[1] == 't')
+  if (CURRENT_CHAR(buffer) == 'v' && NEXT_CHAR(buffer) == 't')
   {
-    parse_wavefront_texture(obj, line);
+    parse_wavefront_texture(obj, buffer);
   }
-  else if (line[0] == 'v' && line[1] == 'n')
+  else if (CURRENT_CHAR(buffer) == 'v' && NEXT_CHAR(buffer) == 'n')
   {
-    parseWavefrontNormal(obj, line);
+    parseWavefrontNormal(obj, buffer);
   }
-  else if (line[0] == 'v')
+  else if (CURRENT_CHAR(buffer) == 'v')
   {
-    parseWavefrontVertex(obj, line);
+    parseWavefrontVertex(obj, buffer);
   }
-  else if (line[0] == 'f')
+  else if (CURRENT_CHAR(buffer) == 'f')
   {
-    parseWavefrontFace(obj, line);
+    parseWavefrontFace(obj, buffer);
   }
-  else
-  {
-    printf("Don't know how to parse '%s'\n", line);
-  }
+  // else
+  // {
+  //   // printf("Don't know how to parse '%.*s'\n", (i32)buffer->len, buffer->buffer);
+  // }
 }
 static inline Vector2 cast_vec3_to_vec2(Vector3 v)
 {
@@ -1225,10 +1209,14 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
     return false;
   }
 
+  Buffer buffer = {};
   while ((read = getline(&line, &len, filePtr)) != -1)
   {
-    line[strlen(line) - 1] = '\0';
-    parseWavefrontLine(&obj, line);
+    buffer.len           = strlen(line);
+    line[buffer.len - 1] = '\0';
+    buffer.buffer        = line;
+    buffer.index         = 0;
+    parseWavefrontLine(&obj, &buffer);
   }
 
   model->vertex_count = obj.face_count * obj.faces[0].count;
@@ -1276,6 +1264,7 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
 
       model->vertices[index].normal = obj.normals[data.normal_idx - 1];
     }
+    // printf("\n");
     deallocate(obj.faces[i].vertices, sizeof(WavefrontVertexData) * obj.faces[i].count);
   }
 
@@ -1284,7 +1273,7 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
   deallocate(obj.faces, sizeof(WavefrontFace) * obj.face_capacity);
   deallocate(obj.normals, sizeof(Vector3) * obj.normal_capacity);
 
-  printf("Low: %.3f, High: %.3f\n", low, high);
+  // printf("Low: %.3f, High: %.3f\n", low, high);
 
   float diff = high - low;
   for (unsigned int i = 0; i < model->vertex_count; i++)

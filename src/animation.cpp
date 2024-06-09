@@ -1,9 +1,9 @@
 #include "animation.h"
 #include "files.h"
 #include "platform.h"
+#include <cassert>
 #include <cctype>
 #include <cfloat>
-#include <cmath>
 #include <cstring>
 
 static Buffer sta_xml_create_buffer_from_content(XML_Node* node)
@@ -99,7 +99,6 @@ XML_Tag* sta_xml_find_tag(XML_Node* xml, const char* tag_name)
   }
   return 0;
 }
-
 
 void debug_tag(XML_Tag* tag)
 {
@@ -717,6 +716,7 @@ void sta_collada_parse_controller_data(AnimationModel* model, XML_Node* node)
   {
     SkinnedVertex* sv    = &model->vertices[i];
     i32            count = vcount[i];
+    assert(count <= 4 && "Expected at max 4 joints\n");
     for (int j = 0; j < count; j++)
     {
       skip_whitespace(&buffer);
@@ -892,5 +892,6 @@ bool sta_collada_parse_from_file(AnimationModel* animation, const char* filename
     return false;
   }
   sta_collada_parse_animation_data(animation, animations);
+
   return true;
 }

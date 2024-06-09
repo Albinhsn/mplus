@@ -33,12 +33,18 @@ bool debug_me(ModelData* obj, AnimationModel* collada)
     SkinnedVertex collada_vertex = collada->vertices[i];
     if (std::abs(obj_vertex.vertex.x - collada_vertex.position.x) > EPSILON)
     {
+      printf("Obj: ");
+      obj_vertex.vertex.debug();
+      printf("Collada: ");
+      collada_vertex.position.debug();
       printf("Failed x @%ld, %f vs %f\n", i, obj_vertex.vertex.x, collada_vertex.position.x);
+      return false;
       // return false;
     }
     if (std::abs(obj_vertex.vertex.y - collada_vertex.position.y) > EPSILON)
     {
       printf("Failed y @%ld, %f vs %f\n", i, obj_vertex.vertex.y, collada_vertex.position.y);
+      return false;
       // return false;
     }
     if (std::abs(obj_vertex.vertex.z - collada_vertex.position.z) > EPSILON)
@@ -76,7 +82,6 @@ int main()
   {
     printf("Failed\n");
   }
-  return 0;
 
   TargaImage image = {};
   result           = sta_read_targa_from_file(&image, "./data/unarmed_man/Peasant_Man_diffuse.tga");
@@ -98,12 +103,12 @@ int main()
   sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
   sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * animation.vertex_count, animation.indices, GL_STATIC_DRAW);
 
-  int size = sizeof(float) * 12;
+  int size = sizeof(float) * 13;
   sta_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, size, (void*)0);
   sta_glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, size, (void*)(3 * sizeof(float)));
   sta_glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, size, (void*)(5 * sizeof(float)));
   sta_glVertexAttribIPointer(3, 1, GL_INT, size, (void*)(8 * sizeof(float)));
-  sta_glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, size, (void*)(9 * sizeof(float)));
+  sta_glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, size, (void*)(9 * sizeof(float)));
   sta_glEnableVertexAttribArray(0);
   sta_glEnableVertexAttribArray(1);
   sta_glEnableVertexAttribArray(2);
@@ -117,7 +122,7 @@ int main()
   sta_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
   sta_glGenerateMipmap(GL_TEXTURE_2D);
 
-  Shader shader("./shaders/tri.vert", "./shaders/tri.frag");
+  Shader shader("./shaders/animation.vert", "./shaders/animation.frag");
 
   shader.use();
   shader.set_int("texture1", 0);

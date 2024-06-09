@@ -94,7 +94,7 @@ struct SkinnedVertex
   Vector2 uv;
   Vector3 normal;
   u8      joint_index[4];
-  float   joint_weight[3];
+  float   joint_weight[4];
 };
 
 struct AnimationModel
