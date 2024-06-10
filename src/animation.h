@@ -70,6 +70,7 @@ struct Joint
 public:
   void  debug();
   Mat44 m_invBindPose;
+  Mat44 m_mat;
   char* m_name;
   u8    m_iParent;
 };

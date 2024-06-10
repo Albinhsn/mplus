@@ -86,8 +86,8 @@ void free_xml_node(XML_Node* node)
     }
   }
 
-  deallocate(node->header.tags, sizeof(XML_Tag) * node->header.tag_capacity);
-  deallocate(node, sizeof(XML_Node));
+  sta_deallocate(node->header.tags, sizeof(XML_Tag) * node->header.tag_capacity);
+  sta_deallocate(node, sizeof(XML_Node));
 }
 
 bool remove_xml_key(XML_Node* xml, const char* node_name, u64 node_name_length)
@@ -317,7 +317,7 @@ XML_Header_Result parse_header(XML_Node* xml, Buffer* buffer)
   XML_Header* header   = &xml->header;
   header->name         = &CURRENT_CHAR(buffer);
   header->tag_capacity = initial_tag_capacity;
-  header->tags         = (XML_Tag*)allocate(sizeof(XML_Tag) * initial_tag_capacity);
+  header->tags         = (XML_Tag*)sta_allocate(sizeof(XML_Tag) * initial_tag_capacity);
   u64 index            = buffer->index;
   SKIP(buffer, CURRENT_CHAR(buffer) != ' ' && CURRENT_CHAR(buffer) != '>' && CURRENT_CHAR(buffer) != '/');
   header->name_length = buffer->index - index;
@@ -420,7 +420,7 @@ bool parse_xml(XML_Node* xml, Buffer* buffer)
       return close_xml(xml, buffer);
     }
     xml->type          = XML_PARENT;
-    xml->child         = (XML_Node*)allocate(sizeof(XML_Node));
+    xml->child         = (XML_Node*)sta_allocate(sizeof(XML_Node));
     xml->child->parent = xml;
     if (!parse_xml(xml->child, buffer))
     {
@@ -440,7 +440,7 @@ bool parse_xml(XML_Node* xml, Buffer* buffer)
         ADVANCE(buffer);
         return close_xml(xml, buffer);
       }
-      next->next         = (XML_Node*)allocate(sizeof(XML_Node));
+      next->next         = (XML_Node*)sta_allocate(sizeof(XML_Node));
       next->next->parent = xml;
       next               = next->next;
       if (!parse_xml(next, buffer))
@@ -476,7 +476,7 @@ bool parse_version_and_encoding(XML* xml, Buffer* buffer)
 
   const int initial_tag_capacity     = 2;
   xml->version_and_encoding_capacity = initial_tag_capacity;
-  xml->version_and_encoding          = (XML_Tag*)allocate(sizeof(XML_Tag) * initial_tag_capacity);
+  xml->version_and_encoding          = (XML_Tag*)sta_allocate(sizeof(XML_Tag) * initial_tag_capacity);
   do
   {
     skip_whitespace(buffer);
@@ -555,7 +555,7 @@ bool sta_collada_parse_model_data(ColladaGeometry* geometry, XML_Node* node)
   }
 
   int position_count = parse_int_from_string(position_count_tag->value) / 3;
-  geometry->vertices = (Vector3*)allocate(sizeof(Vector3) * position_count);
+  geometry->vertices = (Vector3*)sta_allocate(sizeof(Vector3) * position_count);
   Buffer buffer      = sta_xml_create_buffer_from_content(position_array);
   parse_vector3_array(&buffer, geometry->vertices, position_count);
 
@@ -578,7 +578,7 @@ bool sta_collada_parse_model_data(ColladaGeometry* geometry, XML_Node* node)
     return false;
   }
   int normal_count  = parse_int_from_string(normal_count_tag->value) / 3;
-  geometry->normals = (Vector3*)allocate(sizeof(Vector3) * normal_count);
+  geometry->normals = (Vector3*)sta_allocate(sizeof(Vector3) * normal_count);
   buffer            = sta_xml_create_buffer_from_content(normal_array);
   parse_vector3_array(&buffer, geometry->normals, normal_count);
 
@@ -601,7 +601,7 @@ bool sta_collada_parse_model_data(ColladaGeometry* geometry, XML_Node* node)
     return false;
   }
   int uv_count = parse_int_from_string(uv_count_tag->value) / 2;
-  geometry->uv = (Vector2*)allocate(sizeof(Vector2) * uv_count);
+  geometry->uv = (Vector2*)sta_allocate(sizeof(Vector2) * uv_count);
   buffer       = sta_xml_create_buffer_from_content(uv_array);
   parse_vector2_array(&buffer, geometry->uv, uv_count);
 
@@ -625,7 +625,7 @@ bool sta_collada_parse_model_data(ColladaGeometry* geometry, XML_Node* node)
 
   const unsigned int face_count = 3;
   geometry->face_count          = p_count * face_count;
-  geometry->faces               = (ColladaFaceIndexOrder*)allocate(sizeof(ColladaFaceIndexOrder) * p_count * face_count);
+  geometry->faces               = (ColladaFaceIndexOrder*)sta_allocate(sizeof(ColladaFaceIndexOrder) * p_count * face_count);
 
   XML_Node* p                   = polylist->find_key("p");
   if (p == 0)
@@ -689,7 +689,7 @@ void sta_collada_parse_controller_data(ColladaControllers* controllers, XML_Node
   XML_Node* weight_array  = weight_source->find_key("float_array");
   int       weight_count  = sta_xml_get_count_tag(weight_array);
 
-  f32*      weights       = (f32*)allocate(sizeof(f32) * weight_count);
+  f32*      weights       = (f32*)sta_allocate(sizeof(f32) * weight_count);
   Buffer    buffer        = {};
   buffer                  = sta_xml_create_buffer_from_content(weight_array);
   parse_float_array(weights, weight_count, &buffer);
@@ -698,7 +698,7 @@ void sta_collada_parse_controller_data(ColladaControllers* controllers, XML_Node
   unsigned int vertex_weights_count = sta_xml_get_count_tag(vertex_weights);
 
   XML_Node*    vcount_node          = vertex_weights->find_key("vcount");
-  i32*         vcount               = (i32*)allocate(sizeof(i32) * vertex_weights_count);
+  i32*         vcount               = (i32*)sta_allocate(sizeof(i32) * vertex_weights_count);
   buffer                            = sta_xml_create_buffer_from_content(vcount_node);
   parse_int_array(vcount, vertex_weights_count, &buffer);
 
@@ -708,7 +708,7 @@ void sta_collada_parse_controller_data(ColladaControllers* controllers, XML_Node
 
   printf("Parsing %d vertex weights count thingy\n", vertex_weights_count);
   controllers->vertex_weights_count = vertex_weights_count;
-  controllers->joint_and_weight_idx = (ColladaJointAndWeightData*)allocate(sizeof(ColladaJointAndWeightData) * controllers->vertex_weights_count);
+  controllers->joint_and_weight_idx = (ColladaJointAndWeightData*)sta_allocate(sizeof(ColladaJointAndWeightData) * controllers->vertex_weights_count);
   for (unsigned int i = 0; i < vertex_weights_count; i++)
   {
     i32 count                                  = vcount[i];
@@ -737,7 +737,7 @@ void sta_collada_parse_controller_data(ColladaControllers* controllers, XML_Node
 
   XML_Node* joint_array    = skin->child->next->child;
   int       joint_count    = sta_xml_get_count_tag(joint_array);
-  controllers->joints      = (Joint*)allocate(sizeof(Joint) * joint_count);
+  controllers->joints      = (Joint*)sta_allocate(sizeof(Joint) * joint_count);
   controllers->joint_count = joint_count;
 
   buffer                   = sta_xml_create_buffer_from_content(joint_array);
@@ -751,7 +751,7 @@ void sta_collada_parse_controller_data(ColladaControllers* controllers, XML_Node
       buffer.index++;
     }
     int name_length = buffer.index - index;
-    joint->m_name   = (char*)allocate(sizeof(char) * name_length);
+    joint->m_name   = (char*)sta_allocate(sizeof(char) * name_length);
     strncpy((char*)joint->m_name, &buffer.buffer[index], name_length);
     joint->m_name[name_length] = '\0';
   }
@@ -791,8 +791,13 @@ static void animation_assign_parent(Skeleton* skeleton, XML_Node* curr, u8 p_idx
   XML_Tag* tag                    = curr->find_tag("id");
   u8       idx                    = get_node_index_from_id(skeleton, tag->value, tag->value_length);
   skeleton->joints[idx].m_iParent = p_idx;
+  XML_Node* matrix                = curr->find_key("matrix");
 
-  XML_Node* child                 = curr->find_key("node");
+  float*    m                     = &skeleton->joints[idx].m_mat.m[0];
+  Buffer    buffer                = sta_xml_create_buffer_from_content(matrix);
+  parse_float_array(m, 16, &buffer);
+
+  XML_Node* child = curr->find_key("node");
   if (child == 0)
   {
     return;
@@ -815,11 +820,15 @@ void sta_collada_parse_visual_scenes_data(AnimationModel* model, XML_Node* visua
   XML_Node* node     = visual_scene->child->child;
   XML_Tag*  tag      = node->find_tag("id");
   XML_Node* child    = node->find_key("node");
-  u8        idx      = get_node_index_from_id(skeleton, tag->value, tag->value_length);
+  XML_Node* matrix   = node->find_key("matrix");
+  float*    m        = &skeleton->joints[0].m_mat.m[0];
+  Buffer    buffer   = sta_xml_create_buffer_from_content(matrix);
+  parse_float_array(m, 16, &buffer);
+
+  u8 idx = get_node_index_from_id(skeleton, tag->value, tag->value_length);
   while (child)
   {
-    XML_Node* next_child = child->find_key("node");
-    animation_assign_parent(skeleton, next_child, idx);
+    animation_assign_parent(skeleton, child, idx);
     child = child->next;
   }
 }
@@ -828,7 +837,7 @@ void sta_collada_parse_animation_data(AnimationModel* model, XML_Node* library_a
 {
   // animation is the array we iterate over
   XML_Node* animation          = library_animations->find_key("animation");
-  model->animations.poses      = (JointPose*)allocate(sizeof(JointPose) * model->skeleton.joint_count);
+  model->animations.poses      = (JointPose*)sta_allocate(sizeof(JointPose) * model->skeleton.joint_count);
   model->animations.pose_count = 0;
   while (animation)
   {
@@ -841,12 +850,12 @@ void sta_collada_parse_animation_data(AnimationModel* model, XML_Node* library_a
     JointPose* pose        = &model->animations.poses[idx];
 
     XML_Node*  input_array = animation->child->find_key("float_array");
-    pose->name             = (char*)allocate(sizeof(char) * id_tag->value_length);
+    pose->name             = (char*)sta_allocate(sizeof(char) * id_tag->value_length);
     strncpy(pose->name, id_tag->value, id_tag->value_length);
 
     pose->steps           = sta_xml_get_count_tag(input_array);
-    pose->t               = (f32*)allocate(sizeof(f32) * pose->steps);
-    pose->local_transform = (Mat44*)allocate(sizeof(Mat44) * pose->steps);
+    pose->t               = (f32*)sta_allocate(sizeof(f32) * pose->steps);
+    pose->local_transform = (Mat44*)sta_allocate(sizeof(Mat44) * pose->steps);
     Buffer buffer         = sta_xml_create_buffer_from_content(input_array);
     parse_float_array(pose->t, pose->steps, &buffer);
 
@@ -872,8 +881,8 @@ static void merge_geometry_data(AnimationModel* animation, ColladaControllers* c
 {
 
   animation->vertex_count = geometry->face_count;
-  animation->vertices     = (SkinnedVertex*)allocate(sizeof(SkinnedVertex) * animation->vertex_count);
-  animation->indices      = (u32*)allocate(sizeof(u32) * animation->vertex_count);
+  animation->vertices     = (SkinnedVertex*)sta_allocate(sizeof(SkinnedVertex) * animation->vertex_count);
+  animation->indices      = (u32*)sta_allocate(sizeof(u32) * animation->vertex_count);
   for (unsigned int face_index = 0; face_index < animation->vertex_count; face_index++)
   {
     animation->indices[face_index] = face_index;
@@ -897,19 +906,6 @@ static void merge_geometry_data(AnimationModel* animation, ColladaControllers* c
     vertex->joint_weight[3]        = controllers->joint_and_weight_idx[position_index].weight[3];
   }
 
-  Skeleton* skeleton = &animation->skeleton;
-  for (u32 i = 0; i < skeleton->joint_count; i++)
-  {
-    Joint* joint = &skeleton->joints[i];
-    if (i == joint->m_iParent)
-    {
-      joint->m_invBindPose = joint->m_invBindPose.inverse();
-    }
-    else
-    {
-      joint->m_invBindPose = joint->m_invBindPose.mul(skeleton->joints[joint->m_iParent].m_invBindPose);
-    }
-  }
   animation->skeleton.joint_count = controllers->joint_count;
   animation->skeleton.joints      = controllers->joints;
 }

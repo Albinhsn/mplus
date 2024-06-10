@@ -1,9 +1,16 @@
 #include "animation.h"
 #include "files.h"
+#include "platform.h"
 #include "sdl.h"
 #include "shader.h"
 #include <GL/glext.h>
 #include <SDL2/SDL_events.h>
+#include <assimp/Importer.hpp>
+#include <assimp/mesh.h>
+#include <assimp/scene.h>
+#include <assimp/vector3.h>
+#include <cassert>
+#include <cfloat>
 #include <cstdlib>
 
 bool should_quit()
@@ -86,32 +93,164 @@ JointPose* find_joint_pose(Animation* animation, Joint* joint)
 
 void debug_inv_bind(AnimationModel* animation)
 {
-  SkinnedVertex* vertices = animation->vertices;
-  for (u32 i = 0; i < animation->vertex_count; i++)
+  Skeleton* skeleton = &animation->skeleton;
+  for (u32 i = 0; i < skeleton->joint_count; i++)
   {
-    Vector4 v(0, 0, 0, 0);
-    Vector3 pos = vertices[i].position;
+    Joint joint = animation->skeleton.joints[i];
+    printf("%d: \n", i);
+    // joint.m_mat.debug();
+    printf("-\n");
+    joint.m_invBindPose.debug();
+    printf("-----------\n");
+  }
+}
+
+void debug_node(aiNode* node)
+{
+  printf("%s: \n", node->mName.C_Str());
+  aiNode* parent = node->mParent;
+  if (parent == 0)
+  {
+    printf("\tno parent\n");
+  }
+  else
+  {
+    printf("\tparent: %s\n", node->mParent->mName.C_Str());
+  }
+  printf("\ttrans:\n");
+  for (int i = 0; i < 4; i++)
+  {
+    printf("\t\t");
     for (int j = 0; j < 4; j++)
     {
-      Joint   joint = animation->skeleton.joints[vertices[i].joint_index[0]];
-      Vector4 p     = joint.m_invBindPose.mul(Vector4(pos.x, pos.y, pos.z, 1.0));
-      v.x += p.x;
-      v.y += p.y;
-      v.z += p.z;
-      v.w += p.w;
+      printf("%f, ", node->mTransformation[i][j]);
     }
-    printf("%d: (%f %f %f) -> ", i, pos.x, pos.y, pos.z);
-    
-    v.debug();
+    printf("\n");
   }
+  u32 children = node->mNumChildren;
+  printf("Children: ");
+  for (u32 i = 0; i < children; i++)
+  {
+    printf("%s, ", node->mChildren[i]->mName.C_Str());
+  }
+  printf("\n");
+  for (u32 i = 0; i < children; i++)
+  {
+    debug_node(node->mChildren[i]);
+  }
+}
+
+void debug_bone(aiBone* bone, int i)
+{
+  printf("%d: %s\n", i, bone->mName.C_Str());
+  printf("\ttrans:\n");
+  for (int i = 0; i < 4; i++)
+  {
+    printf("\t\t");
+    for (int j = 0; j < 4; j++)
+    {
+      printf("%f, ", bone->mOffsetMatrix[i][j]);
+    }
+    printf("\n");
+  }
+}
+
+void debug_mesh(aiMesh* mesh)
+{
+  printf("%s: \n", mesh->mName.C_Str());
+  printf("bones:\n");
+  for (u32 i = 0; i < mesh->mNumBones; i++)
+  {
+    debug_bone(mesh->mBones[i], i);
+  }
+  printf("Num Anim meshes %d\n", mesh->mNumAnimMeshes);
+}
+
+void create_animation_from_assimp_scene(AnimationModel* model, const aiScene* scene)
+{
+
+  // parse geometry
+  aiMesh* mesh        = scene->mMeshes[0];
+  model->vertex_count = mesh->mNumFaces * 3;
+  model->vertices     = (SkinnedVertex*)sta_allocate(sizeof(SkinnedVertex) * model->vertex_count);
+  model->indices      = (u32*)sta_allocate(sizeof(u32) * model->vertex_count);
+
+  float low = FLT_MAX, high = -FLT_MAX;
+  for (u32 i = 0; i < mesh->mNumFaces; i++)
+  {
+
+    aiFace* face = &mesh->mFaces[i];
+    assert(face->mNumIndices == 3 && "How could this happen to me");
+    for (u32 j = 0; j < face->mNumIndices; j++)
+    {
+      u32            idx  = i * 3 + j;
+      SkinnedVertex* v    = &model->vertices[idx];
+      model->indices[idx] = idx;
+
+      aiVector3D* aiV     = &mesh->mVertices[face->mIndices[j]];
+      v->position         = Vector3(aiV->x, aiV->y, aiV->z);
+
+      low                 = MIN(v->position.x, low);
+      low                 = MIN(v->position.y, low);
+      low                 = MIN(v->position.z, low);
+
+      high                = MAX(v->position.x, high);
+      high                = MAX(v->position.y, high);
+      high                = MAX(v->position.z, high);
+      // v->position.debug();
+    }
+  }
+  float diff = high - low;
+  low        = low < 0 ? low : -low;
+  for (u32 i = 0; i < model->vertex_count; i++)
+  {
+    Vector3* v = &model->vertices[i].position;
+    v->x       = ((v->x - low) / diff) * 2.0f - 1.0f;
+    v->y       = ((v->y - low) / diff) * 2.0f - 1.0f;
+    v->z       = ((v->z - low) / diff) * 2.0f - 1.0f;
+  }
+
+  Skeleton* skeleton    = &model->skeleton;
+  skeleton->joint_count = mesh->mNumBones;
+  skeleton->joints      = (Joint*)sta_allocate(sizeof(Joint) * skeleton->joint_count);
+  for (u32 i = 0; i < mesh->mNumBones; i++)
+  {
+    aiBone* bone  = mesh->mBones[i];
+    Joint*  joint = &skeleton->joints[i];
+    for (int row = 0; row < 4; row++)
+    {
+      for (int col = 0; col < 4; col++)
+      {
+        joint->m_invBindPose.rc[row][col] = bone->mOffsetMatrix[row][col];
+      }
+    }
+
+    for (u32 j = 0; j < bone->mNumWeights; j++)
+    {
+      aiVertexWeight* weight = &bone->mWeights[j];
+    }
+  }
+
+  aiAnimation* animation = scene->mAnimations[0];
+  aiNodeAnim * channel = animation->mChannels[0];
 }
 
 int main()
 {
 
   AnimationModel animation = {};
-  sta_collada_parse_from_file(&animation, "./data/unarmed_man/unarmed_opt.dae");
-  debug_inv_bind(&animation);
+  // sta_collada_parse_from_file(&animation, "./data/unarmed_man/unarmed_opt.dae");
+  Assimp::Importer importer;
+  const aiScene*   scene = importer.ReadFile("./data/modelyup.dae", 0);
+  if (scene == 0)
+  {
+    printf("%s\n", importer.GetErrorString());
+    return 1;
+  }
+
+  create_animation_from_assimp_scene(&animation, scene);
+
+  // return 1;
   // animation.debug();
 
   const int     screen_width  = 620;
@@ -172,35 +311,6 @@ int main()
 
   shader.use();
   shader.set_int("texture1", 0);
-
-  Mat44 joint_transforms[animation.skeleton.joint_count];
-  // Mat44     parent_transforms[animation.skeleton.joint_count];
-
-  Skeleton* skeleton = &animation.skeleton;
-  for (unsigned int i = 0; i < skeleton->joint_count; i++)
-  {
-    Joint* joint        = &skeleton->joints[i];
-    joint_transforms[i] = joint->m_invBindPose;
-    // joint_transforms[i].identity();
-    // parent_transforms[i].identity();
-    // JointPose* pose   = find_joint_pose(&animation.animations, joint);
-    // Mat44      parent = parent_transforms[joint->m_iParent];
-    // if (pose == 0)
-    // {
-    //   parent_transforms[i] = parent;
-    //   joint_transforms[i]  = parent.mul(joint->m_invBindPose);
-    //   continue;
-    // }
-    // parent_transforms[i] = pose->local_transform[0].mul(parent);
-    // joint_transforms[i]  = pose->local_transform[0].mul(parent.mul(joint->m_invBindPose));
-  }
-  for (unsigned int i = 0; i < skeleton->joint_count; i++)
-  {
-    joint_transforms[i] = joint_transforms[i].scale(Vector3(0.001, 0.001, 0.001));
-    // joint_transforms[i].debug();
-    // printf("--\n");
-  }
-  shader.set_mat4("jointTransforms", (float*)&joint_transforms[0].m[0], animation.skeleton.joint_count);
 
   glActiveTexture(GL_TEXTURE0);
   sta_glBindTexture(GL_TEXTURE_2D, texture0);

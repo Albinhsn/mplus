@@ -4,8 +4,8 @@
 #ifdef __unix__
 
 #include "platform_linux.h"
-#define allocate(size) linux_allocate(size)
-#define deallocate(ptr, size) linux_deallocate(ptr, size);
+#define sta_allocate(size) linux_allocate(size)
+#define sta_deallocate(ptr, size) linux_deallocate(ptr, size);
 #endif
 
 

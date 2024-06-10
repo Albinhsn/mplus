@@ -75,9 +75,9 @@ void                 sta_arena_pop(Arena* arena, u64 size);
   {                                                                                                                                                                                                    \
     u64 prev_cap = cap;                                                                                                                                                                                \
     cap *= 2;                                                                                                                                                                                          \
-    type* arr = (type*)allocate(sizeof(type) * cap);                                                                                                                                               \
+    type* arr = (type*)sta_allocate(sizeof(type) * cap);                                                                                                                                               \
     memcpy(arr, array, sizeof(type) * prev_cap);                                                                                                                                                       \
-    deallocate(array, sizeof(type) * prev_cap);                                                                                                                                                    \
+    sta_deallocate(array, sizeof(type) * prev_cap);                                                                                                                                                    \
     array = arr;                                                                                                                                                                                       \
   }
 
