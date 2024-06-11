@@ -206,7 +206,7 @@ bool sta_read_file(Buffer* buffer, const char* fileName)
   fileSize                 = ftell(filePtr);
 
   buffer->len              = fileSize;
-  buffer->buffer           = (char*)allocate(fileSize + 1);
+  buffer->buffer           = (char*)sta_allocate(fileSize + 1);
   buffer->buffer[fileSize] = '\0';
   fseek(filePtr, 0, SEEK_SET);
   count = fread(buffer->buffer, 1, fileSize, filePtr);
@@ -219,7 +219,7 @@ bool sta_read_file(Buffer* buffer, const char* fileName)
   error = fclose(filePtr);
   if (error != 0)
   {
-    deallocate((void*)buffer->buffer, fileSize + 1);
+    sta_deallocate((void*)buffer->buffer, fileSize + 1);
     return false;
   }
 
@@ -296,11 +296,11 @@ bool sta_read_targa_from_file_rgba(TargaImage* image, const char* filename)
   if (targa_file_header.imageType == UNCOMPRESSED)
   {
     image_size  = image->width * image->height * 4;
-    image->data = (unsigned char*)allocate(image_size);
+    image->data = (unsigned char*)sta_allocate(image_size);
     if (image->bpp == 24)
     {
       long size     = image->width * image->height * 3;
-      u8*  rgb_data = (u8*)allocate(size);
+      u8*  rgb_data = (u8*)sta_allocate(size);
       read_safe((void*)rgb_data, size, file_ptr);
       for (int i = 0; i < size / 3; i++)
       {
@@ -319,7 +319,7 @@ bool sta_read_targa_from_file_rgba(TargaImage* image, const char* filename)
   {
     image_size  = image->width * image->height * 4;
     u64 bpp     = 4;
-    image->data = (unsigned char*)allocate(image_size);
+    image->data = (unsigned char*)sta_allocate(image_size);
 
     if (targa_file_header.imagePixelSize == RGB)
     {
@@ -525,11 +525,11 @@ bool sta_read_csv_from_string(CSV* csv, Buffer csvData)
 {
   csv->recordCap           = 1;
   csv->recordCount         = 1;
-  csv->records             = (CSVRecord*)allocate(sizeof(CSVRecord));
+  csv->records             = (CSVRecord*)sta_allocate(sizeof(CSVRecord));
   CSVRecord* currentRecord = &csv->records[0];
   currentRecord->dataCount = 0;
   currentRecord->dataCap   = 1;
-  currentRecord->data      = (Buffer*)allocate(sizeof(Buffer));
+  currentRecord->data      = (Buffer*)sta_allocate(sizeof(Buffer));
   u64 columnsPerRecord     = -1;
   u64 fileDataIndex        = 0;
 
@@ -1152,7 +1152,7 @@ static void parseWavefrontFace(WavefrontObject* obj, Buffer* buffer)
   WavefrontFace* face      = &obj->faces[obj->face_count - 1];
   u32            vertexCap = 8;
   face->count              = 0;
-  face->vertices           = (WavefrontVertexData*)allocate(sizeof(WavefrontVertexData) * vertexCap);
+  face->vertices           = (WavefrontVertexData*)sta_allocate(sizeof(WavefrontVertexData) * vertexCap);
   ADVANCE(buffer);
   skip_until_digit(buffer);
   while (buffer->index < buffer->len)
@@ -1195,20 +1195,20 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
   WavefrontObject obj             = {};
   u64             init_cap        = 8;
   obj.vertex_count                = 0;
-  obj.vertices                    = (Vector4*)allocate(sizeof(struct Vector4) * init_cap);
+  obj.vertices                    = (Vector4*)sta_allocate(sizeof(struct Vector4) * init_cap);
   obj.vertex_capacity             = init_cap;
 
   obj.normal_count                = 0;
-  obj.normals                     = (Vector3*)allocate(sizeof(struct Vector3) * init_cap);
+  obj.normals                     = (Vector3*)sta_allocate(sizeof(struct Vector3) * init_cap);
   obj.normal_capacity             = init_cap;
 
   obj.texture_coordinate_count    = 0;
-  obj.texture_coordinates         = (Vector3*)allocate(sizeof(Vector3) * init_cap);
+  obj.texture_coordinates         = (Vector3*)sta_allocate(sizeof(Vector3) * init_cap);
   obj.texture_coordinate_capacity = init_cap;
 
   obj.face_count                  = 0;
   obj.face_capacity               = init_cap;
-  obj.faces                       = (WavefrontFace*)allocate(sizeof(WavefrontFace) * init_cap);
+  obj.faces                       = (WavefrontFace*)sta_allocate(sizeof(WavefrontFace) * init_cap);
 
   FILE* filePtr;
   char* line = NULL;
@@ -1232,8 +1232,8 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
   }
 
   model->vertex_count = obj.face_count * obj.faces[0].count;
-  model->indices      = (u32*)allocate(sizeof(u32) * model->vertex_count);
-  model->vertices     = (VertexData*)allocate(sizeof(VertexData) * model->vertex_count);
+  model->indices      = (u32*)sta_allocate(sizeof(u32) * model->vertex_count);
+  model->vertices     = (VertexData*)sta_allocate(sizeof(VertexData) * model->vertex_count);
 
   float low = FLT_MAX, high = -FLT_MAX;
   for (u64 i = 0; i < obj.face_count; i++)
@@ -1277,13 +1277,13 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
       model->vertices[index].normal = obj.normals[data.normal_idx - 1];
     }
     // printf("\n");
-    deallocate(obj.faces[i].vertices, sizeof(WavefrontVertexData) * obj.faces[i].count);
+    sta_deallocate(obj.faces[i].vertices, sizeof(WavefrontVertexData) * obj.faces[i].count);
   }
 
-  deallocate(obj.texture_coordinates, sizeof(Vector2) * obj.texture_coordinate_capacity);
-  deallocate(obj.vertices, sizeof(Vector4) * obj.vertex_capacity);
-  deallocate(obj.faces, sizeof(WavefrontFace) * obj.face_capacity);
-  deallocate(obj.normals, sizeof(Vector3) * obj.normal_capacity);
+  sta_deallocate(obj.texture_coordinates, sizeof(Vector2) * obj.texture_coordinate_capacity);
+  sta_deallocate(obj.vertices, sizeof(Vector4) * obj.vertex_capacity);
+  sta_deallocate(obj.faces, sizeof(WavefrontFace) * obj.face_capacity);
+  sta_deallocate(obj.normals, sizeof(Vector3) * obj.normal_capacity);
 
   float diff = high - low;
   for (unsigned int i = 0; i < model->vertex_count; i++)

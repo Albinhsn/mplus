@@ -1,4 +1,5 @@
 #include "platform_linux.h"
+#include <cstdio>
 #include <cstring>
 #include <sys/mman.h>
 
@@ -12,15 +13,17 @@ static int align_offset(long long offset, long long alignment)
   return offset;
 }
 
-void* linux_allocate(long size)
+
+void*            linux_allocate(long size)
 {
-  size = align_offset(size, 64);
-  void * res = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  size += align_offset(64, size);
+  void* res = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   memset(res, 0, size);
 
   return res;
 }
 
-bool linux_deallocate(void * ptr, long size){
+bool linux_deallocate(void* ptr, long size)
+{
   return munmap(ptr, size);
 }

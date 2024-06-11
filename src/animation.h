@@ -35,6 +35,7 @@ enum XML_Encoding
 struct XML_Node
 {
 public:
+  XML_Node*  find_key_with_tag(const char* key_name, const char * tag_name, const char * tag_value);
   XML_Node*  find_key(const char* key_name);
   XML_Tag*   find_tag(const char* tag_name);
   XML_Node*  next;

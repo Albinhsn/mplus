@@ -165,93 +165,33 @@ void debug_mesh(aiMesh* mesh)
   }
   printf("Num Anim meshes %d\n", mesh->mNumAnimMeshes);
 }
-
-void create_animation_from_assimp_scene(AnimationModel* model, const aiScene* scene)
+struct JointAndIdx
 {
+  Joint* joint;
+  u8     idx;
+};
 
-  // parse geometry
-  aiMesh* mesh        = scene->mMeshes[0];
-  model->vertex_count = mesh->mNumFaces * 3;
-  model->vertices     = (SkinnedVertex*)sta_allocate(sizeof(SkinnedVertex) * model->vertex_count);
-  model->indices      = (u32*)sta_allocate(sizeof(u32) * model->vertex_count);
-
-  float low = FLT_MAX, high = -FLT_MAX;
-  for (u32 i = 0; i < mesh->mNumFaces; i++)
+JointAndIdx get_joint_from_node(Skeleton* skeleton, aiNode* node)
+{
+  for (u32 i = 0; i < skeleton->joint_count; i++)
   {
-
-    aiFace* face = &mesh->mFaces[i];
-    assert(face->mNumIndices == 3 && "How could this happen to me");
-    for (u32 j = 0; j < face->mNumIndices; j++)
+    Joint* joint = &skeleton->joints[i];
+    printf("Looking at %.*s vs %.*s\n", (i32)strlen(joint->m_name), joint->m_name, (i32)strlen(node->mName.data), node->mName.data);
+    if (strlen(joint->m_name) == strlen(node->mName.data) && strncmp(joint->m_name, node->mName.data, strlen(joint->m_name)))
     {
-      u32            idx  = i * 3 + j;
-      SkinnedVertex* v    = &model->vertices[idx];
-      model->indices[idx] = idx;
-
-      aiVector3D* aiV     = &mesh->mVertices[face->mIndices[j]];
-      v->position         = Vector3(aiV->x, aiV->y, aiV->z);
-
-      low                 = MIN(v->position.x, low);
-      low                 = MIN(v->position.y, low);
-      low                 = MIN(v->position.z, low);
-
-      high                = MAX(v->position.x, high);
-      high                = MAX(v->position.y, high);
-      high                = MAX(v->position.z, high);
-      // v->position.debug();
+      struct JointAndIdx idx = {joint, (u8)i};
+      return idx;
     }
   }
-  float diff = high - low;
-  low        = low < 0 ? low : -low;
-  for (u32 i = 0; i < model->vertex_count; i++)
-  {
-    Vector3* v = &model->vertices[i].position;
-    v->x       = ((v->x - low) / diff) * 2.0f - 1.0f;
-    v->y       = ((v->y - low) / diff) * 2.0f - 1.0f;
-    v->z       = ((v->z - low) / diff) * 2.0f - 1.0f;
-  }
-
-  Skeleton* skeleton    = &model->skeleton;
-  skeleton->joint_count = mesh->mNumBones;
-  skeleton->joints      = (Joint*)sta_allocate(sizeof(Joint) * skeleton->joint_count);
-  for (u32 i = 0; i < mesh->mNumBones; i++)
-  {
-    aiBone* bone  = mesh->mBones[i];
-    Joint*  joint = &skeleton->joints[i];
-    for (int row = 0; row < 4; row++)
-    {
-      for (int col = 0; col < 4; col++)
-      {
-        joint->m_invBindPose.rc[row][col] = bone->mOffsetMatrix[row][col];
-      }
-    }
-
-    for (u32 j = 0; j < bone->mNumWeights; j++)
-    {
-      aiVertexWeight* weight = &bone->mWeights[j];
-    }
-  }
-
-  aiAnimation* animation = scene->mAnimations[0];
-  aiNodeAnim * channel = animation->mChannels[0];
+  return {0, 0};
 }
+
 
 int main()
 {
 
   AnimationModel animation = {};
-  // sta_collada_parse_from_file(&animation, "./data/unarmed_man/unarmed_opt.dae");
-  Assimp::Importer importer;
-  const aiScene*   scene = importer.ReadFile("./data/modelyup.dae", 0);
-  if (scene == 0)
-  {
-    printf("%s\n", importer.GetErrorString());
-    return 1;
-  }
-
-  create_animation_from_assimp_scene(&animation, scene);
-
-  // return 1;
-  // animation.debug();
+  sta_collada_parse_from_file(&animation, "./data/model.dae");
 
   const int     screen_width  = 620;
   const int     screen_height = 480;

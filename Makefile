@@ -1,6 +1,6 @@
 CC := g++
-CFLAGS := -O2 -g -std=c++11 -Wall -Werror -Wno-strict-aliasing
-LDFLAGS := -lm -lGL -lSDL2 -lassimp
+CFLAGS := -O2 -g -std=c++11 -Wall -Wno-strict-aliasing
+LDFLAGS := -lm -lGL -lSDL2
 TARGET = main
 
 
