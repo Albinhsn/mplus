@@ -83,6 +83,23 @@ void                 sta_arena_pop(Arena* arena, u64 size);
 
 struct Buffer
 {
+public:
+  Buffer()
+  {
+    this->buffer = 0;
+    this->len    = 0;
+    this->index = 0;
+  }
+  Buffer(char* buffer, u64 len)
+  {
+    this->buffer = buffer;
+    this->len    = len;
+    this->index = 0;
+  }
+  bool is_out_of_bounds()
+  {
+    return this->len <= this->index;
+  }
   u64   len;
   u64   index;
   char* buffer;
@@ -160,9 +177,9 @@ enum LoggingLevel
 };
 typedef enum LoggingLevel LoggingLevel;
 
-void                      sta_log(Logger* logger, LoggingLevel level, const char * msg);
+void                      sta_log(Logger* logger, LoggingLevel level, const char* msg);
 
-bool                      sta_initLogger(Logger* logger, const char * filename);
+bool                      sta_initLogger(Logger* logger, const char* filename);
 bool                      sta_destroyLogger(Logger* logger);
 
 #endif

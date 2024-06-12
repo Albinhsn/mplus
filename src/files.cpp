@@ -75,16 +75,22 @@ float parse_float_from_string(Buffer* buffer)
       ADVANCE(buffer);
       sign_exp = true;
     }
-    u32 exp = (CURRENT_CHAR(buffer) - '0');
+    u32 exp       = (CURRENT_CHAR(buffer) - '0');
     ADVANCE(buffer);
+    while (isdigit(CURRENT_CHAR(buffer)))
+    {
+      exp *= 10;
+      exp += CURRENT_CHAR(buffer) - '0';
+      ADVANCE(buffer);
+    }
 
     if (sign_exp)
     {
-      value *= pow(10, exp);
+      value /= pow(10, exp);
     }
     else
     {
-      value /= pow(10, exp);
+      value *= pow(10, exp);
     }
   }
 

@@ -12,86 +12,86 @@ Mat44 Mat44::inverse()
 {
   Mat33 m00 = {
       .rc = {{this->rc[1][1], this->rc[1][2], this->rc[1][3]}, //
- {this->rc[2][1], this->rc[2][2], this->rc[2][3]}, //
- {this->rc[3][1], this->rc[3][2], this->rc[3][3]}}  //
+             {this->rc[2][1], this->rc[2][2], this->rc[2][3]}, //
+             {this->rc[3][1], this->rc[3][2], this->rc[3][3]}}  //
   };
   Mat33 m01 = {
       .rc = {{this->rc[1][0], this->rc[1][2], this->rc[1][3]}, //
- {this->rc[2][0], this->rc[2][2], this->rc[2][3]}, //
- {this->rc[3][0], this->rc[3][2], this->rc[3][3]}}  //
+             {this->rc[2][0], this->rc[2][2], this->rc[2][3]}, //
+             {this->rc[3][0], this->rc[3][2], this->rc[3][3]}}  //
   };
   Mat33 m02 = {
-      .rc = {{this->rc[1][0], this->rc[1][1], this->rc[1][3]}, //
- {this->rc[2][0], this->rc[2][1], this->rc[2][3]}, //
- {this->rc[3][0], this->rc[3][1], this->rc[3][3]}}
+      .rc = {{this->rc[1][0], this->rc[1][1], this->rc[1][3]},   //
+             {this->rc[2][0], this->rc[2][1], this->rc[2][3]},   //
+             {this->rc[3][0], this->rc[3][1], this->rc[3][3]}}
   }; //
   Mat33 m03 = {
       .rc = {{this->rc[1][0], this->rc[1][1], this->rc[1][2]}, //
- {this->rc[2][0], this->rc[2][1], this->rc[2][2]}, //
- {this->rc[3][0], this->rc[3][1], this->rc[3][2]}}  //
+             {this->rc[2][0], this->rc[2][1], this->rc[2][2]}, //
+             {this->rc[3][0], this->rc[3][1], this->rc[3][2]}}  //
   };
 
   Mat33 m10 = {
       .rc = {{this->rc[0][1], this->rc[0][2], this->rc[0][3]}, //
- {this->rc[2][1], this->rc[2][2], this->rc[2][3]}, //
- {this->rc[3][1], this->rc[3][2], this->rc[3][3]}}  //
+             {this->rc[2][1], this->rc[2][2], this->rc[2][3]}, //
+             {this->rc[3][1], this->rc[3][2], this->rc[3][3]}}  //
   };
   Mat33 m11 = {
       .rc = {{this->rc[0][0], this->rc[0][2], this->rc[0][3]}, //
- {this->rc[2][0], this->rc[2][2], this->rc[2][3]}, //
- {this->rc[3][0], this->rc[3][2], this->rc[3][3]}}  //
+             {this->rc[2][0], this->rc[2][2], this->rc[2][3]}, //
+             {this->rc[3][0], this->rc[3][2], this->rc[3][3]}}  //
   };
   Mat33 m12 = {
       .rc = {{this->rc[0][0], this->rc[0][1], this->rc[0][3]}, //
- {this->rc[2][0], this->rc[2][1], this->rc[2][3]}, //
- {this->rc[3][0], this->rc[3][1], this->rc[3][3]}}  //
+             {this->rc[2][0], this->rc[2][1], this->rc[2][3]}, //
+             {this->rc[3][0], this->rc[3][1], this->rc[3][3]}}  //
   };
   Mat33 m13 = {
       .rc = {{this->rc[0][0], this->rc[0][1], this->rc[0][2]}, //
- {this->rc[2][0], this->rc[2][1], this->rc[2][2]}, //
- {this->rc[3][0], this->rc[3][1], this->rc[3][2]}}  //
+             {this->rc[2][0], this->rc[2][1], this->rc[2][2]}, //
+             {this->rc[3][0], this->rc[3][1], this->rc[3][2]}}  //
   };
 
   Mat33 m20 = {
       .rc = {{this->rc[0][1], this->rc[0][2], this->rc[0][3]}, //
- {this->rc[1][1], this->rc[1][2], this->rc[1][3]}, //
- {this->rc[3][1], this->rc[3][2], this->rc[3][3]}}  //
+             {this->rc[1][1], this->rc[1][2], this->rc[1][3]}, //
+             {this->rc[3][1], this->rc[3][2], this->rc[3][3]}}  //
   };
 
   Mat33 m21 = {
       .rc = {{this->rc[0][0], this->rc[0][2], this->rc[0][3]}, //
- {this->rc[1][0], this->rc[1][2], this->rc[1][3]}, //
- {this->rc[3][0], this->rc[3][2], this->rc[3][3]}}  //
+             {this->rc[1][0], this->rc[1][2], this->rc[1][3]}, //
+             {this->rc[3][0], this->rc[3][2], this->rc[3][3]}}  //
   };
   Mat33 m22 = {
       .rc = {{this->rc[0][0], this->rc[0][1], this->rc[0][3]}, //
- {this->rc[1][0], this->rc[1][1], this->rc[1][3]}, //
- {this->rc[3][0], this->rc[3][1], this->rc[3][3]}}  //
+             {this->rc[1][0], this->rc[1][1], this->rc[1][3]}, //
+             {this->rc[3][0], this->rc[3][1], this->rc[3][3]}}  //
   };
   Mat33 m23 = {
       .rc = {{this->rc[0][0], this->rc[0][1], this->rc[0][2]}, //
- {this->rc[1][0], this->rc[1][1], this->rc[1][2]}, //
- {this->rc[3][0], this->rc[3][1], this->rc[3][2]}}  //
+             {this->rc[1][0], this->rc[1][1], this->rc[1][2]}, //
+             {this->rc[3][0], this->rc[3][1], this->rc[3][2]}}  //
   };
   Mat33 m30 = {
       .rc = {{this->rc[0][1], this->rc[0][2], this->rc[0][3]}, //
- {this->rc[1][1], this->rc[1][2], this->rc[1][3]}, //
- {this->rc[2][1], this->rc[2][2], this->rc[2][3]}}  //
+             {this->rc[1][1], this->rc[1][2], this->rc[1][3]}, //
+             {this->rc[2][1], this->rc[2][2], this->rc[2][3]}}  //
   };
   Mat33 m31 = {
       .rc = {{this->rc[0][0], this->rc[0][2], this->rc[0][3]}, //
- {this->rc[1][0], this->rc[1][2], this->rc[1][3]}, //
- {this->rc[2][0], this->rc[2][2], this->rc[2][3]}}  //
+             {this->rc[1][0], this->rc[1][2], this->rc[1][3]}, //
+             {this->rc[2][0], this->rc[2][2], this->rc[2][3]}}  //
   };
   Mat33 m32 = {
       .rc = {{this->rc[0][0], this->rc[0][1], this->rc[0][3]}, //
- {this->rc[1][0], this->rc[1][1], this->rc[1][3]}, //
- {this->rc[2][0], this->rc[2][1], this->rc[2][3]}}  //
+             {this->rc[1][0], this->rc[1][1], this->rc[1][3]}, //
+             {this->rc[2][0], this->rc[2][1], this->rc[2][3]}}  //
   };
   Mat33 m33 = {
       .rc = {{this->rc[0][0], this->rc[0][1], this->rc[0][2]}, //
- {this->rc[1][0], this->rc[1][1], this->rc[1][2]}, //
- {this->rc[2][0], this->rc[2][1], this->rc[2][2]}}  //
+             {this->rc[1][0], this->rc[1][1], this->rc[1][2]}, //
+             {this->rc[2][0], this->rc[2][1], this->rc[2][2]}}  //
   };
   Mat44 res = {
       .rc = {{m00.determinant(), -m01.determinant(), m02.determinant(), -m03.determinant()},
@@ -104,7 +104,7 @@ Mat44 Mat44::inverse()
   f32 det   = this->determinant();
   f32 scale = 1.0f / det;
   res.scale(Vector3(scale, scale, scale));
-  return res;
+  return res.transpose();
 }
 
 Mat44 Mat44::rotate_x(f32 degrees)
@@ -119,6 +119,13 @@ Mat44 Mat44::rotate_x(f32 degrees)
   return this->mul(m);
 }
 
+Mat44 Mat44::scale(f32 scale){
+  Mat44 res = *this;
+  res.rc[0][0] *= scale;
+  res.rc[1][1] *= scale;
+  res.rc[2][2] *= scale;
+  return res;
+}
 Mat44 Mat44::scale(Vector3 v)
 {
   Mat44 m    = {};
@@ -219,15 +226,16 @@ Mat44 Mat44::rotate_z(f32 degrees)
 
   return this->mul(m);
 }
+
 Vector4 Mat44::mul(Vector4 v)
 {
   Vector4 res(0, 0, 0, 0);
   for (int i = 0; i < 4; i++)
   {
-    res.x += this->rc[i][0] * v.x;
-    res.y += this->rc[i][1] * v.y;
-    res.z += this->rc[i][2] * v.z;
-    res.w += this->rc[i][3] * v.w;
+    res.v[i] += this->rc[0][i] * v.x;
+    res.v[i] += this->rc[1][i] * v.y;
+    res.v[i] += this->rc[2][i] * v.z;
+    res.v[i] += this->rc[3][i] * v.w;
   }
 
   return res;
@@ -305,9 +313,9 @@ float Mat44::determinant()
       .rc = {{this->rc[1][0], this->rc[1][1], this->rc[1][3]}, {this->rc[2][0], this->rc[2][1], this->rc[2][3]}, {this->rc[3][0], this->rc[3][1], this->rc[3][3]}},
   };
   Mat33 m03 = {
-      .rc = {{this->rc[1][0], this->rc[1][1], this->rc[1][2]}, //
- {this->rc[2][0], this->rc[2][1], this->rc[2][2]}, //
- {this->rc[3][0], this->rc[3][1], this->rc[3][2]}}, //
+      .rc = {{this->rc[1][0], this->rc[1][1], this->rc[1][2]},  //
+             {this->rc[2][0], this->rc[2][1], this->rc[2][2]},  //
+             {this->rc[3][0], this->rc[3][1], this->rc[3][2]}}, //
   };
 
   f32 d0 = this->rc[0][0] * m00.determinant();

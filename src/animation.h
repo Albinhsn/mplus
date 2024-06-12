@@ -35,7 +35,7 @@ enum XML_Encoding
 struct XML_Node
 {
 public:
-  XML_Node*  find_key_with_tag(const char* key_name, const char * tag_name, const char * tag_value);
+  XML_Node*  find_key_with_tag(const char* key_name, const char* tag_name, const char* tag_value);
   XML_Node*  find_key(const char* key_name);
   XML_Tag*   find_tag(const char* tag_name);
   XML_Node*  next;
@@ -73,6 +73,7 @@ public:
   Mat44 m_invBindPose;
   Mat44 m_mat;
   char* m_name;
+  u32   m_name_length;
   u8    m_iParent;
 };
 
@@ -81,29 +82,25 @@ struct Skeleton
   u32    joint_count;
   Joint* joints;
 };
-// struct JointPose
-// {
-//  Quaternion m_rot;
-//  Vector3 m_trans;
-//  F32 m_scale;
-// };
 
-// just an affine transformation
+struct String
+{
+  char* s;
+  u32   l;
+};
+
 struct JointPose
 {
 public:
-  void   debug();
-  float* t;
-  char*  name;
-  Mat44* local_transform;
-  u32    steps;
+  String* names;
+  Mat44*  local_transform;
 };
 
 struct Animation
 {
-  // f32 times_per_second
-  // bool is_looping
+  f32        duration;
   JointPose* poses;
+  f32*       steps;
   u32        pose_count;
 };
 

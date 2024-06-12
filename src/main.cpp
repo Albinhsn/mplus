@@ -1,6 +1,5 @@
 #include "animation.h"
 #include "files.h"
-#include "platform.h"
 #include "sdl.h"
 #include "shader.h"
 #include <GL/glext.h>
@@ -25,172 +24,12 @@ bool should_quit()
   }
   return false;
 }
-bool debug_me(ModelData* obj, AnimationModel* collada)
-{
-  const float EPSILON = 0.0001f;
-  for (u64 i = 0; i < obj->vertex_count; i++)
-  {
-    u64 obj_index     = obj->indices[i];
-    u64 collada_index = collada->indices[i];
-    if (obj_index != collada_index)
-    {
-      printf("Wrong index @%ld, %ld vs %ld\n", i, obj_index, collada_index);
-    }
-    VertexData    obj_vertex     = obj->vertices[i];
-    SkinnedVertex collada_vertex = collada->vertices[i];
-    if (std::abs(obj_vertex.vertex.x - collada_vertex.position.x) > EPSILON)
-    {
-      printf("Obj: ");
-      obj_vertex.vertex.debug();
-      printf("Collada: ");
-      collada_vertex.position.debug();
-      printf("Failed x @%ld, %f vs %f\n", i, obj_vertex.vertex.x, collada_vertex.position.x);
-      return false;
-      // return false;
-    }
-    if (std::abs(obj_vertex.vertex.y - collada_vertex.position.y) > EPSILON)
-    {
-      printf("Failed y @%ld, %f vs %f\n", i, obj_vertex.vertex.y, collada_vertex.position.y);
-      return false;
-      // return false;
-    }
-    if (std::abs(obj_vertex.vertex.z - collada_vertex.position.z) > EPSILON)
-    {
-      printf("Failed normal x @%ld, %f vs %f\n", i, obj_vertex.vertex.x, collada_vertex.position.x);
-      return false;
-    }
-  }
-  return true;
-}
-
-void debug_joints(AnimationModel* model)
-{
-  Skeleton* skeleton = &model->skeleton;
-  for (u32 i = 0; i < skeleton->joint_count; i++)
-  {
-    Joint* joint = &skeleton->joints[i];
-    printf("%s -> %s\n", joint->m_name, skeleton->joints[joint->m_iParent].m_name);
-  }
-}
-
-JointPose* find_joint_pose(Animation* animation, Joint* joint)
-{
-  for (unsigned int i = 0; i < animation->pose_count; i++)
-  {
-
-    JointPose* pose = &animation->poses[i];
-    if (pose->name == 0)
-    {
-      continue;
-    }
-    if (strlen(pose->name) == strlen(joint->m_name) && strncmp(pose->name, joint->m_name, strlen(joint->m_name)) == 0)
-    {
-      return pose;
-    }
-  }
-  return 0;
-}
-
-void debug_inv_bind(AnimationModel* animation)
-{
-  Skeleton* skeleton = &animation->skeleton;
-  for (u32 i = 0; i < skeleton->joint_count; i++)
-  {
-    Joint joint = animation->skeleton.joints[i];
-    printf("%d: \n", i);
-    // joint.m_mat.debug();
-    printf("-\n");
-    joint.m_invBindPose.debug();
-    printf("-----------\n");
-  }
-}
-
-void debug_node(aiNode* node)
-{
-  printf("%s: \n", node->mName.C_Str());
-  aiNode* parent = node->mParent;
-  if (parent == 0)
-  {
-    printf("\tno parent\n");
-  }
-  else
-  {
-    printf("\tparent: %s\n", node->mParent->mName.C_Str());
-  }
-  printf("\ttrans:\n");
-  for (int i = 0; i < 4; i++)
-  {
-    printf("\t\t");
-    for (int j = 0; j < 4; j++)
-    {
-      printf("%f, ", node->mTransformation[i][j]);
-    }
-    printf("\n");
-  }
-  u32 children = node->mNumChildren;
-  printf("Children: ");
-  for (u32 i = 0; i < children; i++)
-  {
-    printf("%s, ", node->mChildren[i]->mName.C_Str());
-  }
-  printf("\n");
-  for (u32 i = 0; i < children; i++)
-  {
-    debug_node(node->mChildren[i]);
-  }
-}
-
-void debug_bone(aiBone* bone, int i)
-{
-  printf("%d: %s\n", i, bone->mName.C_Str());
-  printf("\ttrans:\n");
-  for (int i = 0; i < 4; i++)
-  {
-    printf("\t\t");
-    for (int j = 0; j < 4; j++)
-    {
-      printf("%f, ", bone->mOffsetMatrix[i][j]);
-    }
-    printf("\n");
-  }
-}
-
-void debug_mesh(aiMesh* mesh)
-{
-  printf("%s: \n", mesh->mName.C_Str());
-  printf("bones:\n");
-  for (u32 i = 0; i < mesh->mNumBones; i++)
-  {
-    debug_bone(mesh->mBones[i], i);
-  }
-  printf("Num Anim meshes %d\n", mesh->mNumAnimMeshes);
-}
-struct JointAndIdx
-{
-  Joint* joint;
-  u8     idx;
-};
-
-JointAndIdx get_joint_from_node(Skeleton* skeleton, aiNode* node)
-{
-  for (u32 i = 0; i < skeleton->joint_count; i++)
-  {
-    Joint* joint = &skeleton->joints[i];
-    printf("Looking at %.*s vs %.*s\n", (i32)strlen(joint->m_name), joint->m_name, (i32)strlen(node->mName.data), node->mName.data);
-    if (strlen(joint->m_name) == strlen(node->mName.data) && strncmp(joint->m_name, node->mName.data, strlen(joint->m_name)))
-    {
-      struct JointAndIdx idx = {joint, (u8)i};
-      return idx;
-    }
-  }
-  return {0, 0};
-}
-
 
 int main()
 {
 
   AnimationModel animation = {};
+
   sta_collada_parse_from_file(&animation, "./data/model.dae");
 
   const int     screen_width  = 620;
@@ -249,8 +88,52 @@ int main()
 
   Shader shader("./shaders/animation.vert", "./shaders/animation.frag");
 
+  Mat44  parent_transforms[animation.skeleton.joint_count];
+  Mat44  transforms[animation.skeleton.joint_count];
+  Mat44  current_poses[animation.skeleton.joint_count];
+
+  for (u32 i = 0; i < animation.skeleton.joint_count; i++)
+  {
+    current_poses[i] = animation.animations.poses[0].local_transform[i];
+    // printf("%.*s:\n", animation.animations.poses[0].names[i].l, animation.animations.poses[0].names[i].s);
+    // current_poses[i].debug();
+    // printf("---\n");
+  }
+
+  for (int i = 0; i < animation.skeleton.joint_count; i++)
+  {
+    parent_transforms[i].identity();
+  }
+
+  for (u32 i = 0; i < animation.skeleton.joint_count; i++)
+  {
+    Joint* joint             = &animation.skeleton.joints[i];
+
+    Mat44  current_local     = current_poses[i];
+    Mat44  parent_transform  = parent_transforms[joint->m_iParent];
+
+    Mat44  current_transform = parent_transform.mul(current_local);
+    parent_transforms[i]     = current_transform;
+    transforms[i]            = current_transform.mul(joint->m_invBindPose);
+
+    printf("Set %.*s to:\n", joint->m_name_length, joint->m_name);
+    printf("Inv bind:\n");
+    joint->m_invBindPose.debug();
+    printf("---\n");
+    printf("Current local:\n");
+    current_local.debug();
+    printf("---\n");
+    printf("Parent: \n");
+    parent_transform.debug();
+    printf("---\n");
+    printf("Transform:\n");
+    transforms[i].debug();
+    printf("---\n");
+  }
+
   shader.use();
   shader.set_int("texture1", 0);
+  shader.set_mat4("jointTransforms", &transforms[0].m[0], animation.skeleton.joint_count);
 
   glActiveTexture(GL_TEXTURE0);
   sta_glBindTexture(GL_TEXTURE_2D, texture0);
@@ -260,6 +143,7 @@ int main()
 
   Mat44 view  = {};
   view.identity();
+  view = view.scale(0.1f);
 
   while (true)
   {
@@ -274,6 +158,7 @@ int main()
       view  = view.rotate_y(0.5f);
       shader.set_mat4("view", &view.m[0]);
     }
+
     sta_gl_clear_buffer(0.0f, 0.0f, 0.0f, 1.0f);
 
     glDrawElements(GL_TRIANGLES, animation.vertex_count, GL_UNSIGNED_INT, 0);
