@@ -1,6 +1,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include <cstring>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -81,42 +82,6 @@ void                 sta_arena_pop(Arena* arena, u64 size);
     array = arr;                                                                                                                                                                                       \
   }
 
-struct Buffer
-{
-public:
-  Buffer()
-  {
-    this->buffer = 0;
-    this->len    = 0;
-    this->index  = 0;
-  }
-  Buffer(char* buffer, u64 len)
-  {
-    this->buffer = buffer;
-    this->len    = len;
-    this->index  = 0;
-  }
-
-  int  parse_int_from_string();
-  bool match(char c);
-  void skip_whitespace();
-  bool is_out_of_bounds()
-  {
-    return this->len <= this->index;
-  }
-  void advance()
-  {
-    this->index++;
-  }
-  char current_char()
-  {
-    return this->buffer[this->index];
-  }
-  u64   len;
-  u64   index;
-  char* buffer;
-};
-
 struct Profiler
 {
   u64 StartTSC;
@@ -193,5 +158,27 @@ void                      sta_log(Logger* logger, LoggingLevel level, const char
 
 bool                      sta_initLogger(Logger* logger, const char* filename);
 bool                      sta_destroyLogger(Logger* logger);
+
+struct String
+{
+public:
+  String()
+  {
+    buffer = 0;
+    length = 0;
+  }
+  String(char* buffer, u32 length)
+  {
+    this->buffer = buffer;
+    this->length = length;
+  }
+
+  bool compare(String s)
+  {
+    return this->length == s.length && strncmp(this->buffer, s.buffer, this->length);
+  };
+  char* buffer;
+  u32   length;
+};
 
 #endif

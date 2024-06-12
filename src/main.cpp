@@ -144,16 +144,15 @@ Vector3 interpolate_translation(Vector3 v0, Vector3 v1, f32 t)
 
 Mat44 interpolate_transforms(Mat44 first, Mat44 second, f32 time)
 {
-  Vector3 first_translation(first.rc[3][0], first.rc[3][1], first.rc[3][2]);
-  Vector3 second_translation(second.rc[3][0], second.rc[3][1], second.rc[3][2]);
-  Vector3 final_translation = interpolate_translation(first_translation, second_translation, time);
+  Vector3    first_translation(first.rc[3][0], first.rc[3][1], first.rc[3][2]);
+  Vector3    second_translation(second.rc[3][0], second.rc[3][1], second.rc[3][2]);
+  Vector3    final_translation = interpolate_translation(first_translation, second_translation, time);
 
+  Quaternion first_q           = Quaternion::from_mat(first);
+  Quaternion second_q          = Quaternion::from_mat(second);
+  Quaternion final_q           = Quaternion::interpolate(first_q, second_q, time);
 
-  Quaternion first_q  = Quaternion::from_mat(first);
-  Quaternion second_q = Quaternion::from_mat(second);
-  Quaternion final_q  = Quaternion::interpolate(first_q, second_q, time);
-
-  Mat44 res = {};
+  Mat44      res               = {};
   res.identity();
   res = res.translate(final_translation);
   res = res.rotate(final_q);
@@ -163,14 +162,15 @@ Mat44 interpolate_transforms(Mat44 first, Mat44 second, f32 time)
 
 void calculate_new_pose(Mat44* poses, u32 count, Animation animation, u32 ticks)
 {
-  u64   loop_time = (u64)(5000 * animation.duration);
-  float time      = (ticks % loop_time) / (f32)loop_time;
+  u64   loop_time = 2000;
+  float time      = (ticks % (u64)(loop_time * animation.duration)) / (f32)loop_time;
 
   u32   pose_idx  = 0;
   if (time >= animation.duration - 0.001f)
   {
     time = animation.duration;
   }
+
   for (; pose_idx < animation.pose_count && animation.steps[pose_idx] < time; pose_idx++)
     ;
 

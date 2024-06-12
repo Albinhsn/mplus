@@ -290,3 +290,5 @@ bool sta_destroyLogger(Logger* logger)
 {
   return fclose(logger->filePtr);
 }
+
+

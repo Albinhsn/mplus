@@ -22,7 +22,7 @@ bool Buffer::match(char c)
 {
   return this->current_char() == c;
 }
-int Buffer::parse_int_from_string()
+int Buffer::parse_int()
 {
   if (this->is_out_of_bounds())
   {
@@ -65,7 +65,131 @@ int parse_int_from_string(Buffer* buffer)
   }
   return sign ? -value : value;
 }
+void Buffer::parse_float_array(f32* array, u64 count)
+{
+  for (unsigned int i = 0; i < count; i++)
+  {
+    while (!(isdigit(this->current_char()) || this->current_char() == '-' || this->current_char() == 'e'))
+    {
+      this->advance();
+    }
+    array[i] = this->parse_float();
+  }
+}
+void Buffer::parse_int_array(i32* array, u64 count)
+{
+  for (u32 i = 0; i < count; i++)
+  {
+    while (!(isdigit(this->current_char()) || this->current_char() == '-'))
+    {
+      this->advance();
+    }
+    array[i] = this->parse_int();
+  }
+}
 
+void Buffer::parse_string_array(char** array, u64 count)
+{
+  u32 prev = 0;
+  for (u32 i = 0; i < count; i++)
+  {
+    while (!this->match(' ') && !this->match('<'))
+    {
+      this->advance();
+    }
+    array[i] = (char*)sta_allocate(this->index - prev + 1);
+    strncpy(array[i], &this->buffer[prev], this->index - prev);
+    array[i][this->index - prev] = '\0';
+
+    this->advance();
+    prev = this->index;
+  }
+}
+void Buffer::parse_vector2_array(Vector2* array, u64 count)
+{
+  for (unsigned int i = 0; i < count; i++)
+  {
+    Vector2* position = &array[i];
+    this->skip_whitespace();
+    position->x = this->parse_float();
+    this->skip_whitespace();
+    position->y = this->parse_float();
+  }
+}
+void Buffer::parse_vector3_array(Vector3* array, u64 count)
+{
+  for (unsigned int i = 0; i < count; i++)
+  {
+    Vector3* position = &array[i];
+    this->skip_whitespace();
+    position->x = this->parse_float();
+    this->skip_whitespace();
+    position->y = this->parse_float();
+    this->skip_whitespace();
+    position->z = this->parse_float();
+  }
+}
+
+float Buffer::parse_float()
+{
+  bool sign = false;
+  if (this->current_char() == '-')
+  {
+    this->advance();
+    sign = true;
+  }
+  float value = 0;
+  while (isdigit(this->current_char()))
+  {
+    value *= 10;
+    value += this->current_char() - '0';
+    this->advance();
+  }
+
+  float decimal       = 0.0f;
+  int   decimal_count = 0;
+  if (this->current_char() == '.')
+  {
+    this->advance();
+    while (isdigit(this->current_char()))
+    {
+      decimal_count++;
+      decimal += (this->current_char() - '0') / pow(10, decimal_count);
+      this->advance();
+    }
+  }
+
+  value += decimal;
+  if (this->current_char() == 'e' || this->current_char() == 'E')
+  {
+    this->advance();
+    bool sign_exp = false;
+    if (this->current_char() == '-')
+    {
+      this->advance();
+      sign_exp = true;
+    }
+    u32 exp = (this->current_char() - '0');
+    this->advance();
+    while (isdigit(this->current_char()))
+    {
+      exp *= 10;
+      exp += this->current_char() - '0';
+      this->advance();
+    }
+
+    if (sign_exp)
+    {
+      value /= pow(10, exp);
+    }
+    else
+    {
+      value *= pow(10, exp);
+    }
+  }
+
+  return sign ? -value : value;
+}
 float parse_float_from_string(Buffer* buffer)
 {
   bool sign = false;
@@ -1378,6 +1502,454 @@ bool convert_obj_to_model(const char* input_filename, const char* output_filenam
     }
   }
   fclose(file_ptr);
+
+  return true;
+}
+
+void free_xml_node(XML_Node* node)
+{
+  if (node->type == XML_PARENT)
+  {
+    XML_Node* child = node->child;
+    while (child != 0)
+    {
+      XML_Node* next = child->next;
+      free_xml_node(child);
+      child = next;
+    }
+  }
+
+  sta_deallocate(node->header.tags, sizeof(XML_Tag) * node->header.tag_capacity);
+  sta_deallocate(node, sizeof(XML_Node));
+}
+
+bool remove_xml_key(XML_Node* xml, const char* node_name, u64 node_name_length)
+{
+
+  XML_Node* prev = xml->child;
+  XML_Node* curr = xml->child;
+  while (curr != 0)
+  {
+    if (curr->header.name_length == node_name_length && strncmp(curr->header.name, node_name, node_name_length) == 0)
+    {
+      if (curr == xml->child)
+      {
+        xml->child = curr->next;
+        if (xml->child == 0)
+        {
+          xml->type = XML_CLOSED;
+        }
+      }
+      else
+      {
+
+        prev->next = curr->next;
+      }
+      free_xml_node(curr);
+      return true;
+    }
+    prev = curr;
+    curr = curr->next;
+  }
+  return false;
+}
+
+XML_Node* XML_Node::find_key_with_tag(char* key_name, u32 key_name_length, char* tag_name, u32 tag_name_length, char* tag_value, u32 tag_value_length)
+{
+  XML_Node* curr = this->child;
+  while (curr != 0)
+  {
+    if (curr->header.name_length == key_name_length && strncmp(curr->header.name, key_name, key_name_length) == 0)
+    {
+      XML_Tag* tag = curr->find_tag(tag_name);
+      if (tag->value_length == tag_value_length && strncmp(tag->value, tag_value, tag->value_length) == 0)
+      {
+        return curr;
+      }
+    }
+    curr = curr->next;
+  }
+  return 0;
+}
+XML_Node* XML_Node::find_key_with_tag(const char* key_name, const char* tag_name, String tag_value)
+{
+  u64       node_name_length = strlen(key_name);
+  XML_Node* curr             = this->child;
+  while (curr != 0)
+  {
+    if (curr->header.name_length == node_name_length && strncmp(curr->header.name, key_name, node_name_length) == 0)
+    {
+      XML_Tag* tag = curr->find_tag(tag_name);
+      if (tag->value_length == tag_value.length && strncmp(tag->value, tag_value.buffer, tag->value_length) == 0)
+      {
+        return curr;
+      }
+    }
+    curr = curr->next;
+  }
+  assert(0 && "Couldn't find key with tag");
+}
+XML_Node* XML_Node::find_key_with_tag(const char* key_name, const char* tag_name, const char* tag_value)
+{
+  u64       node_name_length = strlen(key_name);
+  XML_Node* curr             = this->child;
+  while (curr != 0)
+  {
+    if (curr->header.name_length == node_name_length && strncmp(curr->header.name, key_name, node_name_length) == 0)
+    {
+      XML_Tag* tag = curr->find_tag(tag_name);
+      if (tag->value_length == strlen(tag_value) && strncmp(tag->value, tag_value, tag->value_length) == 0)
+      {
+        return curr;
+      }
+    }
+    curr = curr->next;
+  }
+  return 0;
+}
+
+XML_Node* XML_Node::find_key(char* key_name, u32 key_name_length)
+{
+  XML_Node* curr = this->child;
+  while (curr != 0)
+  {
+    if (curr->header.name_length == key_name_length && strncmp(curr->header.name, key_name, key_name_length) == 0)
+    {
+      return curr;
+    }
+    curr = curr->next;
+  }
+  assert(0 && "Couldn't find" && key_name);
+}
+XML_Node* XML_Node::find_key(const char* key_name)
+{
+  return this->find_key((char*)key_name, strlen(key_name));
+}
+XML_Tag* XML_Node::find_tag(char* tag_name, u32 tag_name_length)
+{
+  XML_Tag* tags = this->header.tags;
+  for (unsigned int i = 0; i < this->header.tag_count; i++)
+  {
+    XML_Tag* tag = &tags[i];
+    if (tag->name_length == tag_name_length && strncmp(tag_name, tag->name, tag_name_length) == 0)
+    {
+      return tag;
+    }
+  }
+  assert(0 && "Couldn't find" && tag_name);
+}
+
+XML_Tag* XML_Node::find_tag(const char* tag_name)
+{
+  return this->find_tag((char*)tag_name, strlen(tag_name));
+}
+
+u32 sta_xml_get_child_count_by_name(XML_Node* node, const char* name)
+{
+  u32       count       = 0;
+  XML_Node* child       = node->child;
+  u32       name_length = strlen(name);
+  while (child)
+  {
+    if (child->header.name_length == name_length && strncmp(name, child->header.name, name_length) == 0)
+    {
+      count++;
+    }
+    child = child->next;
+  }
+
+  return count;
+}
+
+static void write_xml_node(XML_Node* xml, FILE* ptr, int tabs)
+{
+
+  if (xml == 0)
+  {
+    return;
+  }
+  XML_Header* header = &xml->header;
+  char        t[tabs];
+  memset(t, '\t', tabs);
+  fprintf(ptr, "%.*s<%.*s", tabs, t, (i32)header->name_length, header->name);
+  for (unsigned int i = 0; i < header->tag_count; i++)
+  {
+    XML_Tag* tag = &header->tags[i];
+    fprintf(ptr, " %.*s=\"%.*s\"", (i32)tag->name_length, tag->name, (i32)tag->value_length, tag->value);
+  }
+  if (xml->type == XML_CLOSED)
+  {
+    fprintf(ptr, "/>\n");
+  }
+  else if (xml->type == XML_PARENT)
+  {
+    fprintf(ptr, ">\n");
+
+    XML_Node* child = xml->child;
+    write_xml_node(child, ptr, tabs + 1);
+
+    char t[tabs];
+    memset(t, '\t', tabs);
+    fprintf(ptr, "%.*s</%.*s>\n", tabs, t, (i32)header->name_length, header->name);
+  }
+  else if (xml->content.length != 0)
+  {
+    fprintf(ptr, ">%.*s</%.*s>\n", (i32)xml->content.length, xml->content.buffer, (i32)header->name_length, header->name);
+  }
+  else
+  {
+    char t[tabs];
+    memset(t, '\t', tabs);
+    fprintf(ptr, ">%.*s</%.*s>\n", tabs, t, (i32)header->name_length, header->name);
+  }
+  write_xml_node(xml->next, ptr, tabs);
+}
+static void write_xml(XML* xml, FILE* ptr)
+{
+  fprintf(ptr, "<?");
+  for (unsigned int i = 0; i < xml->version_and_encoding_length; i++)
+  {
+
+    XML_Tag* tag = &xml->version_and_encoding[i];
+    fprintf(ptr, " %.*s=\"%.*s\"", (i32)tag->name_length, tag->name, (i32)tag->value_length, tag->value);
+  }
+  fprintf(ptr, "?>\n");
+  write_xml_node(&xml->head, ptr, 0);
+}
+
+void write_xml_to_file(XML* xml, const char* filename)
+{
+  FILE* file_ptr = fopen(filename, "w");
+  write_xml(xml, file_ptr);
+}
+
+static bool compare_string(XML_Header* xml, Buffer* buffer, u64 index)
+{
+  u64 len = buffer->index - index;
+  if (len != xml->name_length)
+  {
+    printf("Not the same length!\n");
+    return false;
+  }
+  return strncmp(xml->name, &buffer->buffer[index], len) == 0;
+}
+
+enum XML_Header_Result
+{
+  XML_HEADER_OKAY,
+  XML_HEADER_ERROR,
+  XML_HEADER_CLOSED
+};
+
+bool parse_tag(Buffer* buffer, XML_Tag* current_tag)
+{
+
+  // parse name
+  u64 index         = buffer->index;
+  current_tag->name = &buffer->buffer[index];
+
+  // very robust yes
+  SKIP(buffer, !match(buffer, '='));
+  current_tag->name_length = buffer->index - index;
+
+  buffer->advance();
+  if (!match(buffer, '\"'))
+  {
+    printf("Expected '\"' for tag content?\n");
+    return false;
+  }
+  buffer->advance();
+  current_tag->value = &buffer->buffer[buffer->index];
+  index              = buffer->index;
+
+  SKIP(buffer, buffer->current_char() != '\"');
+
+  current_tag->value_length = buffer->index - index;
+  buffer->advance();
+  return true;
+}
+XML_Header_Result parse_header(XML_Node* xml, Buffer* buffer)
+{
+  const int initial_tag_capacity = 8;
+  // <NAME [TAG_NAME="TAG_CONTENT"]>
+  XML_Header* header   = &xml->header;
+  header->name         = &buffer->buffer[buffer->index];
+  header->tag_capacity = initial_tag_capacity;
+  header->tags         = (XML_Tag*)sta_allocate(sizeof(XML_Tag) * initial_tag_capacity);
+  u64 index            = buffer->index;
+  SKIP(buffer, buffer->current_char() != ' ' && buffer->current_char() != '>' && buffer->current_char() != '/');
+  header->name_length = buffer->index - index;
+
+  // parse tags
+  for (;;)
+  {
+    skip_whitespace(buffer);
+    if (isalpha(buffer->current_char()))
+    {
+      RESIZE_ARRAY(header->tags, XML_Tag, header->tag_count, header->tag_capacity);
+      if (!parse_tag(buffer, &header->tags[header->tag_count++]))
+      {
+        return XML_HEADER_ERROR;
+      }
+    }
+    else if (match(buffer, '/') && NEXT_CHAR(buffer) == '>')
+    {
+      buffer->advance();
+      buffer->advance();
+      return XML_HEADER_CLOSED;
+    }
+    else if (match(buffer, '>'))
+    {
+      buffer->advance();
+      return XML_HEADER_OKAY;
+    }
+    else
+    {
+      printf("Idk should close or alpha? %c\n", buffer->current_char());
+      return XML_HEADER_ERROR;
+    }
+  }
+}
+
+bool close_xml(XML_Node* xml, Buffer* buffer)
+{
+
+  buffer->advance();
+  u64 index = buffer->index;
+  SKIP(buffer, buffer->current_char() != '>');
+
+  if (!compare_string(&xml->header, buffer, index))
+  {
+    printf("Closed the wrong thing?\n");
+    return false;
+  }
+  buffer->advance();
+  return true;
+}
+
+bool parse_content(XML_Node* xml, Buffer* buffer, u64 index)
+{
+  xml->type           = XML_CONTENT;
+  xml->content.buffer = &buffer->buffer[buffer->index];
+
+  SKIP(buffer, buffer->current_char() != '<');
+
+  xml->content.length = buffer->index - index;
+  buffer->advance();
+  if (!match(buffer, '/'))
+  {
+    printf("Should be closing?\n");
+    return false;
+  }
+  return close_xml(xml, buffer);
+}
+
+bool sta_xml_parse_from_buffer(XML_Node* xml, Buffer* buffer)
+{
+
+  skip_whitespace(buffer);
+  if (!match(buffer, '<'))
+  {
+    printf("Unknown char? %c %ld\n", buffer->buffer[buffer->index], buffer->index);
+    return false;
+  }
+  buffer->advance();
+  XML_Header_Result result = parse_header(xml, buffer);
+  if (result == XML_HEADER_ERROR)
+  {
+    return false;
+  }
+
+  if (result == XML_HEADER_CLOSED)
+  {
+    xml->type = XML_CLOSED;
+    return true;
+  }
+
+  skip_whitespace(buffer);
+  u64 index = buffer->index;
+  if (match(buffer, '<'))
+  {
+    // check empty
+    if (NEXT_CHAR(buffer) == '/')
+    {
+      // advance past '<'
+      buffer->advance();
+      return close_xml(xml, buffer);
+    }
+    xml->type          = XML_PARENT;
+    xml->child         = (XML_Node*)sta_allocate_struct(XML_Node, 1);
+    xml->child->parent = xml;
+    if (!sta_xml_parse_from_buffer(xml->child, buffer))
+    {
+      return false;
+    }
+
+    XML_Node* next = xml->child;
+    for (;;)
+    {
+      skip_whitespace(buffer);
+      if (!match(buffer, '<'))
+      {
+        return true;
+      }
+      if (NEXT_CHAR(buffer) == '/')
+      {
+        buffer->advance();
+        return close_xml(xml, buffer);
+      }
+      next->next         = (XML_Node*)sta_allocate_struct(XML_Node, 1);
+      next->next->parent = xml;
+      next               = next->next;
+      if (!sta_xml_parse_from_buffer(next, buffer))
+      {
+        return false;
+      }
+    }
+  }
+  return parse_content(xml, buffer, index);
+}
+bool sta_xml_parse_version_and_encoding(XML* xml, Buffer* buffer)
+{
+  skip_whitespace(buffer);
+  // parse header?
+  if (!match(buffer, '<'))
+  {
+    printf("Unknown char? %c %ld\n", buffer->buffer[buffer->index], buffer->index);
+    return false;
+  }
+  buffer->advance();
+  if (!match(buffer, '?'))
+  {
+    printf("Tried to parse xml version thingy but didn't find it?\n");
+    return false;
+  }
+  buffer->advance();
+  if (match(buffer, '?') && NEXT_CHAR(buffer) == '>')
+  {
+    buffer->advance();
+    buffer->advance();
+    return true;
+  }
+
+  const int initial_tag_capacity     = 2;
+  xml->version_and_encoding_capacity = initial_tag_capacity;
+  xml->version_and_encoding          = (XML_Tag*)sta_allocate_struct(XML_Tag, initial_tag_capacity);
+  do
+  {
+    skip_whitespace(buffer);
+    RESIZE_ARRAY(xml->version_and_encoding, XML_Tag, xml->version_and_encoding_length, xml->version_and_encoding_capacity);
+    if (!parse_tag(buffer, &xml->version_and_encoding[xml->version_and_encoding_length++]))
+    {
+      return false;
+    }
+  } while (!match(buffer, '?'));
+  buffer->advance();
+  if (!match(buffer, '>'))
+  {
+    return false;
+  }
+  buffer->advance();
 
   return true;
 }
