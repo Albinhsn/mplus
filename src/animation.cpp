@@ -559,8 +559,6 @@ void parse_int_array(i32* array, u64 count, Buffer* buffer)
 
 void parse_float_array(f32* array, u64 count, Buffer* buffer, const char* joint, i32 joint_length)
 {
-  printf("%.*s\n", joint_length, joint);
-  printf("Parsing from %.*s\n", (i32)buffer->len, buffer->buffer);
   for (unsigned int i = 0; i < count; i++)
   {
     while (!(isdigit(CURRENT_CHAR(buffer)) || CURRENT_CHAR(buffer) == '-' || CURRENT_CHAR(buffer) == 'e'))
@@ -568,9 +566,7 @@ void parse_float_array(f32* array, u64 count, Buffer* buffer, const char* joint,
       ADVANCE(buffer);
     }
     array[i] = parse_float_from_string(buffer);
-    printf("%f\n", array[i]);
   }
-  printf("--\n");
 }
 void parse_float_array(f32* array, u64 count, Buffer* buffer)
 {
@@ -721,32 +717,30 @@ int cmp_vertex_skin_data(const void* _a, const void* _b)
 
 void get_skin_data(VertexSkinData* vertex_skin_data, u32 vertex_skin_count, i32* vcount, i32 vcount_count, f32* weights, XML_Node* vertex_weights)
 {
-  XML_Node* v    = vertex_weights->find_key("v");
-  Buffer    buff = {};
-  buff.len       = v->content_length;
-  buff.buffer    = (char*)v->content;
-  Buffer* buffer = &buff;
+  XML_Node* v = vertex_weights->find_key("v");
+  Buffer    buff((char*)v->content, v->content_length);
+  Buffer*   buffer = &buff;
 
   for (u32 i = 0; i < vcount_count; i++)
   {
-    VertexSkinData skin_data = {};
-    i32            vc        = vcount[i];
-    skin_data.count          = MIN(vc, 4);
-    skin_data.data           = (JointWeight*)sta_allocate(sizeof(JointWeight) * skin_data.count);
+    VertexSkinData* skin_data = &vertex_skin_data[i];
+    i32             vc        = vcount[i];
+    skin_data->count          = MIN(vc, 4);
+    skin_data->data           = (JointWeight*)sta_allocate(sizeof(JointWeight) * skin_data->count);
     for (u32 j = 0; j < vc; j++)
     {
-      skip_whitespace(buffer);
+      buffer->skip_whitespace();
       i32 joint_id = parse_int_from_string(buffer);
-      skip_whitespace(buffer);
+      buffer->skip_whitespace();
       i32 weight_id = parse_int_from_string(buffer);
       if (j < 4)
       {
-        skin_data.data[j].weight   = weights[weight_id];
-        skin_data.data[j].joint_id = joint_id;
+        skin_data->data[j].weight   = weights[weight_id];
+        skin_data->data[j].joint_id = joint_id;
       }
     }
 
-    qsort(&skin_data, sizeof(JointWeight), vc, cmp_vertex_skin_data);
+    qsort(skin_data, sizeof(JointWeight), skin_data->count, cmp_vertex_skin_data);
 
     if (vc > 4)
     {
@@ -754,17 +748,15 @@ void get_skin_data(VertexSkinData* vertex_skin_data, u32 vertex_skin_count, i32*
       float sum = 0.0f;
       for (u32 j = 0; j < 4; j++)
       {
-        sum += skin_data.data[j].weight;
+        sum += skin_data->data[j].weight;
       }
       float after_sum = 0.0f;
       for (u32 j = 0; j < 4; j++)
       {
-        skin_data.data[j].weight /= sum;
-        after_sum += skin_data.data[j].weight;
+        skin_data->data[j].weight /= sum;
+        after_sum += skin_data->data[j].weight;
       }
     }
-
-    vertex_skin_data[i] = skin_data;
   }
 }
 
@@ -876,9 +868,6 @@ void         extract_main_joint_data(JointData* joint, XML_Node* child, bool is_
   {
     joint->local_bind_transform = CORRECTION.mul(joint->local_bind_transform);
   }
-  printf("%.*s\n", joint->name_length, joint->name);
-  joint->local_bind_transform.debug();
-  printf("--\n");
 }
 
 void load_joint_data(JointData* joint, XML_Node* node, bool is_root, const char** bone_order, u32 bone_count)
@@ -1202,7 +1191,6 @@ void load_joint_transforms(AnimationData* animation_data, XML_Node* joint_node, 
 
     parse_float_array(&transform->local_transform.m[0], 16, &buffer);
     transform->local_transform = transform->local_transform.transpose();
-    printf("%d vs %d, %.*s vs %.*s\n", joint_name_length, root_name_length, joint_name_length, joint_name, root_name_length, root_name);
     if (joint_name_length == root_name_length && strncmp(joint_name, root_name, root_name_length) == 0)
     {
       transform->local_transform = CORRECTION.mul(transform->local_transform);
@@ -1277,6 +1265,7 @@ bool sta_collada_parse_from_file(AnimationModel* animation, const char* filename
   animation->skeleton.joints      = (Joint*)sta_allocate(sizeof(Joint) * animation->skeleton.joint_count);
 
   transfer_joints(&animation->skeleton, animation_model.skeleton_data.head_joint, 0);
+
   for (u32 i = 0; i < animation->skeleton.joint_count; i++)
   {
     Joint* joint = &animation->skeleton.joints[i];
@@ -1289,6 +1278,7 @@ bool sta_collada_parse_from_file(AnimationModel* animation, const char* filename
 
   animation->animations.pose_count = animation_model.animation_data.count;
   animation->animations.duration   = animation_model.animation_data.duration;
+  animation->animations.steps      = (f32*)sta_allocate(sizeof(f32) * animation->animations.pose_count);
   animation->animations.poses      = (JointPose*)sta_allocate(sizeof(JointPose) * animation->animations.pose_count);
 
   // keyframe are how many different poses there are in a animation
@@ -1298,14 +1288,13 @@ bool sta_collada_parse_from_file(AnimationModel* animation, const char* filename
   {
     JointPose* pose       = &animation->animations.poses[i];
     pose->local_transform = (Mat44*)sta_allocate(sizeof(Mat44) * animation_model.skeleton_data.joint_count);
-    pose->names           = (String*)sta_allocate(sizeof(String) * animation_model.skeleton_data.joint_count);
+    anim->steps[i]        = animation_model.animation_data.timesteps[i];
+    anim->joint_count = animation_model.skeleton_data.joint_count;
 
     for (u32 j = 0; j < animation_model.skeleton_data.joint_count; j++)
     {
       KeyFrameData* frame      = &animation_model.animation_data.key_frames[i];
       pose->local_transform[j] = frame->transforms[j].local_transform;
-      pose->names[j].s         = animation->skeleton.joints[j].m_name;
-      pose->names[j].l         = animation->skeleton.joints[j].m_name_length;
     }
   }
 

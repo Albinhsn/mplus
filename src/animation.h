@@ -61,10 +61,6 @@ struct XML
   u64      version_and_encoding_capacity;
 };
 
-struct Quaternion
-{
-  f32 x, y, z, w;
-};
 
 struct Joint
 {
@@ -92,8 +88,7 @@ struct String
 struct JointPose
 {
 public:
-  String* names;
-  Mat44*  local_transform;
+  Mat44* local_transform;
 };
 
 struct Animation
@@ -102,6 +97,7 @@ struct Animation
   JointPose* poses;
   f32*       steps;
   u32        pose_count;
+  u32        joint_count;
 };
 
 struct SkinnedVertex

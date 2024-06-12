@@ -18,8 +18,38 @@ static inline Vector3 cast_vec4_to_vec3(Vector4 v)
   return (Vector3){v.x, v.y, v.z};
 }
 
+bool Buffer::match(char c)
+{
+  return this->current_char() == c;
+}
+int Buffer::parse_int_from_string()
+{
+  if (this->is_out_of_bounds())
+  {
+    assert(0 && "Out of bounds!");
+  }
+  bool sign = false;
+  if (this->current_char() == '-')
+  {
+    this->advance();
+    sign = true;
+  }
+  u64 value = 0;
+  while (isdigit(this->current_char()))
+  {
+    value *= 10;
+    value += this->current_char() - '0';
+    this->advance();
+  }
+  return sign ? -value : value;
+}
+
 int parse_int_from_string(Buffer* buffer)
 {
+  if (buffer->is_out_of_bounds())
+  {
+    assert(0 && "Out of bounds!");
+  }
   bool sign = false;
   if (CURRENT_CHAR(buffer) == '-')
   {
@@ -75,7 +105,7 @@ float parse_float_from_string(Buffer* buffer)
       ADVANCE(buffer);
       sign_exp = true;
     }
-    u32 exp       = (CURRENT_CHAR(buffer) - '0');
+    u32 exp = (CURRENT_CHAR(buffer) - '0');
     ADVANCE(buffer);
     while (isdigit(CURRENT_CHAR(buffer)))
     {
@@ -110,10 +140,17 @@ bool consume(Buffer* buffer, char target)
   ADVANCE(buffer);
   return true;
 }
+void Buffer::skip_whitespace()
+{
+  while (!this->is_out_of_bounds() && (this->match(' ') || this->match('\n') || this->match('\t')))
+  {
+    this->advance();
+  }
+}
 
 void skip_whitespace(Buffer* buffer)
 {
-  SKIP(buffer, match(buffer, ' ') || match(buffer, '\n') || match(buffer, '\t'));
+  SKIP(buffer, !buffer->is_out_of_bounds() && (match(buffer, ' ') || match(buffer, '\n') || match(buffer, '\t')));
 }
 
 void sta_save_targa(TargaImage* image, const char* filename)
@@ -847,7 +884,7 @@ static bool json_parse_string(char** key, Buffer* buffer)
 {
   ADVANCE(buffer);
   u64 start = buffer->index;
-  SKIP(buffer, CURRENT_CHAR(buffer) != '"');
+  SKIP(buffer, !buffer->match('"'));
   u64 len     = (buffer->index - start);
 
   *key        = (char*)malloc(sizeof(char) * (1 + len));
@@ -888,7 +925,7 @@ static bool parseJsonObject(JsonObject* obj, Buffer* buffer)
   ADVANCE(buffer);
   skip_whitespace(buffer);
   // end or string
-  while (CURRENT_CHAR(buffer) != '}')
+  while (!buffer->match('}'))
   {
     bool res = parseKeyValuePair(obj, buffer);
     if (!res)
@@ -926,7 +963,7 @@ static bool parseJsonArray(JsonArray* arr, Buffer* buffer)
   ADVANCE(buffer);
   skip_whitespace(buffer);
   bool res;
-  while (CURRENT_CHAR(buffer) != ']')
+  while (!buffer->match(']'))
   {
     resizeArray(arr);
     res = parseJsonValue(&arr->values[arr->arraySize], buffer);
@@ -952,12 +989,12 @@ static bool parseNumber(f32* number, Buffer* buffer)
 static bool parseJsonValue(JsonValue* value, Buffer* buffer)
 {
   skip_whitespace(buffer);
-  if (isdigit(CURRENT_CHAR(buffer)) || CURRENT_CHAR(buffer) == '-')
+  if (isdigit(buffer->current_char()) || buffer->match('-'))
   {
     value->type = JSON_NUMBER;
     return parseNumber(&value->number, buffer);
   }
-  switch (CURRENT_CHAR(buffer))
+  switch (buffer->current_char())
   {
   case '\"':
   {
@@ -1016,7 +1053,7 @@ static bool parseJsonValue(JsonValue* value, Buffer* buffer)
   }
   default:
   {
-    printf("Unknown value token '%c'\n", CURRENT_CHAR(buffer));
+    printf("Unknown value token '%c'\n", buffer->current_char());
     return false;
   }
   }
@@ -1092,7 +1129,7 @@ bool sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filena
 
 static void skip_until_digit(Buffer* buffer)
 {
-  SKIP(buffer, buffer->index < buffer->len && !(isdigit(CURRENT_CHAR(buffer)) || (CURRENT_CHAR(buffer) == '-')));
+  SKIP(buffer, buffer->index < buffer->len && !(isdigit(buffer->current_char()) || (buffer->match('-'))));
 }
 
 static void parse_wavefront_texture(WavefrontObject* obj, Buffer* buffer)

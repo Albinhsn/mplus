@@ -285,9 +285,9 @@ Mat44 Mat44::translate(Vector3 v)
   Mat44 m = {};
   m.identity();
 
-  m.rc[0][3] = v.x;
-  m.rc[1][3] = v.y;
-  m.rc[2][3] = v.z;
+  m.rc[3][0] = v.x;
+  m.rc[3][1] = v.y;
+  m.rc[3][2] = v.z;
 
   return this->mul(m);
 }

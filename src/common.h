@@ -88,17 +88,29 @@ public:
   {
     this->buffer = 0;
     this->len    = 0;
-    this->index = 0;
+    this->index  = 0;
   }
   Buffer(char* buffer, u64 len)
   {
     this->buffer = buffer;
     this->len    = len;
-    this->index = 0;
+    this->index  = 0;
   }
+
+  int  parse_int_from_string();
+  bool match(char c);
+  void skip_whitespace();
   bool is_out_of_bounds()
   {
     return this->len <= this->index;
+  }
+  void advance()
+  {
+    this->index++;
+  }
+  char current_char()
+  {
+    return this->buffer[this->index];
   }
   u64   len;
   u64   index;

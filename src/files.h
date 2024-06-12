@@ -31,7 +31,7 @@ struct ModelData
 
 struct TargaImage
 {
-  
+
   unsigned char* data;
   i32            bpp;
   u16            width, height;
@@ -190,7 +190,7 @@ bool  sta_convert_obj_to_model(const char* input_filename, const char* output_fi
 
 int   parse_int_from_string(Buffer* buffer);
 float parse_float_from_string(Buffer* buffer);
-void skip_whitespace(Buffer* buffer);
-bool match(Buffer* buffer, char target);
+void  skip_whitespace(Buffer* buffer);
+bool  match(Buffer* buffer, char target);
 
 #endif
