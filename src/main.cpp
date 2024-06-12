@@ -164,8 +164,9 @@ void calculate_new_pose(Mat44* poses, u32 count, Animation animation, u32 ticks)
 {
   u64   loop_time = 2000;
   float time      = (ticks % (u64)(loop_time * animation.duration)) / (f32)loop_time;
+  time            = 0.5;
 
-  u32   pose_idx  = 0;
+  u32 pose_idx = 0;
   if (time >= animation.duration - 0.001f)
   {
     time = animation.duration;
@@ -175,10 +176,11 @@ void calculate_new_pose(Mat44* poses, u32 count, Animation animation, u32 ticks)
     ;
 
   // get the two key frames
-  JointPose* first              = &animation.poses[pose_idx - 1];
-  JointPose* second             = &animation.poses[pose_idx];
+  // JointPose* first              = &animation.poses[pose_idx - 1];
+  JointPose* first  = &animation.poses[pose_idx];
+  JointPose* second = &animation.poses[pose_idx];
 
-  float      time_between_poses = (time - animation.steps[pose_idx - 1]) / (animation.steps[pose_idx] - animation.steps[pose_idx - 1]);
+  // float      time_between_poses = (time - animation.steps[pose_idx - 1]) / (animation.steps[pose_idx] - animation.steps[pose_idx - 1]);
 
   // interpolate between the frames given the progression
   //  iterate over each joint
@@ -188,11 +190,8 @@ void calculate_new_pose(Mat44* poses, u32 count, Animation animation, u32 ticks)
     //    interpolate them
     Mat44 first_transform  = first->local_transform[i];
     Mat44 second_transform = second->local_transform[i];
-    poses[i]               = interpolate_transforms(first_transform, second_transform, time_between_poses);
+    poses[i]               = interpolate_transforms(first_transform, second_transform, 0);
   }
-
-  printf("%f\n", time);
-  printf("%d %d\n", pose_idx, animation.pose_count);
 }
 
 void update_animation(AnimationModel animation, Shader shader, u32 ticks)
@@ -220,6 +219,7 @@ void update_animation(AnimationModel animation, Shader shader, u32 ticks)
     transforms[i]            = current_transform.mul(joint->m_invBindPose);
   }
   shader.set_mat4("jointTransforms", &transforms[0].m[0], skeleton->joint_count);
+  // exit(1);
 }
 
 int main()
@@ -227,7 +227,25 @@ int main()
 
   AnimationModel animation = {};
 
-  sta_collada_parse_from_file(&animation, "./data/model.dae");
+  sta_collada_parse_from_file(&animation, "./data/unarmed_man/UnarmedWalkForward.dae");
+  for (u32 i = 0; i < animation.skeleton.joint_count; i++)
+  {
+    Joint* joint = &animation.skeleton.joints[i];
+    printf("%.*s %d -> %.*s %d\n", joint->m_name_length, joint->m_name, i, animation.skeleton.joints[joint->m_iParent].m_name_length, animation.skeleton.joints[joint->m_iParent].m_name,
+           joint->m_iParent);
+    for (u32 j = 0; j < animation.vertex_count; j++)
+    {
+      SkinnedVertex* vertex = &animation.vertices[j];
+      for (u32 k = 0; k < 4; k++)
+      {
+        if (vertex->joint_index[k] == i)
+        {
+          // printf("%d: %f\n", j, vertex->joint_weight[0]);
+        }
+      }
+    }
+    printf("---\n");
+  }
 
   const int     screen_width  = 620;
   const int     screen_height = 480;
@@ -296,7 +314,8 @@ int main()
 
   Mat44 view  = {};
   view.identity();
-  view = view.scale(0.1f);
+  view = view.scale(0.005f);
+  view = view.rotate_y(180.0);
   while (true)
   {
 
@@ -307,7 +326,6 @@ int main()
     if (ticks + 16 < SDL_GetTicks())
     {
       ticks = SDL_GetTicks() + 16;
-      view  = view.rotate_y(0.5f);
       shader.set_mat4("view", &view.m[0]);
     }
     update_animation(animation, shader, ticks);

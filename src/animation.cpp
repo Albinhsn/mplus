@@ -41,12 +41,12 @@ static u8 get_joint_index_from_id(Skeleton* skeleton, char* name, u64 length)
 {
   for (unsigned int i = 0; i < skeleton->joint_count; i++)
   {
-    if (strlen(skeleton->joints[i].m_name) == length && strncmp(name, skeleton->joints[i].m_name, length) == 0)
+    if (skeleton->joints[i].m_name_length == length && strncmp(name, skeleton->joints[i].m_name, length) == 0)
     {
       return i;
     }
   }
-  return -1;
+  assert(0 && "Couldn't find joint by this name?");
 }
 
 struct JointData
@@ -158,7 +158,6 @@ static void get_skin_data(VertexSkinData* vertex_skin_data, u32 vertex_skin_coun
 
     if (vc > 4)
     {
-
       float sum = 0.0f;
       for (u32 j = 0; j < 4; j++)
       {
@@ -240,16 +239,12 @@ static void  extract_main_joint_data(JointData* joint, XML_Node* child, bool is_
 
   buffer.parse_float_array(&joint->local_bind_transform.m[0], 16);
   joint->local_bind_transform = joint->local_bind_transform.transpose();
-  if (is_root)
-  {
-    joint->local_bind_transform = CORRECTION.mul(joint->local_bind_transform);
-  }
 }
 
-static void load_joint_data(JointData* joint, XML_Node* node, bool is_root, char** bone_order, u32 bone_count)
+static void load_joint_data(JointData* joint, XML_Node* node, bool is_root, SkinningData* skinning_data)
 {
   const int length_of_node = 4;
-  extract_main_joint_data(joint, node, is_root, bone_order, bone_count);
+  extract_main_joint_data(joint, node, is_root, skinning_data->joint_order, skinning_data->joint_order_count);
 
   XML_Node* child_node = node->child;
   while (child_node)
@@ -261,23 +256,23 @@ static void load_joint_data(JointData* joint, XML_Node* node, bool is_root, char
       child_joint->children_cap   = 1;
       child_joint->children       = (JointData*)sta_allocate_struct(JointData, 1);
       child_joint->children_count = 0;
-      load_joint_data(child_joint, child_node, false, bone_order, bone_count);
+      load_joint_data(child_joint, child_node, false, skinning_data);
     }
 
     child_node = child_node->next;
   }
 }
 
-static void extract_bone_data(SkeletonData* skeleton_data, XML_Node* visual_scenes, char** bone_order, u32 bone_count)
+static void extract_bone_data(SkeletonData* skeleton_data, XML_Node* visual_scenes, SkinningData* skinning_data)
 {
-  XML_Node* armature_data                   = visual_scenes->find_key("visual_scene")->find_key_with_tag("node", "id", "Armature");
-  skeleton_data->joint_count                = bone_count;
-  XML_Node* child                           = armature_data->find_key("node");
+  XML_Node* armature_data                   = visual_scenes->find_key("visual_scene");
+  skeleton_data->joint_count                = skinning_data->joint_order_count;
+  XML_Node* child                           = armature_data->find_key_with_tag("node", "id", "mixamorig_Hips");
   skeleton_data->head_joint                 = (JointData*)sta_allocate_struct(JointData, 1);
   skeleton_data->head_joint->children_cap   = 1;
   skeleton_data->head_joint->children       = (JointData*)sta_allocate_struct(JointData, 1);
   skeleton_data->head_joint->children_count = 0;
-  load_joint_data(skeleton_data->head_joint, child, true, bone_order, bone_count);
+  load_joint_data(skeleton_data->head_joint, child, true, skinning_data);
 }
 
 static void read_positions(XML_Node* mesh_node, Vector3** positions, u32& count, VertexSkinData* skin_data)
@@ -299,10 +294,10 @@ static void read_positions(XML_Node* mesh_node, Vector3** positions, u32& count,
     Vector3* v  = &pos[i];
 
     Vector4  v4 = Vector4(v->x, v->y, v->z, 1.0f);
-    v4          = CORRECTION.mul(v4);
-    v->x        = v4.x;
-    v->y        = v4.y;
-    v->z        = v4.z;
+    // v4          = CORRECTION.mul(v4);
+    v->x = v4.x;
+    v->y = v4.y;
+    v->z = v4.z;
   }
   *positions = pos;
 }
@@ -401,6 +396,11 @@ static void extract_model_data(MeshData* model, XML_Node* geometry, VertexSkinDa
       vertex->joint_index[j]  = sd->data[j].joint_id;
       vertex->joint_weight[j] = sd->data[j].weight;
     }
+    for (u32 j = sd->count; j < 4; j++)
+    {
+      vertex->joint_index[j]  = 0;
+      vertex->joint_weight[j] = 0;
+    }
   }
 }
 
@@ -430,7 +430,7 @@ static void load_collada_model(ColladaModelData* data, XML_Node* head)
   extract_model_data(&data->mesh_data, geometry_node, data->skinning_data.vertex_skin_data);
 
   XML_Node* visual_scene = head->find_key("library_visual_scenes");
-  extract_bone_data(&data->skeleton_data, visual_scene, data->skinning_data.joint_order, data->skinning_data.joint_order_count);
+  extract_bone_data(&data->skeleton_data, visual_scene, &data->skinning_data);
 
   calculate_inverse_bind_transforms(&data->skeleton_data);
 }
@@ -443,6 +443,12 @@ static void transfer_joints(Skeleton* skeleton, JointData* joint_data, u32 paren
   joint->m_invBindPose = joint_data->inverse_bind_transform;
   joint->m_name        = joint_data->name;
   joint->m_name_length = joint_data->name_length;
+
+  printf("%.*s\n", (i32)joint->m_name_length, joint->m_name);
+  joint->m_invBindPose.debug();
+  printf("-\n");
+  joint->m_mat.debug();
+
   for (u32 i = 0; i < joint_data->children_count; i++)
   {
     transfer_joints(skeleton, &joint_data->children[i], joint_data->index);
@@ -451,8 +457,8 @@ static void transfer_joints(Skeleton* skeleton, JointData* joint_data, u32 paren
 
 static void find_root_joint_name(XML_Node* visual_scenes_node, String* root)
 {
-  XML_Node* skeleton = visual_scenes_node->find_key("visual_scene")->find_key_with_tag("node", "id", "Armature");
-  XML_Tag*  node     = skeleton->find_key("node")->find_tag("id");
+  XML_Node* skeleton = visual_scenes_node->find_key("visual_scene");
+  XML_Tag*  node     = skeleton->find_key_with_tag("node", "id", "mixamorig_Hips")->find_tag("id");
   root->buffer       = (char*)node->value;
   root->length       = node->value_length;
 }
@@ -491,7 +497,7 @@ static void get_joint_id(String* joint_id, XML_Node* joint_node)
   joint_id->length    = source_tag->value_length - 1;
 }
 
-static void load_joint_transforms(AnimationData* animation_data, XML_Node* joint_node, u32 joint_transform_index, String root)
+static void load_joint_transforms(Skeleton* skeleton, AnimationData* animation_data, XML_Node* joint_node)
 {
   String joint_name = {};
   get_joint_name(&joint_name, joint_node);
@@ -499,8 +505,11 @@ static void load_joint_transforms(AnimationData* animation_data, XML_Node* joint
   String data_id = {};
   get_joint_id(&data_id, joint_node);
 
-  XML_Node* transform_data = joint_node->find_key_with_tag("source", "id", data_id)->find_key("float_array");
-  Buffer    buffer         = sta_xml_create_buffer_from_content(transform_data);
+  XML_Node* transform_data        = joint_node->find_key_with_tag("source", "id", data_id)->find_key("float_array");
+  XML_Tag*  name_tag              = joint_node->find_tag("name");
+  i32       joint_transform_index = get_joint_index_from_id(skeleton, name_tag->value, name_tag->value_length);
+
+  Buffer    buffer                = sta_xml_create_buffer_from_content(transform_data);
 
   for (u32 i = 0; i < animation_data->count; i++)
   {
@@ -509,23 +518,14 @@ static void load_joint_transforms(AnimationData* animation_data, XML_Node* joint
 
     buffer.parse_float_array(&transform->local_transform.m[0], 16);
     transform->local_transform = transform->local_transform.transpose();
-    if (joint_name.compare(root))
-    {
-      transform->local_transform = CORRECTION.mul(transform->local_transform);
-    }
   }
 }
 
-static void load_animation_data(ColladaModelData* model_data, XML_Node* head)
+static void load_animation_data(Skeleton* skeleton, ColladaModelData* model_data, XML_Node* head)
 {
-  XML_Node*      animation_node     = head->find_key("library_animations");
-  XML_Node*      visual_scenes_node = head->find_key("library_visual_scenes");
 
-  String         root;
-
+  XML_Node*      animation_node = head->find_key("library_animations");
   AnimationData* animation_data = &model_data->animation_data;
-
-  find_root_joint_name(visual_scenes_node, &root);
   get_key_times(animation_node, &animation_data->timesteps, animation_data->count);
   animation_data->duration   = animation_data->timesteps[animation_data->count - 1];
 
@@ -538,14 +538,12 @@ static void load_animation_data(ColladaModelData* model_data, XML_Node* head)
 
   XML_Node* joint_node       = animation_node->child;
   u32       node_name_length = strlen("animation");
-  u32       frame_index      = 0;
 
   while (joint_node)
   {
     if (joint_node->header.name_length == node_name_length && strncmp(joint_node->header.name, "animation", node_name_length) == 0)
     {
-      load_joint_transforms(animation_data, joint_node, frame_index, root);
-      frame_index++;
+      load_joint_transforms(skeleton, animation_data, joint_node);
     }
 
     joint_node = joint_node->next;
@@ -588,7 +586,7 @@ bool sta_collada_parse_from_file(AnimationModel* model, const char* filename)
     Joint* joint = &model->skeleton.joints[i];
   }
 
-  load_animation_data(&animation_model, &xml.head);
+  load_animation_data(&model->skeleton, &animation_model, &xml.head);
 
   model->animations.pose_count = animation_model.animation_data.count;
   model->animations.duration   = animation_model.animation_data.duration;
@@ -605,10 +603,20 @@ bool sta_collada_parse_from_file(AnimationModel* model, const char* filename)
     anim->steps[i]        = animation_model.animation_data.timesteps[i];
     anim->joint_count     = animation_model.skeleton_data.joint_count;
 
+    KeyFrameData* frame   = &animation_model.animation_data.key_frames[i];
     for (u32 j = 0; j < animation_model.skeleton_data.joint_count; j++)
     {
-      KeyFrameData* frame      = &animation_model.animation_data.key_frames[i];
+
       pose->local_transform[j] = frame->transforms[j].local_transform;
+    }
+  }
+  for (u32 i = 0; i < animation_model.skeleton_data.joint_count; i++)
+  {
+    JointPose* pose = &model->animations.poses[0];
+    if (pose->local_transform[i].rc[0][0] == 0 && pose->local_transform[i].rc[1][1] == 0)
+    {
+      Joint* joint = &model->skeleton.joints[i];
+      printf("%.*s: %d\n", joint->m_name_length, joint->m_name, i);
     }
   }
 

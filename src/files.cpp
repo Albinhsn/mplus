@@ -93,7 +93,7 @@ void Buffer::parse_string_array(char** array, u64 count)
   u32 prev = 0;
   for (u32 i = 0; i < count; i++)
   {
-    while (!this->match(' ') && !this->match('<'))
+    while (!this->match(' ') && !this->match('<') && !this->match('\n'))
     {
       this->advance();
     }
