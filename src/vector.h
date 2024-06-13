@@ -8,10 +8,12 @@ typedef class Mat44 Mat44;
 struct Quaternion
 {
 public:
-  void debug(){
+  void debug()
+  {
     printf("%f %f %f %f\n", x, y, z, w);
   }
-  Quaternion(){
+  Quaternion()
+  {
     this->x = 0;
     this->y = 0;
     this->z = 0;
@@ -24,7 +26,7 @@ public:
     this->z = z;
     this->w = w;
   }
-  Mat44 to_matrix();
+  Mat44             to_matrix();
   static Quaternion from_mat(Mat44 m);
   static Quaternion interpolate(Quaternion q0, Quaternion q1, f32 t);
   f32               x, y, z, w;
@@ -192,8 +194,17 @@ public:
 typedef Vector2 Point2;
 typedef Vector3 Point3;
 
+
+
 struct Color
 {
+public:
+  Color(f32 r, f32 g,f32 b, f32 a){
+    this->r = r;
+    this->g = g;
+    this->b = b;
+    this->a = a;
+  }
   float r;
   float g;
   float b;
@@ -222,13 +233,11 @@ float orient3d(Point3 a, Point3 b, Point3 c);
 float in_circle2d(Point2 a, Point2 b, Point2 c, Point2 d);
 float in_sphere(Point3 a, Point3 b, Point3 c, Point3 d, Point3 e);
 
-#define BLACK                                                                                                                                                                                          \
-  {                                                                                                                                                                                                    \
-    0, 0, 0, 0                                                                                                                                                                                         \
-  }
-#define WHITE                                                                                                                                                                                          \
-  {                                                                                                                                                                                                    \
-    1.0f, 1.0f, 1.0f, 1.0f                                                                                                                                                                             \
-  }
+Mat44 interpolate_transforms(Mat44 first, Mat44 second, f32 time);
+#define BLACK Color(0, 0, 0, 0)
+#define WHITE Color(0, 0, 0, 0)
+#define RED   Color(1, 0, 0, 1)
+#define GREEN Color(0, 1, 0, 1)
+#define BLUE Color(0, 0, 1, 1)
 
 #endif

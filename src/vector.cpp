@@ -2,6 +2,139 @@
 #include "common.h"
 #include <cmath>
 #include <cstring>
+Quaternion Quaternion::from_mat(Mat44 m)
+{
+  float diagonal = m.rc[0][0] + m.rc[1][1] + m.rc[2][2];
+  float x, y, z, w;
+  if (diagonal > 0)
+  {
+    float w4 = sqrtf(diagonal + 1.0f) * 2.0f;
+    x        = (m.rc[2][1] - m.rc[1][2]) / w4;
+    y        = (m.rc[0][2] - m.rc[2][0]) / w4;
+    z        = (m.rc[1][0] - m.rc[0][1]) / w4;
+    w        = w4 / 4.0f;
+  }
+  else if (m.rc[0][0] > m.rc[1][1] && m.rc[0][0] > m.rc[2][2])
+  {
+    float x4 = sqrtf(1.0f + m.rc[0][0] - m.rc[1][1] - m.rc[2][2]) * 2.0f;
+    x        = x4 / 4.0f;
+    y        = (m.rc[0][1] + m.rc[1][0]) / x4;
+    z        = (m.rc[0][2] + m.rc[2][0]) / x4;
+    w        = (m.rc[2][1] - m.rc[1][2]) / x4;
+  }
+  else if (m.rc[1][1] > m.rc[2][2])
+  {
+    float y4 = sqrtf(1.0f + m.rc[1][1] - m.rc[0][0] - m.rc[2][2]) * 2.0f;
+    x        = (m.rc[0][1] + m.rc[1][0]) / y4;
+    y        = y4 / 4.0f;
+    z        = (m.rc[1][2] + m.rc[2][1]) / y4;
+    w        = (m.rc[0][2] - m.rc[2][0]) / y4;
+  }
+  else
+  {
+    float z4 = sqrtf(1.0f + m.rc[2][2] - m.rc[0][0] - m.rc[1][1]) * 2.0f;
+    x        = (m.rc[0][2] + m.rc[2][0]) / z4;
+    y        = (m.rc[1][2] + m.rc[2][1]) / z4;
+    z        = z4 / 4.0f;
+    w        = (m.rc[1][0] - m.rc[0][1]) / z4;
+  }
+  return Quaternion(x, y, z, w);
+}
+
+Mat44 Quaternion::to_matrix()
+{
+  f32   x_squared = this->x * this->x;
+  f32   y_squared = this->y * this->y;
+  f32   z_squared = this->z * this->z;
+  f32   xy        = this->x * this->y;
+  f32   xz        = this->x * this->z;
+  f32   xw        = this->x * this->w;
+  f32   yz        = this->y * this->z;
+  f32   yw        = this->y * this->w;
+  f32   zw        = this->z * this->w;
+
+  Mat44 m         = {};
+  m.rc[0][0]      = 1 - 2 * (y_squared + z_squared);
+  m.rc[0][1]      = 2 * (xy - zw);
+  m.rc[0][2]      = 2 * (xz + yw);
+  m.rc[0][3]      = 0;
+  m.rc[1][0]      = 2 * (xy + zw);
+  m.rc[1][1]      = 1 - 2 * (x_squared + z_squared);
+  m.rc[1][2]      = 2 * (yz - xw);
+  m.rc[1][3]      = 0;
+  m.rc[2][0]      = 2 * (xz - yw);
+  m.rc[2][1]      = 2 * (yz + yw);
+  m.rc[2][2]      = 1 - 2 * (x_squared + y_squared);
+  m.rc[2][3]      = 0;
+  m.rc[3][0]      = 0;
+  m.rc[3][1]      = 0;
+  m.rc[3][2]      = 0;
+  m.rc[3][3]      = 1;
+
+  return m;
+}
+
+Mat44 Mat44::rotate(Quaternion q)
+{
+  return this->mul(q.to_matrix());
+}
+
+Quaternion Quaternion::interpolate(Quaternion q0, Quaternion q1, f32 t0)
+{
+  float x, y, z, w;
+
+  float dot = q0.w * q1.w + q0.x * q1.x + q0.y * q1.y + q0.z * q1.z;
+  float t1  = 1.0f - t0;
+
+  if (dot < 0)
+  {
+    x = t1 * q0.x + t0 * -q1.x;
+    y = t1 * q0.y + t0 * -q1.y;
+    z = t1 * q0.z + t0 * -q1.z;
+    w = t1 * q0.w + t0 * -q1.w;
+  }
+  else
+  {
+    x = t1 * q0.x + t0 * q1.x;
+    y = t1 * q0.y + t0 * q1.y;
+    z = t1 * q0.z + t0 * q1.z;
+    w = t1 * q0.w + t0 * q1.w;
+  }
+  float sum = sqrtf(x * x + y * y + z * z + w * w);
+  x /= sum;
+  y /= sum;
+  z /= sum;
+  w /= sum;
+
+  return Quaternion(x, y, z, w);
+}
+
+Vector3 interpolate_translation(Vector3 v0, Vector3 v1, f32 t)
+{
+  float x = v0.x + (v1.x - v0.x) * t;
+  float y = v0.y + (v1.y - v0.y) * t;
+  float z = v0.z + (v1.z - v0.z) * t;
+
+  return Vector3(x, y, z);
+}
+
+Mat44 interpolate_transforms(Mat44 first, Mat44 second, f32 time)
+{
+  Vector3    first_translation(first.rc[3][0], first.rc[3][1], first.rc[3][2]);
+  Vector3    second_translation(second.rc[3][0], second.rc[3][1], second.rc[3][2]);
+  Vector3    final_translation = interpolate_translation(first_translation, second_translation, time);
+
+  Quaternion first_q           = Quaternion::from_mat(first);
+  Quaternion second_q          = Quaternion::from_mat(second);
+  Quaternion final_q           = Quaternion::interpolate(first_q, second_q, time);
+
+  Mat44      res               = {};
+  res.identity();
+  res = res.translate(final_translation);
+  res = res.rotate(final_q);
+
+  return res;
+}
 
 float Mat22::determinant()
 {

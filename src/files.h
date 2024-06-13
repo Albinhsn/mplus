@@ -30,6 +30,10 @@ public:
     this->index  = 0;
   }
 
+  char* current_address()
+  {
+    return &this->buffer[this->index];
+  }
   void  parse_string_array(char** array, u64 count);
   void  parse_vector2_array(Vector2* array, u64 count);
   void  parse_vector3_array(Vector3* array, u64 count);
@@ -43,9 +47,13 @@ public:
   {
     return this->len <= this->index;
   }
-  void advance()
+  void advance(int length)
   {
-    this->index++;
+    this->index += length;
+  }
+  char advance()
+  {
+    return this->buffer[this->index++];
   }
   char current_char()
   {
@@ -72,12 +80,12 @@ struct ModelData
 
 struct TargaImage
 {
-
   unsigned char* data;
   i32            bpp;
   u16            width, height;
 };
 typedef struct TargaImage TargaImage;
+typedef struct TargaImage Image;
 
 struct TargaHeader
 {

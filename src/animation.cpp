@@ -2,6 +2,7 @@
 #include "common.h"
 #include "files.h"
 #include "platform.h"
+#include "shader.h"
 #include "vector.h"
 #include <cassert>
 #include <cctype>
@@ -9,6 +10,67 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+void calculate_new_pose(Mat44* poses, u32 count, Animation animation, u32 ticks)
+{
+  u64   loop_time = 2000;
+  float time      = (ticks % (u64)(loop_time * animation.duration)) / (f32)loop_time;
+  time            = 0.5;
+
+  u32 pose_idx    = 0;
+  if (time >= animation.duration - 0.001f)
+  {
+    time = animation.duration;
+  }
+
+  for (; pose_idx < animation.pose_count && animation.steps[pose_idx] < time; pose_idx++)
+    ;
+
+  // get the two key frames
+  // JointPose* first              = &animation.poses[pose_idx - 1];
+  JointPose* first  = &animation.poses[pose_idx];
+  JointPose* second = &animation.poses[pose_idx];
+
+  // float      time_between_poses = (time - animation.steps[pose_idx - 1]) / (animation.steps[pose_idx] - animation.steps[pose_idx - 1]);
+
+  // interpolate between the frames given the progression
+  //  iterate over each joint
+  for (u32 i = 0; i < animation.joint_count; i++)
+  {
+    //    grab the two transform and interpolate between them
+    //    interpolate them
+    Mat44 first_transform  = first->local_transform[i];
+    Mat44 second_transform = second->local_transform[i];
+    poses[i]               = interpolate_transforms(first_transform, second_transform, 0);
+  }
+}
+
+void update_animation(AnimationModel animation, Shader shader, u32 ticks)
+{
+  Skeleton* skeleton = &animation.skeleton;
+  Mat44     transforms[skeleton->joint_count];
+  Mat44     current_poses[skeleton->joint_count];
+  calculate_new_pose(current_poses, skeleton->joint_count, animation.animations, ticks);
+
+  Mat44 parent_transforms[skeleton->joint_count];
+  for (int i = 0; i < skeleton->joint_count; i++)
+  {
+    parent_transforms[i].identity();
+  }
+
+  for (u32 i = 0; i < skeleton->joint_count; i++)
+  {
+    Joint* joint             = &skeleton->joints[i];
+
+    Mat44  current_local     = current_poses[i];
+    Mat44  parent_transform  = parent_transforms[joint->m_iParent];
+
+    Mat44  current_transform = parent_transform.mul(current_local);
+    parent_transforms[i]     = current_transform;
+    transforms[i]            = current_transform.mul(joint->m_invBindPose);
+  }
+  shader.set_mat4("jointTransforms", &transforms[0].m[0], skeleton->joint_count);
+}
 
 static Buffer sta_xml_create_buffer_from_content(XML_Node* node)
 {
