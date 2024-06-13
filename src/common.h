@@ -175,7 +175,7 @@ public:
 
   bool compare(String s)
   {
-    return this->length == s.length && strncmp(this->buffer, s.buffer, this->length);
+    return this->length == s.length && strncmp(this->buffer, s.buffer, this->length) == 0;
   };
   char* buffer;
   u32   length;

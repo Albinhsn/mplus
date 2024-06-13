@@ -219,7 +219,6 @@ void update_animation(AnimationModel animation, Shader shader, u32 ticks)
     transforms[i]            = current_transform.mul(joint->m_invBindPose);
   }
   shader.set_mat4("jointTransforms", &transforms[0].m[0], skeleton->joint_count);
-  // exit(1);
 }
 
 int main()
