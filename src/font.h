@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <byteswap.h>
 #include <cstring>
+#include <iterator>
 
 static inline u64 swap_u64(u64 input)
 {
@@ -69,6 +70,20 @@ struct CompoundGlyph
 
 struct SimpleGlyph
 {
+public:
+  void debug()
+  {
+    printf("Points: %d from (%d %d) -> (%d, %d)\n", end_pts_of_contours[n - 1], min_x, min_y, max_x, max_y);
+    
+    for (u32 i = 0; i <= end_pts_of_contours[n - 1]; i++)
+    {
+      printf("%d %d\n", x_coordinates[i], y_coordinates[i]);
+    }
+  }
+  i16  min_x;
+  i16  min_y;
+  i16  max_x;
+  i16  max_y;
   u16* end_pts_of_contours;
   u16  n;
   u16  instruction_length;
@@ -183,9 +198,10 @@ public:
   // u16 mac_style;           // 44
   // u16 lowest_rec_ppem;     // 46
   // i16 font_direction_hint; // 48
-  i16 index_to_loc_format(){
+  i16 index_to_loc_format()
+  {
     const int offset = 50;
-    i16 out = *(i16*)(buffer + offset);
+    i16       out    = *(i16*)(buffer + offset);
     return swap_u16(out);
   }
   i16 glyph_data_format;
@@ -210,6 +226,18 @@ enum GlyphType
 };
 struct Glyph
 {
+public:
+  void debug()
+  {
+    if (is_simple)
+    {
+      simple.debug();
+    }
+    else
+    {
+      printf("Compound\n");
+    }
+  }
   bool is_simple;
   union
   {
@@ -220,8 +248,8 @@ struct Glyph
 
 struct Font
 {
-  Glyph * glyphs;
-  u32 glyph_count;
+  Glyph* glyphs;
+  u32    glyph_count;
 };
 
 void sta_font_parse_ttf(Font* font, const char* filename);

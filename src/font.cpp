@@ -3,6 +3,7 @@
 #include "files.h"
 #include "platform.h"
 #include <cassert>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 
@@ -65,8 +66,10 @@ void swap_glyph_data(TableGlyf* data)
   data->max_y              = swap_u16(data->max_y);
 }
 
-void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buffer, bool reading_x)
+void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buffer, bool reading_x, i16& min, i16& max)
 {
+  min = INT16_MAX;
+  max = -INT16_MAX;
   // check if 1 or 2 byte long
   u8 offset_size_flag_bit = reading_x ? 1 : 2;
 
@@ -89,7 +92,7 @@ void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buffer, bo
 
     if (BIT_IS_SET(flag, offset_size_flag_bit))
     {
-      i16 offset = buffer->advance();
+      u8 offset = buffer->advance();
       curr += (sign_or_bit ? offset : -offset);
     }
     else if (!sign_or_bit)
@@ -97,6 +100,8 @@ void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buffer, bo
       curr += (i16)swap_u16(*(u16*)buffer->current_address());
       buffer->advance(sizeof(u16));
     }
+    min            = MIN(curr, min);
+    max            = MAX(curr, max);
 
     coordinates[i] = curr;
   }
@@ -104,13 +109,15 @@ void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buffer, bo
 
 void read_simple_glyph(SimpleGlyph* simple, Buffer* buffer, int n)
 {
-  simple->n                   = n;
-  simple->end_pts_of_contours = (u16*)sta_allocate_struct(u16, simple->n);
-  printf("Found %d contours\n", simple->n);
-  for (u16 i = 0; i < simple->n; i++, buffer->advance(sizeof(u16)))
+
+  if (n > 0)
   {
-    simple->end_pts_of_contours[i] = swap_u16(*(u16*)buffer->current_address());
-    printf("End pt %d: %d\n", i, simple->end_pts_of_contours[i]);
+    simple->n                   = n;
+    simple->end_pts_of_contours = (u16*)sta_allocate_struct(u16, n);
+    for (u16 i = 0; i < simple->n; i++, buffer->advance(sizeof(u16)))
+    {
+      simple->end_pts_of_contours[i] = swap_u16(*(u16*)buffer->current_address());
+    }
   }
 
   simple->instruction_length = swap_u16(*(u16*)buffer->current_address());
@@ -120,7 +127,7 @@ void read_simple_glyph(SimpleGlyph* simple, Buffer* buffer, int n)
   strncpy((char*)simple->instructions, buffer->current_address(), simple->instruction_length);
   buffer->advance(simple->instruction_length);
 
-  u16 number_of_points = simple->end_pts_of_contours[simple->n - 1] + 1;
+  u16 number_of_points = n > 0 ? simple->end_pts_of_contours[simple->n - 1] + 1 : 0;
 
   simple->flags        = (u8*)sta_allocate_struct(u8, number_of_points);
 
@@ -140,14 +147,12 @@ void read_simple_glyph(SimpleGlyph* simple, Buffer* buffer, int n)
     }
   }
 
-  simple->x_coordinates = (i16*)sta_allocate_struct(i16, number_of_points);
-  simple->y_coordinates = (i16*)sta_allocate_struct(i16, number_of_points);
-  read_coordinates(simple->x_coordinates, simple->flags, number_of_points, buffer, true);
-  read_coordinates(simple->y_coordinates, simple->flags, number_of_points, buffer, false);
-
-  for (u32 i = 0; i < number_of_points; i++)
+  if (number_of_points > 0)
   {
-    printf("Glyph %d: %d %d\n", i, simple->x_coordinates[i], simple->y_coordinates[i]);
+    simple->x_coordinates = (i16*)sta_allocate_struct(i16, number_of_points);
+    simple->y_coordinates = (i16*)sta_allocate_struct(i16, number_of_points);
+    read_coordinates(simple->x_coordinates, simple->flags, number_of_points, buffer, true, simple->min_x, simple->max_x);
+    read_coordinates(simple->y_coordinates, simple->flags, number_of_points, buffer, false, simple->min_y, simple->max_y);
   }
 }
 
@@ -178,6 +183,7 @@ static void get_all_glyph_locations(Table* tables, char* buf, u32** glyph_locati
       glyph_data_offset = swap_u32(*(u32*)buffer.current_address());
       buffer.advance(sizeof(u32));
     }
+
     locations[glyph_index] = glyph_table_start + glyph_data_offset;
   }
 
@@ -187,28 +193,34 @@ static void get_all_glyph_locations(Table* tables, char* buf, u32** glyph_locati
 static void parse_all_glyphs(char* buf, Glyph** glyphs, u32* glyph_locations, u32 number_of_glyphs)
 {
   Glyph* g = (Glyph*)sta_allocate_struct(Glyph, number_of_glyphs);
+  memset(g, 0, sizeof(Glyph));
 
   for (u32 i = 0; i < number_of_glyphs; i++)
   {
-    Glyph*     glyph  = &g[i];
+    Glyph*    glyph  = &g[i];
 
-    u32        offset = glyph_locations[i];
+    u32       offset = glyph_locations[i];
 
-    TableGlyf* table  = (TableGlyf*)&buf[offset];
+    TableGlyf table  = *(TableGlyf*)&buf[offset];
+    swap_glyph_data(&table);
+    Buffer buffer(buf + offset);
+    buffer.index = 0;
+    buffer.advance(sizeof(TableGlyf));
 
-    // check simple
-    //
-    i16 number_of_contours = table->number_of_contours;
-    glyph->is_simple       = number_of_contours >= 0;
+    i16 number_of_contours = table.number_of_contours;
+    // need to parse table  as well
+    glyph->is_simple = number_of_contours >= 0;
     if (glyph->is_simple)
     {
-      Buffer buffer(buf + offset, 0);
-      printf("Parsing from %d\n", offset);
+      glyph->simple.max_x = 0;
+      glyph->simple.min_x = 0;
+      glyph->simple.max_y = 0;
+      glyph->simple.min_y = 0;
       read_simple_glyph(&glyph->simple, &buffer, number_of_contours);
     }
     else
     {
-      printf("COMPOUND %d\n", i);
+      // printf("COMPOUND %d\n", i);
     }
   }
 
@@ -233,7 +245,6 @@ void sta_font_parse_ttf(Font* font, const char* filename)
   buffer.index         = sizeof(TableDirectory);
 
   TableRecord* records = (TableRecord*)sta_allocate(sizeof(TableRecord) * directory.num_tables);
-  printf("%s: %d\n", filename, directory.num_tables);
 
   for (u16 i = 0; i < directory.num_tables; i++, buffer.advance(sizeof(TableRecord)))
   {
@@ -245,10 +256,10 @@ void sta_font_parse_ttf(Font* font, const char* filename)
     {
       Table* table  = &tables[TABLE_GLYF];
       table->type   = TABLE_GLYF;
-      table->glyf   = (TableGlyf*)&buffer.buffer[record.offset];
+      table->glyf   = (TableGlyf*)sta_allocate_struct(TableGlyf, 1);
+      *table->glyf  = *(TableGlyf*)&buffer.buffer[record.offset];
       table->offset = record.offset;
       swap_glyph_data(table->glyf);
-      printf("%d %d %d %d %d\n", table->glyf->number_of_contours, table->glyf->min_x, table->glyf->max_x, table->glyf->min_y, table->glyf->max_y);
     }
     else if (record.match_tag("head"))
     {
@@ -271,8 +282,6 @@ void sta_font_parse_ttf(Font* font, const char* filename)
       table->loca   = &records[i];
       table->offset = record.offset;
     }
-
-    printf("Tag: %.*s Location: %d\n", 4, record.tag, record.offset);
   }
 
   u32* glyph_locations;

@@ -1,5 +1,6 @@
 #include "font.h"
 #include "sta_renderer.h"
+#include "vector.h"
 #include <GL/glext.h>
 #include <SDL2/SDL_events.h>
 #include <cassert>
@@ -19,9 +20,39 @@ bool should_quit()
   return false;
 }
 
-static inline u64 convert_me(i16* coordinates, u64 j, u64 min, u64 max, u64 screen_width)
+static inline f32 convert_me(u64 x, u64 min, u64 max)
 {
-  return (u64)(((coordinates[j] - min) / (f32)(max - min)) * screen_width) / 2 + screen_width / 4;
+  if (min == max)
+  {
+    return 0;
+  }
+  return ((x - min) / (f32)(max - min));
+}
+
+static void render_simple_glyph(SimpleGlyph glyph, FrameBuffer* buffer, const int width, const int height, const int offset_x, const int offset_y)
+{
+  u32 prev = 0;
+  for (u32 i = 0; i < glyph.n; i++)
+  {
+    u32 end_contour      = glyph.end_pts_of_contours[i];
+    u32 number_of_points = end_contour - prev;
+    for (u32 point_index = 0; point_index <= number_of_points; point_index++)
+    {
+      u64 p_index = prev + point_index;
+      f32 start_x = convert_me(glyph.x_coordinates[p_index], glyph.min_x, glyph.max_x);
+      f32 start_y = 1.0f - convert_me(glyph.y_coordinates[p_index], glyph.min_y, glyph.max_y);
+      f32 end_x   = convert_me(glyph.x_coordinates[(point_index + 1) % (number_of_points + 1) + prev], glyph.min_x, glyph.max_x);
+      f32 end_y   = 1.0f - convert_me(glyph.y_coordinates[(point_index + 1) % (number_of_points + 1) + prev], glyph.min_y, glyph.max_y);
+
+      u64 sx      = offset_x + width * start_x;
+      u64 sy      = offset_y + height * start_y;
+      u64 ex      = offset_x + width * end_x;
+      u64 ey      = offset_y + height * end_y;
+      draw_line(buffer, sx, sy, ex, ey, GREEN);
+    }
+
+    prev = end_contour + 1;
+  }
 }
 
 int main()
@@ -32,11 +63,15 @@ int main()
 
   Renderer  renderer      = {};
   init_renderer(&renderer, screen_width, screen_height);
-  u32        ticks = 0;
+  u32  ticks = 0;
 
-  Font font = {};
+  Font font  = {};
   sta_font_parse_ttf(&font, "./data/fonts/JetBrainsMono-Bold.ttf");
-  // TableGlyf* glyf  = table.glyf;
+
+  const int quadrants       = 400;
+  const int quad_per_row    = sqrt(quadrants);
+  const int quadrant_width  = screen_width / quad_per_row - 10;
+  const int quadrant_height = screen_height / quad_per_row - 10;
 
   while (true)
   {
@@ -49,27 +84,23 @@ int main()
     {
       ticks = SDL_GetTicks() + 16;
     }
-    // SimpleGlyph* glyph = &glyf->simple;
-    // u32          prev  = 0;
-    // for (u32 i = 0; i < glyph->n; i++)
-    // {
-    //   u32 end_contour      = glyph->end_pts_of_contours[i];
-    //   u32 number_of_points = end_contour - prev + 1;
-    //   // printf("Drawing %d points, ending at %d, prev %d\n", number_of_points, end_contour, prev);
-    //   for (u32 j = 0; j < number_of_points; j++)
-    //   {
-    //     // printf("(%d, %d) -> (%d,%d)\n", glyph->x_coordinates[j + prev], glyph->y_coordinates[j + prev], glyph->x_coordinates[(j + 1) % number_of_points + prev],
-    //     //        glyph->y_coordinates[(j + 1) % number_of_points + prev]);
-    //     u64 start_x = convert_me(glyph->x_coordinates, j + prev, glyf->data.min_x, glyf->data.max_x, screen_width);
-    //     u64 end_x   = convert_me(glyph->x_coordinates, (j + 1) % number_of_points + prev, glyf->data.min_x, glyf->data.max_x, screen_width);
+    for (u32 row = 0; row < quad_per_row; row++)
+    {
+      for (u32 col = 0; col < quad_per_row; col++)
+      {
+        u32 glyph_index = row * quad_per_row + col;
+        assert(glyph_index < font.glyph_count && "Really?");
 
-    //     u64 start_y = convert_me(glyph->y_coordinates, j + prev, glyf->data.min_y, glyf->data.max_y, screen_height);
-    //     u64 end_y   = convert_me(glyph->y_coordinates, (j + 1) % number_of_points + prev, glyf->data.min_y, glyf->data.max_y, screen_height);
-    //     // printf("%ld %ld %ld %ld\n", start_x, start_y, end_x, end_y);
-    //     draw_line(&renderer.buffer, start_x, start_y, end_x, end_y, RED);
-    //   }
-    //   prev = end_contour + 1;
-    // }
+        u64   offset_x = col * quadrant_width;
+        u64   offset_y = row * quadrant_height;
+        Glyph glyph    = font.glyphs[glyph_index];
+        if (glyph.is_simple)
+        {
+          render_simple_glyph(glyph.simple, &renderer.buffer, quadrant_width, quadrant_height, offset_x, offset_y);
+        }
+      }
+    }
+    // figure out lines to draw between 0 and 1
 
     render(&renderer);
   }

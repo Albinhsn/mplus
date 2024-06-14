@@ -17,6 +17,12 @@
 struct Buffer
 {
 public:
+  Buffer(char * b)
+  {
+    this->buffer = b;
+    this->len    = 0;
+    this->index  = 0;
+  }
   Buffer()
   {
     this->buffer = 0;
