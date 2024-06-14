@@ -57,27 +57,26 @@ enum TableType
   TABLE_MAXP,
   TABLE_HEAD,
   TABLE_LOCA,
+  TABLE_CMAP,
   DUMMY_TABLE
 };
 
-struct CompoundGlyph
-{
-  u16 flags;
-  u16 glyph_index;
-  u16 argument1;
-  u16 argument2;
-};
-
-struct SimpleGlyph
+struct Glyph
 {
 public:
   void debug()
   {
-    printf("Points: %d from (%d %d) -> (%d, %d)\n", end_pts_of_contours[n - 1], min_x, min_y, max_x, max_y);
-    
+    printf("Countours: %d:: ", n);
+    for (u32 i = 0; i < n; i++)
+    {
+      printf("%d, ", end_pts_of_contours[i]);
+    }
+    printf("\n(%d, %d) -> (%d, %d)", min_x, min_y, max_x, max_y);
+    printf("\nPoints: %d from (%d %d) -> (%d, %d)\n", end_pts_of_contours[n - 1], min_x, min_y, max_x, max_y);
+
     for (u32 i = 0; i <= end_pts_of_contours[n - 1]; i++)
     {
-      printf("%d %d\n", x_coordinates[i], y_coordinates[i]);
+      printf("\t%d %d\n", x_coordinates[i], y_coordinates[i]);
     }
   }
   i16  min_x;
@@ -207,6 +206,19 @@ public:
   i16 glyph_data_format;
 };
 
+struct CmapSubtable
+{
+  u16 platform_id;
+  u16 platform_specific_id;
+  u32 offset;
+};
+
+struct TableCmap
+{
+  u16 version;
+  u16 number_of_subtables;
+};
+
 struct Table
 {
   TableType type;
@@ -216,38 +228,19 @@ struct Table
     TableGlyf*       glyf;
     TableMaxp*       maxp;
     TableHead*       head;
+    TableCmap*        cmap;
     TableRecord*     loca;
   };
   u32 offset;
 };
-enum GlyphType
-{
 
-};
-struct Glyph
+struct Mapping
 {
-public:
-  void debug()
-  {
-    if (is_simple)
-    {
-      simple.debug();
-    }
-    else
-    {
-      printf("Compound\n");
-    }
-  }
-  bool is_simple;
-  union
-  {
-    SimpleGlyph   simple;
-    CompoundGlyph compound;
-  };
 };
 
 struct Font
 {
+  Mapping mapping;
   Glyph* glyphs;
   u32    glyph_count;
 };

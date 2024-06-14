@@ -29,7 +29,7 @@ static inline f32 convert_me(u64 x, u64 min, u64 max)
   return ((x - min) / (f32)(max - min));
 }
 
-static void render_simple_glyph(SimpleGlyph glyph, FrameBuffer* buffer, const int width, const int height, const int offset_x, const int offset_y)
+static void render_glyph(Glyph glyph, FrameBuffer* buffer, const int width, const int height, const int offset_x, const int offset_y)
 {
   u32 prev = 0;
   for (u32 i = 0; i < glyph.n; i++)
@@ -68,7 +68,7 @@ int main()
   Font font  = {};
   sta_font_parse_ttf(&font, "./data/fonts/JetBrainsMono-Bold.ttf");
 
-  const int quadrants       = 400;
+  const int quadrants       = 100;
   const int quad_per_row    = sqrt(quadrants);
   const int quadrant_width  = screen_width / quad_per_row - 10;
   const int quadrant_height = screen_height / quad_per_row - 10;
@@ -94,10 +94,7 @@ int main()
         u64   offset_x = col * quadrant_width;
         u64   offset_y = row * quadrant_height;
         Glyph glyph    = font.glyphs[glyph_index];
-        if (glyph.is_simple)
-        {
-          render_simple_glyph(glyph.simple, &renderer.buffer, quadrant_width, quadrant_height, offset_x, offset_y);
-        }
+        render_glyph(glyph, &renderer.buffer, quadrant_width, quadrant_height, offset_x, offset_y);
       }
     }
     // figure out lines to draw between 0 and 1
