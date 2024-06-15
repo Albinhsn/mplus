@@ -54,9 +54,21 @@ PFNGLDRAWBUFFERSPROC              glDrawBuffers              = NULL;
 PFNGLDELETERENDERBUFFERSPROC      glDeleteRenderbuffers      = NULL;
 PFNGLBLENDFUNCSEPARATEPROC        glBlendFuncSeparate        = NULL;
 PFNGLBINDVERTEXARRAYPROC          glBindVertexArray          = NULL;
+PFNGLNAMEDBUFFERSTORAGEPROC       glNamedBufferStorage       = NULL;
+PFNGLBUFFERSTORAGEPROC            glBufferStorage            = NULL;
+PFNGLBUFFERSUBDATAPROC            glBufferSubData            = NULL;
+PFNGLNAMEDBUFFERSUBDATAPROC       glNamedBufferSubData       = NULL;
+PFNGLCREATEVERTEXARRAYSPROC       glCreateVertexArrays       = NULL;
+PFNGLCREATEBUFFERSPROC            glCreateBuffers            = NULL;
+PFNGLVERTEXARRAYVERTEXBUFFERPROC  glVertexArrayVertexBuffer  = NULL;
+PFNGLENABLEVERTEXARRAYATTRIBPROC  glEnableVertexArrayAttrib  = NULL;
+PFNGLVERTEXARRAYATTRIBFORMATPROC  glVertexArrayAttribFormat  = NULL;
+PFNGLVERTEXARRAYATTRIBBINDINGPROC glVertexArrayAttribBinding = NULL;
 
 void                              loadExtensions()
 {
+  glBufferSubData            = (PFNGLBUFFERSUBDATAPROC)SDL_GL_GetProcAddress("glBufferSubData");
+  glNamedBufferSubData       = (PFNGLNAMEDBUFFERSUBDATAPROC)SDL_GL_GetProcAddress("glNamedBufferSubData");
   glCreateShader             = (PFNGLCREATESHADERPROC)SDL_GL_GetProcAddress("glCreateShader");
   glCompileShader            = (PFNGLCOMPILESHADERPROC)SDL_GL_GetProcAddress("glCompileShader");
   glGetShaderiv              = (PFNGLGETSHADERIVPROC)SDL_GL_GetProcAddress("glGetShaderiv");
@@ -107,6 +119,37 @@ void                              loadExtensions()
   glDrawBuffers              = (PFNGLDRAWBUFFERSPROC)SDL_GL_GetProcAddress("glDrawBuffers");
   glDeleteRenderbuffers      = (PFNGLDELETERENDERBUFFERSPROC)SDL_GL_GetProcAddress("glDeleteRenderbuffers");
   glBlendFuncSeparate        = (PFNGLBLENDFUNCSEPARATEPROC)SDL_GL_GetProcAddress("glBlendFuncSeparate");
+  glCreateVertexArrays       = (PFNGLCREATEVERTEXARRAYSPROC)SDL_GL_GetProcAddress("glCreateVertexArrays");
+  glCreateBuffers            = (PFNGLCREATEBUFFERSPROC)SDL_GL_GetProcAddress("glCreateBuffers");
+  glNamedBufferStorage       = (PFNGLNAMEDBUFFERSTORAGEPROC)SDL_GL_GetProcAddress("glNamedBufferStorage");
+  glVertexArrayVertexBuffer  = (PFNGLVERTEXARRAYVERTEXBUFFERPROC)SDL_GL_GetProcAddress("glVertexArrayVertexBuffer");
+  glEnableVertexArrayAttrib  = (PFNGLENABLEVERTEXARRAYATTRIBPROC)SDL_GL_GetProcAddress("glEnableVertexArrayAttrib");
+  glVertexArrayAttribFormat  = (PFNGLVERTEXARRAYATTRIBFORMATPROC)SDL_GL_GetProcAddress("glVertexArrayAttribFormat");
+  glVertexArrayAttribBinding = (PFNGLVERTEXARRAYATTRIBBINDINGPROC)SDL_GL_GetProcAddress("glVertexArrayAttribBinding");
+}
+void sta_glCreateVertexArrays(GLsizei n, GLuint* arrays)
+{
+  glCreateVertexArrays(n, arrays);
+}
+void sta_glCreateBuffers(GLsizei n, GLuint* arrays)
+{
+  glCreateBuffers(n, arrays);
+}
+void sta_glVertexArrayVertexBuffer(GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride)
+{
+  glVertexArrayVertexBuffer(vaobj, bindingindex, buffer, offset, stride);
+}
+void sta_glEnableVertexArrayAttrib(GLuint vaobj, GLuint index)
+{
+  glEnableVertexArrayAttrib(vaobj, index);
+}
+void sta_glVertexArrayAttribFormat(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset)
+{
+  glVertexArrayAttribFormat(vaobj, attribindex, size, type, normalized, relativeoffset);
+}
+void sta_glVertexArrayAttribBinding(GLuint vaobj, GLuint attribindex, GLuint bindingindex)
+{
+  glVertexArrayAttribBinding(vaobj, attribindex, bindingindex);
 }
 
 GLuint sta_glCreateShader(GLenum type)
@@ -319,7 +362,23 @@ void sta_glDrawBuffers(GLint n, const GLenum* bufs)
 {
   glDrawBuffers(n, bufs);
 }
+void sta_glNamedBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, const GLvoid* data)
+{
+  glNamedBufferSubData(target, offset, size, data);
+}
+void sta_glNamedBufferStorage(GLenum target, GLsizeiptr size, const GLvoid* data, GLbitfield flags)
+{
+  glNamedBufferStorage(target, size, data, flags);
+}
+void sta_glBufferStorage(GLenum target, GLsizeiptr size, const GLvoid* data, GLbitfield flags)
+{
+  glBufferStorage(target, size, data, flags);
+}
 
+void sta_glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, const GLvoid* data)
+{
+  glBufferSubData(target, offset, size, data);
+}
 void sta_init_sdl_window(u8** buffer, SDL_Window** window, u64 screenWidth, u64 screenHeight)
 {
   SDL_Init(SDL_INIT_VIDEO);

@@ -37,7 +37,10 @@ typedef void(APIENTRY* PFNGLUNIFORM2FVPROC)(GLint location, GLsizei count, const
 typedef void(APIENTRY* PFNGLUNIFORM3FVPROC)(GLint location, GLsizei count, const GLfloat* value);
 typedef void(APIENTRY* PFNGLUNIFORM4FVPROC)(GLint location, GLsizei count, const GLfloat* value);
 typedef void*(APIENTRY* PFNGLMAPBUFFERPROC)(GLenum target, GLenum access);
+typedef void*(APIENTRY* PFNGLBUFFERSUBDATA)(GLenum target, GLintptr offset, GLsizeiptr size, const GLvoid* data);
 typedef GLboolean(APIENTRY* PFNGLUNMAPBUFFERPROC)(GLenum target);
+typedef void*(APIENTRY* PFNGLBUFFERSTORAGE)(GLenum target, GLsizeiptr size, const GLvoid* data, GLbitfield flags);
+typedef void*(APIENTRY* PFNGLNAMEDBUFFERSTORAGE)(GLenum target, GLsizeiptr size, const GLvoid* data, GLbitfield flags);
 typedef void(APIENTRY* PFNGLUNIFORM1FPROC)(GLint location, GLfloat v0);
 typedef void(APIENTRY* PFNGLGENFRAMEBUFFERSPROC)(GLsizei n, GLuint* framebuffers);
 typedef void(APIENTRY* PFNGLDELETEFRAMEBUFFERSPROC)(GLsizei n, const GLuint* framebuffers);
@@ -56,15 +59,31 @@ typedef void(APIENTRY* PFNGLFRAMEBUFFERTEXTURE2DPROC)(GLenum target, GLenum atta
 typedef void(APIENTRY* PFNGLDRAWBUFFERSPROC)(GLint n, const GLenum* bufs);
 typedef void(APIENTRY* PFNGLDELETERENDERBUFFERSPROC)(GLsizei n, const GLuint* renderbuffers);
 typedef void(APIENTRY* PFNGLGENERATEMIPMAPPROC)(GLuint n);
+typedef void(APIENTRY* PFNGLCREATEVERTEXARRAYSPROC)(GLsizei n, GLuint* arrays);
+typedef void(APIENTRY* PFNGLCREATEBUFFERSPROC)(GLsizei n, GLuint* arrays);
+typedef void(APIENTRY* PFNGLVERTEXARRAYVERTEXBUFFERPROC)(GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride);
+typedef void(APIENTRY* PFNGLENABLEVERTEXARRAYATTRIBPROC)(GLuint vaobj, GLuint index);
+typedef void(APIENTRY* PFNGLVERTEXARRAYATTRIBFORMATPROC)(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset);
+typedef void(APIENTRY* PFNGLVERTEXARRAYATTRIBBINDINGPROC)(GLuint vaobj, GLuint attribindex, GLuint bindingindex);
 
 inline void sta_gl_clear_buffer(f32 r, f32 g, f32 b, f32 a)
 {
   glClearColor(r, g, b, a);
   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 }
+void      sta_glCreateVertexArrays(GLsizei n, GLuint* arrays);
+void      sta_glCreateBuffers(GLsizei n, GLuint* arrays);
+void      sta_glVertexArrayVertexBuffer(GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride);
+void      sta_glEnableVertexArrayAttrib(GLuint vaobj, GLuint index);
+void      sta_glVertexArrayAttribFormat(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset);
+void      sta_glVertexArrayAttribBinding(GLuint vaobj, GLuint attribindex, GLuint bindingindex);
 
+void      sta_glNamedBufferStorage(GLenum target, GLsizeiptr size, const GLvoid* data, GLbitfield flags);
+void      sta_glBufferStorage(GLenum target, GLsizeiptr size, const GLvoid* data, GLbitfield flags);
+void      sta_glNamedBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, const GLvoid* data);
+void      sta_glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, const GLvoid* data);
 void      sta_updateWindowSizeSDL(SDL_Window* window, i32 width, i32 height);
-void sta_gl_draw_lines(GLuint vertex_array, u32 vertex_count, u32 width, Color color);
+void      sta_gl_draw_lines(GLuint vertex_array, u32 vertex_count, u32 width, Color color);
 void      sta_gl_render(SDL_Window* window);
 void      sta_init_sdl_gl(SDL_Window** window, SDL_GLContext* context, i32 screenWidth, i32 screenHeight);
 void      sta_init_sdl_window(u8** buffer, SDL_Window** window, u64 screenWidth, u64 screenHeight);
@@ -85,16 +104,16 @@ GLint     sta_glGetUniformLocation(GLuint program, const char* name);
 void      sta_glUniformMatrix4fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value);
 void      sta_glUniformMatrix3fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value);
 void      sta_glGenVertexArrays(GLsizei n, GLuint* arrays);
-void      sta_glGenTextures(GLsizei n, GLuint *textures);
-void sta_glBindTexture(GLenum target, GLuint texture);
-void sta_glTexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid* pixels);
+void      sta_glGenTextures(GLsizei n, GLuint* textures);
+void      sta_glBindTexture(GLenum target, GLuint texture);
+void      sta_glTexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid* pixels);
 void      sta_glBindVertexArray(GLuint array);
 void      sta_glGenBuffers(GLsizei n, GLuint* buffers);
 void      sta_glBindBuffer(GLenum target, GLuint buffer);
 void      sta_glBufferData(GLenum target, ptrdiff_t size, const GLvoid* data, GLenum usage);
 void      sta_glEnableVertexAttribArray(GLuint index);
 void      sta_glVertexAttribPointer(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid* pointer);
-void sta_glVertexAttribIPointer(GLuint index, GLint size, GLenum type, GLsizei stride, const GLvoid* pointer);
+void      sta_glVertexAttribIPointer(GLuint index, GLint size, GLenum type, GLsizei stride, const GLvoid* pointer);
 void      sta_glDisableVertexAttribArray(GLuint index);
 void      sta_glDeleteBuffers(GLsizei n, const GLuint* buffers);
 void      sta_glDeleteVertexArrays(GLsizei n, const GLuint* arrays);
