@@ -66,10 +66,8 @@ void swap_glyph_data(TableGlyf* data)
   data->max_y              = swap_u16(data->max_y);
 }
 
-void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buffer, bool reading_x, i16& min, i16& max)
+void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buffer, bool reading_x)
 {
-  min = INT16_MAX;
-  max = -INT16_MAX;
   // check if 1 or 2 byte long
   u8 offset_size_flag_bit = reading_x ? 1 : 2;
 
@@ -100,8 +98,6 @@ void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buffer, bo
       curr += (i16)swap_u16(*(u16*)buffer->current_address());
       buffer->advance(sizeof(u16));
     }
-    min            = MIN(curr, min);
-    max            = MAX(curr, max);
 
     coordinates[i] = curr;
   }
@@ -110,9 +106,9 @@ void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buffer, bo
 void read_simple_glyph(Glyph* simple, Buffer* buffer, int n)
 {
 
+  simple->n = n;
   if (n > 0)
   {
-    simple->n                   = n;
     simple->end_pts_of_contours = (u16*)sta_allocate_struct(u16, n);
     for (u16 i = 0; i < simple->n; i++, buffer->advance(sizeof(u16)))
     {
@@ -151,8 +147,13 @@ void read_simple_glyph(Glyph* simple, Buffer* buffer, int n)
   {
     simple->x_coordinates = (i16*)sta_allocate_struct(i16, number_of_points);
     simple->y_coordinates = (i16*)sta_allocate_struct(i16, number_of_points);
-    read_coordinates(simple->x_coordinates, simple->flags, number_of_points, buffer, true, simple->min_x, simple->max_x);
-    read_coordinates(simple->y_coordinates, simple->flags, number_of_points, buffer, false, simple->min_y, simple->max_y);
+    read_coordinates(simple->x_coordinates, simple->flags, number_of_points, buffer, true);
+    read_coordinates(simple->y_coordinates, simple->flags, number_of_points, buffer, false);
+  }
+  else
+  {
+    simple->x_coordinates = 0;
+    simple->y_coordinates = 0;
   }
 }
 
@@ -199,8 +200,6 @@ void        parse_glyph(char* buf, Glyph* glyph, u32 offset, u32* glyph_location
 
 static void read_compound_glyph(u32* glyph_locations, char* original_buf, Glyph* comp_glyph, Buffer* buffer, u32 this_glyph)
 {
-  // should have header?
-
   bool   has_more_glyphs = true;
   u32    total_points    = 0;
   u32    glyph_count = 0, glyph_capacity = 2;
@@ -282,10 +281,6 @@ static void read_compound_glyph(u32* glyph_locations, char* original_buf, Glyph*
 
     // parse the glyph from glyphindex
     parse_glyph(original_buf, current_glyph, glyph_locations[glyph_index], glyph_locations, glyph_index);
-    comp_glyph->min_x = MIN(comp_glyph->min_x, current_glyph->min_x);
-    comp_glyph->min_y = MIN(comp_glyph->min_y, current_glyph->min_y);
-    comp_glyph->max_x = MAX(comp_glyph->max_x, current_glyph->max_x);
-    comp_glyph->max_y = MAX(comp_glyph->max_y, current_glyph->max_y);
 
     for (u32 i = 0; i <= current_glyph->end_pts_of_contours[current_glyph->n - 1]; i++)
     {
@@ -331,10 +326,6 @@ void parse_glyph(char* buf, Glyph* glyph, u32 offset, u32* glyph_locations, u32 
   buffer.advance(sizeof(TableGlyf));
 
   i16 number_of_contours = table.number_of_contours;
-  glyph->max_x           = 0;
-  glyph->min_x           = 0;
-  glyph->max_y           = 0;
-  glyph->min_y           = 0;
   // need to parse table  as well
   if (number_of_contours >= 0)
   {
@@ -379,7 +370,6 @@ void parse_mapping(char* buf, Font* font, Table* cmap_table)
     subtable.offset               = swap_u32(subtable.offset);
     subtable.platform_specific_id = swap_u16(subtable.platform_specific_id);
     subtable.platform_id          = swap_u16(subtable.platform_id);
-    printf("platform: %d specific: %d offset: %d\n", subtable.platform_id, subtable.platform_specific_id, subtable.offset);
     switch (subtable.platform_id)
     {
     // unicode
@@ -416,19 +406,13 @@ void parse_mapping(char* buf, Font* font, Table* cmap_table)
 
   if (format == 4)
   {
-    u16 length = read_u16(&buffer);
-    printf("length: %d\n", length);
-    u16 language = read_u16(&buffer);
-    printf("language: %d\n", language);
-    u16 seg_count_x2 = read_u16(&buffer);
-    u16 seg_count    = seg_count_x2 / 2;
-    printf("seg count: %d\n", seg_count);
-    u16 search_range = read_u16(&buffer);
-    printf("search range: %d\n", search_range);
+    u16 length         = read_u16(&buffer);
+    u16 language       = read_u16(&buffer);
+    u16 seg_count_x2   = read_u16(&buffer);
+    u16 seg_count      = seg_count_x2 / 2;
+    u16 search_range   = read_u16(&buffer);
     u16 entry_selector = read_u16(&buffer);
-    printf("entry selector: %d\n", entry_selector);
-    u16 range_shift = read_u16(&buffer);
-    printf("range shift: %d\n", range_shift);
+    u16 range_shift    = read_u16(&buffer);
     u16 end_codes[seg_count];
     for (u32 i = 0; i < seg_count; i++)
     {
@@ -452,15 +436,6 @@ void parse_mapping(char* buf, Font* font, Table* cmap_table)
       id_offset[i] = read_u16(&buffer);
     }
 
-    // each segment is described by
-    //  startcode
-    //  endcode
-    //  id delta
-    //  id range offset
-    //
-    //
-    //  if the corresponding start_code is <= character code
-    //  use the corresponding id_delta nad id_range_offset to map the character code to the glyph index
     u32 read_indices = 0;
     for (u32 i = 0; i < seg_count; i++)
     {
@@ -472,12 +447,12 @@ void parse_mapping(char* buf, Font* font, Table* cmap_table)
         break;
       }
 
-      while (start_code <= end_code)
+      for(;start_code <= end_code; start_code++)
       {
         u32 glyph_index;
         if (id_offset[i] == 0)
         {
-          glyph_index = (start_code + id_delta[i]) % UINT16_MAX;
+          glyph_index = (start_code + id_delta[i]) % (UINT16_MAX + 1);
         }
         else
         {
@@ -490,7 +465,7 @@ void parse_mapping(char* buf, Font* font, Table* cmap_table)
 
           if (glyph_index != 0)
           {
-            glyph_index = (glyph_index + id_delta[i]) % UINT16_MAX;
+            glyph_index = (glyph_index + id_delta[i]) % (UINT16_MAX + 1);
           }
 
           buffer.index = current_idx;
@@ -499,7 +474,6 @@ void parse_mapping(char* buf, Font* font, Table* cmap_table)
         font->glyph_indices[read_indices] = glyph_index;
         font->char_codes[read_indices++]  = start_code;
 
-        start_code++;
       }
     }
   }
@@ -522,6 +496,7 @@ void parse_mapping(char* buf, Font* font, Table* cmap_table)
       {
         font->char_codes[read_indices]    = start_char_code + j;
         font->glyph_indices[read_indices] = start_glyph_code + j;
+        read_indices++;
         assert(read_indices <= font->glyph_count && "Read more then count?");
       }
     }

@@ -79,10 +79,9 @@ public:
     {
       printf("%d, ", end_pts_of_contours[i]);
     }
-    printf("\n(%d, %d) -> (%d, %d)", min_x, min_y, max_x, max_y);
     if (n > 0)
     {
-      printf("\nPoints: %d from (%d %d) -> (%d, %d)\n", end_pts_of_contours[n - 1], min_x, min_y, max_x, max_y);
+      printf("\nPoints: %d\n", end_pts_of_contours[n - 1]);
       for (u32 i = 0; i <= end_pts_of_contours[n - 1]; i++)
       {
         printf("\t%d %d\n", x_coordinates[i], y_coordinates[i]);
@@ -90,13 +89,9 @@ public:
     }
     else
     {
-      printf("No points!\n");
+      printf("\nNo points!\n");
     }
   }
-  i16  min_x;
-  i16  min_y;
-  i16  max_x;
-  i16  max_y;
   u16* end_pts_of_contours;
   u16  n;
   u16  instruction_length;
