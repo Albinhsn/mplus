@@ -1,3 +1,4 @@
+#include "common.h"
 #include "font.h"
 #include "sta_renderer.h"
 #include "vector.h"
@@ -29,7 +30,7 @@ static inline f32 convert_me(u64 x, u64 min, u64 max)
   return ((x - min) / (f32)(max - min));
 }
 
-static void render_glyph(Glyph glyph, FrameBuffer* buffer, const int width, const int height, const int offset_x, const int offset_y)
+static void render_glyph(Glyph glyph, FrameBuffer* buffer, const int width, const int height, const int offset_x, const int offset_y, f32 scale)
 {
   u32 prev = 0;
   for (u32 i = 0; i < glyph.n; i++)
@@ -55,6 +56,22 @@ static void render_glyph(Glyph glyph, FrameBuffer* buffer, const int width, cons
   }
 }
 
+Glyph get_glyph(Font* font, u32 code)
+{
+  for (u32 i = 0; i < font->glyph_count; i++)
+  {
+    if (font->char_codes[i] == code)
+    {
+      return font->glyphs[font->glyph_indices[i]];
+    }
+  }
+  if (code == 0)
+  {
+    assert(0 && "Couldn't find empty glyph?");
+  }
+  return get_glyph(font, 0);
+}
+
 int main()
 {
 
@@ -66,13 +83,16 @@ int main()
   u32  ticks = 0;
 
   Font font  = {};
-  sta_font_parse_ttf(&font, "./data/fonts/JetBrainsMono-Bold.ttf");
+  sta_font_parse_ttf(&font, "./data/fonts/OpenSans-Bold.ttf");
+  // font.debug();
 
   const int quadrants       = 100;
   const int quad_per_row    = sqrt(quadrants);
-  const int quadrant_width  = screen_width / quad_per_row - 10;
-  const int quadrant_height = screen_height / quad_per_row - 10;
+  const int quadrant_width  = 20;
+  const int quadrant_height = 20;
 
+  u32       lower[]         = {0xE5, 0xE4, 0xF6, 0x20, 0xC5, 0xC4, 0xD6};
+  char      lower_chars[]   = "abcdefghijklmnopqrstuvxyz";
   while (true)
   {
 
@@ -84,20 +104,19 @@ int main()
     {
       ticks = SDL_GetTicks() + 16;
     }
-    for (u32 row = 0; row < quad_per_row; row++)
+    u32 offset_x = 0;
+    // for (u32 code_index = 0; code_index < ArrayCount(lower); code_index++)
+    // {
+    //   Glyph glyph = get_glyph(&font, lower[code_index]);
+    //   render_glyph(glyph, &renderer.buffer, quadrant_width, quadrant_height, offset_x, 50);
+    //   offset_x += quadrant_width * (glyph.advance_width / (f32)(glyph.max_x - glyph.min_x));
+    // }
+    for (u32 code_index = 0; code_index < ArrayCount(lower_chars); code_index++)
     {
-      for (u32 col = 0; col < quad_per_row; col++)
-      {
-        u32 glyph_index = row * quad_per_row + col;
-        assert(glyph_index < font.glyph_count && "Really?");
-
-        u64   offset_x = col * quadrant_width;
-        u64   offset_y = row * quadrant_height;
-        Glyph glyph    = font.glyphs[glyph_index];
-        render_glyph(glyph, &renderer.buffer, quadrant_width, quadrant_height, offset_x, offset_y);
-      }
+      Glyph glyph = get_glyph(&font, lower_chars[code_index]);
+      offset_x += quadrant_width * (glyph.advance_width / (f32)(glyph.max_x - glyph.min_x));
+      render_glyph(glyph, &renderer.buffer, quadrant_width, quadrant_height, offset_x, 50, font.scale);
     }
-    // figure out lines to draw between 0 and 1
 
     render(&renderer);
   }

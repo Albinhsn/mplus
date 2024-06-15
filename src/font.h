@@ -58,7 +58,15 @@ enum TableType
   TABLE_HEAD,
   TABLE_LOCA,
   TABLE_CMAP,
-  DUMMY_TABLE
+  TABLE_HHEA,
+  TABLE_HMTX,
+  DUMMY_TABLE_TYPE
+};
+
+struct LongHorMetric
+{
+  u16 advance_width;
+  i16 left_side_bearing;
 };
 
 struct Glyph
@@ -72,11 +80,17 @@ public:
       printf("%d, ", end_pts_of_contours[i]);
     }
     printf("\n(%d, %d) -> (%d, %d)", min_x, min_y, max_x, max_y);
-    printf("\nPoints: %d from (%d %d) -> (%d, %d)\n", end_pts_of_contours[n - 1], min_x, min_y, max_x, max_y);
-
-    for (u32 i = 0; i <= end_pts_of_contours[n - 1]; i++)
+    if (n > 0)
     {
-      printf("\t%d %d\n", x_coordinates[i], y_coordinates[i]);
+      printf("\nPoints: %d from (%d %d) -> (%d, %d)\n", end_pts_of_contours[n - 1], min_x, min_y, max_x, max_y);
+      for (u32 i = 0; i <= end_pts_of_contours[n - 1]; i++)
+      {
+        printf("\t%d %d\n", x_coordinates[i], y_coordinates[i]);
+      }
+    }
+    else
+    {
+      printf("No points!\n");
     }
   }
   i16  min_x;
@@ -86,6 +100,7 @@ public:
   u16* end_pts_of_contours;
   u16  n;
   u16  instruction_length;
+  u16  advance_width;
   u8*  instructions;
   u8*  flags;
   i16* x_coordinates;
@@ -146,64 +161,8 @@ struct TableOSSlashTwo
 struct TableHead
 {
 public:
-  char* buffer;
-  u32   version()
-  {
-    u32 out = *(u32*)buffer;
-    return swap_u32(out);
-  } // 0
-
-  u32 font_revision()
-  {
-    const int offset = 4;
-    u32       out    = *(u32*)(buffer + offset);
-    return swap_u32(out);
-  } // 4
-  u32 checksum_adjustment()
-  {
-    const int offset = 8;
-    u32       out    = *(u32*)(buffer + offset);
-    return swap_u32(out);
-  } // 8
-  u32 magic_number()
-  {
-    const int offset = 12;
-    u32       out    = *(u32*)(buffer + offset);
-    return swap_u32(out);
-  } // 12
-  u16 flags()
-  {
-    const int offset = 16;
-    u16       out    = *(u16*)(buffer + offset);
-    return swap_u16(out);
-  } // 16
-  u16 units_per_em()
-  {
-    const int offset = 18;
-    u16       out    = *(u16*)(buffer + offset);
-    return swap_u16(out);
-  } // 18
-  i64 created()
-  {
-    const int offset = 20;
-    i64       out    = *(i64*)(buffer + offset);
-    return swap_u64(out);
-  } // 20
-  // i64 modifier;            // 28
-  // i16 min_x;               // 36
-  // i16 min_y;               // 38
-  // i16 max_x;               // 40
-  // i16 max_y;               // 42
-  // u16 mac_style;           // 44
-  // u16 lowest_rec_ppem;     // 46
-  // i16 font_direction_hint; // 48
-  i16 index_to_loc_format()
-  {
-    const int offset = 50;
-    i16       out    = *(i16*)(buffer + offset);
-    return swap_u16(out);
-  }
-  i16 glyph_data_format;
+  u16 units_per_em;
+  i16 index_to_loc_format;
 };
 
 struct CmapSubtable
@@ -219,6 +178,24 @@ struct TableCmap
   u16 number_of_subtables;
 };
 
+struct TableHhea
+{
+  u32 version;
+  i16 ascent;
+  i16 descent;
+  i16 line_gap;
+  u16 advance_width_max;
+  i16 min_left_side_bearing;
+  i16 min_right_side_bearing;
+  i16 x_max_extent;
+  i16 caret_slope_rise;
+  i16 caret_slope_run;
+  i16 caret_offset;
+  i16 reserved[4];
+  i16 metric_data_format;
+  u16 num_of_long_hor_metrics;
+};
+
 struct Table
 {
   TableType type;
@@ -228,20 +205,28 @@ struct Table
     TableGlyf*       glyf;
     TableMaxp*       maxp;
     TableHead*       head;
-    TableCmap*        cmap;
+    TableCmap*       cmap;
     TableRecord*     loca;
+    TableHhea*       hhea;
   };
   u32 offset;
 };
 
-struct Mapping
-{
-};
-
 struct Font
 {
-  Mapping mapping;
+public:
+  void debug()
+  {
+    printf("Glyphs %d:\n", glyph_count);
+    for (u32 i = 0; i < glyph_count; i++)
+    {
+      glyphs[i].debug();
+    }
+  }
+  u32*   char_codes;
+  u32*   glyph_indices;
   Glyph* glyphs;
+  f32    scale;
   u32    glyph_count;
 };
 

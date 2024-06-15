@@ -18,7 +18,7 @@ static inline u16 read_u16(Buffer* buffer)
 }
 static inline u32 read_u32(Buffer* buffer)
 {
-  u32 out = swap_u16(*(u32*)buffer->current_address());
+  u32 out = swap_u32(*(u32*)buffer->current_address());
   buffer->advance(sizeof(u32));
   return out;
 }
@@ -159,7 +159,7 @@ void read_simple_glyph(Glyph* simple, Buffer* buffer, int n)
 static void get_all_glyph_locations(Table* tables, char* buf, u32** glyph_locations, u32& number_of_glyphs)
 {
   number_of_glyphs            = tables[TABLE_MAXP].maxp->num_glyphs;
-  u32    bytes_per_entry      = tables[TABLE_HEAD].head->index_to_loc_format() == 0 ? 2 : 4;
+  u32    bytes_per_entry      = tables[TABLE_HEAD].head->index_to_loc_format == 0 ? 2 : 4;
 
   u32    location_table_start = tables[TABLE_LOCA].offset;
   u32    glyph_table_start    = tables[TABLE_GLYF].offset;
@@ -297,8 +297,6 @@ static void read_compound_glyph(u32* glyph_locations, char* original_buf, Glyph*
     }
     comp_glyph->n += current_glyph->n;
     total_points += current_glyph->end_pts_of_contours[current_glyph->n - 1];
-    // current_glyph->debug();
-    // exit(1);
   }
 
   comp_glyph->end_pts_of_contours = (u16*)sta_allocate_struct(u16, comp_glyph->n);
@@ -320,7 +318,6 @@ static void read_compound_glyph(u32* glyph_locations, char* original_buf, Glyph*
 
     n += glyph.n;
     coords += glyph.end_pts_of_contours[glyph.n - 1] + 1;
-    // add x and y from prev count
   }
   sta_deallocate(glyphs, sizeof(Glyph) * glyph_capacity);
 }
@@ -364,7 +361,7 @@ static void parse_all_glyphs(char* buf, Glyph** glyphs, u32* glyph_locations, u3
   *glyphs = g;
 }
 
-void parse_mapping(char* buf, Mapping* mapping, Table* cmap_table)
+void parse_mapping(char* buf, Font* font, Table* cmap_table)
 {
   Buffer buffer(buf + cmap_table->offset);
   cmap_table->cmap                      = (TableCmap*)buffer.current_address();
@@ -398,7 +395,7 @@ void parse_mapping(char* buf, Mapping* mapping, Table* cmap_table)
     default:
     {
       // jk this is valid?
-      assert(0 && "Bro why are you using this encoding xD");
+      // assert(0 && "Bro why are you using this encoding xD");
     }
     }
   }
@@ -411,32 +408,37 @@ void parse_mapping(char* buf, Mapping* mapping, Table* cmap_table)
   buffer.buffer += mapping_table_offset;
   buffer.index = 0;
 
-  u16 format   = *(u16*)buffer.current_address();
-  format       = swap_u16(format);
-  buffer.advance(sizeof(u16));
+  u16 format   = read_u16(&buffer);
 
   assert((format == 4 || format == 12) && "Can't parse this font format");
+  font->char_codes    = (u32*)sta_allocate_struct(u32, font->glyph_count);
+  font->glyph_indices = (u32*)sta_allocate_struct(u32, font->glyph_count);
 
   if (format == 4)
   {
     u16 length = read_u16(&buffer);
-    ;
-    u16 language       = read_u16(&buffer);
-    u16 seg_count_x2   = read_u16(&buffer);
-    u16 seg_count      = seg_count_x2 / 2;
-    u16 search_range   = read_u16(&buffer);
+    printf("length: %d\n", length);
+    u16 language = read_u16(&buffer);
+    printf("language: %d\n", language);
+    u16 seg_count_x2 = read_u16(&buffer);
+    u16 seg_count    = seg_count_x2 / 2;
+    printf("seg count: %d\n", seg_count);
+    u16 search_range = read_u16(&buffer);
+    printf("search range: %d\n", search_range);
     u16 entry_selector = read_u16(&buffer);
-    u16 range_shift    = read_u16(&buffer);
-    u16 end_code[seg_count];
+    printf("entry selector: %d\n", entry_selector);
+    u16 range_shift = read_u16(&buffer);
+    printf("range shift: %d\n", range_shift);
+    u16 end_codes[seg_count];
     for (u32 i = 0; i < seg_count; i++)
     {
-      end_code[i] = read_u16(&buffer);
+      end_codes[i] = read_u16(&buffer);
     }
     u16 reserved_pad = read_u16(&buffer);
-    u16 start_code[seg_count];
+    u16 start_codes[seg_count];
     for (u32 i = 0; i < seg_count; i++)
     {
-      start_code[i] = read_u16(&buffer);
+      start_codes[i] = read_u16(&buffer);
     }
     u16 id_delta[seg_count];
     for (u32 i = 0; i < seg_count; i++)
@@ -452,27 +454,121 @@ void parse_mapping(char* buf, Mapping* mapping, Table* cmap_table)
 
     // each segment is described by
     //  startcode
-    //  endcode 
+    //  endcode
     //  id delta
     //  id range offset
     //
     //
     //  if the corresponding start_code is <= character code
     //  use the corresponding id_delta nad id_range_offset to map the character code to the glyph index
+    u32 read_indices = 0;
     for (u32 i = 0; i < seg_count; i++)
     {
+      u16 start_code = start_codes[i];
+      u16 end_code   = end_codes[i];
+
+      if (start_code == UINT16_MAX)
+      {
+        break;
+      }
+
+      while (start_code <= end_code)
+      {
+        u32 glyph_index;
+        if (id_offset[i] == 0)
+        {
+          glyph_index = (start_code + id_delta[i]) % UINT16_MAX;
+        }
+        else
+        {
+          u32 current_idx                = buffer.index;
+          i32 range_offset_location      = id_range[i] + id_offset[i];
+          i32 glyph_index_array_location = 2 * (start_code - start_codes[i]) + range_offset_location;
+
+          buffer.index                   = glyph_index_array_location;
+          glyph_index                    = read_u16(&buffer);
+
+          if (glyph_index != 0)
+          {
+            glyph_index = (glyph_index + id_delta[i]) % UINT16_MAX;
+          }
+
+          buffer.index = current_idx;
+        }
+
+        font->glyph_indices[read_indices] = glyph_index;
+        font->char_codes[read_indices++]  = start_code;
+
+        start_code++;
+      }
     }
   }
   // format == 12
   else
   {
+    u16 reserved     = read_u16(&buffer);
+    u32 length       = read_u32(&buffer); // including header
+    u32 language     = read_u32(&buffer);
+    u32 n_groups     = read_u32(&buffer);
+
+    u32 read_indices = 0;
+    for (u32 i = 0; i < n_groups; i++)
+    {
+      u32 start_char_code  = read_u32(&buffer);
+      u32 end_char_code    = read_u32(&buffer);
+      u32 start_glyph_code = read_u32(&buffer);
+      u32 number_of_chars  = end_char_code - start_char_code + 1;
+      for (u32 j = 0; j < number_of_chars; j++)
+      {
+        font->char_codes[read_indices]    = start_char_code + j;
+        font->glyph_indices[read_indices] = start_glyph_code + j;
+        assert(read_indices <= font->glyph_count && "Read more then count?");
+      }
+    }
+  }
+}
+
+void read_table_hhea(Table* table, u32 offset, char* buf)
+{
+  Buffer buffer(buf + offset);
+  table->hhea                   = (TableHhea*)sta_allocate_struct(TableHhea, 1);
+  TableHhea* hhea               = table->hhea;
+  hhea->version                 = read_u32(&buffer);
+  hhea->ascent                  = read_u16(&buffer);
+  hhea->descent                 = read_u16(&buffer);
+  hhea->line_gap                = read_u16(&buffer);
+  hhea->advance_width_max       = read_u16(&buffer);
+  hhea->min_left_side_bearing   = read_u16(&buffer);
+  hhea->min_right_side_bearing  = read_u16(&buffer);
+  hhea->x_max_extent            = read_u16(&buffer);
+  hhea->caret_slope_rise        = read_u16(&buffer);
+  hhea->caret_slope_run         = read_u16(&buffer);
+  hhea->caret_offset            = read_u16(&buffer);
+  hhea->reserved[0]             = read_u16(&buffer);
+  hhea->reserved[1]             = read_u16(&buffer);
+  hhea->reserved[2]             = read_u16(&buffer);
+  hhea->reserved[3]             = read_u16(&buffer);
+  hhea->metric_data_format      = read_u16(&buffer);
+  hhea->num_of_long_hor_metrics = read_u16(&buffer);
+}
+
+void parse_advance_widths(Font* font, Table* hhea, Table* hmtx, char* buf)
+{
+  u32           number_of_metrics = hhea->hhea->num_of_long_hor_metrics;
+  Buffer        buffer(buf + hmtx->offset);
+  LongHorMetric metrics[font->glyph_count];
+  for (u32 i = 0; i < number_of_metrics; i++)
+  {
+    metrics[i].advance_width      = read_u16(&buffer);
+    metrics[i].left_side_bearing  = read_u16(&buffer);
+    font->glyphs[i].advance_width = metrics[i].advance_width;
   }
 }
 
 void sta_font_parse_ttf(Font* font, const char* filename)
 {
 
-  const int number_of_tables = DUMMY_TABLE;
+  const int number_of_tables = DUMMY_TABLE_TYPE;
   Table     tables[number_of_tables];
   Buffer    buffer = {};
   bool      result = sta_read_file(&buffer, filename);
@@ -505,10 +601,12 @@ void sta_font_parse_ttf(Font* font, const char* filename)
     }
     else if (record.match_tag("head"))
     {
-      Table* table        = &tables[TABLE_HEAD];
-      table->type         = TABLE_HEAD;
-      table->head         = (TableHead*)sta_allocate_struct(TableHead, 1);
-      table->head->buffer = &buffer.buffer[record.offset];
+      Table* table                     = &tables[TABLE_HEAD];
+      table->type                      = TABLE_HEAD;
+      table->head                      = (TableHead*)sta_allocate_struct(TableHead, 1);
+      table->head->units_per_em        = swap_u16(*(u16*)&buffer.buffer[record.offset + 18]);
+      table->head->index_to_loc_format = swap_u16(*(u16*)&buffer.buffer[record.offset + 50]);
+      font->scale                      = 1.0f / (f32)table->head->units_per_em;
     }
     else if (record.match_tag("maxp"))
     {
@@ -530,12 +628,26 @@ void sta_font_parse_ttf(Font* font, const char* filename)
       table->type   = TABLE_CMAP;
       table->offset = record.offset;
     }
+    else if (record.match_tag("hhea"))
+    {
+      Table* table  = &tables[TABLE_HHEA];
+      table->type   = TABLE_HHEA;
+      table->offset = record.offset;
+      read_table_hhea(table, record.offset, buffer.buffer);
+    }
+    else if (record.match_tag("hmtx"))
+    {
+      Table* table  = &tables[TABLE_HMTX];
+      table->type   = TABLE_HMTX;
+      table->offset = record.offset;
+    }
   }
 
   u32* glyph_locations;
   get_all_glyph_locations(tables, buffer.buffer, &glyph_locations, font->glyph_count);
   parse_all_glyphs(buffer.buffer, &font->glyphs, glyph_locations, font->glyph_count);
-  parse_mapping(buffer.buffer, &font->mapping, &tables[TABLE_CMAP]);
+  parse_advance_widths(font, &tables[TABLE_HHEA], &tables[TABLE_HMTX], buffer.buffer);
+  parse_mapping(buffer.buffer, font, &tables[TABLE_CMAP]);
 }
 #undef REPEAT
 #undef BIT_IS_SET
