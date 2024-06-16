@@ -10,12 +10,19 @@
 #define BIT_IS_SET(flag, c) ((((flag) >> c) & 1) == 1)
 #define REPEAT(flag)        (BIT_IS_SET(flag, 3))
 
+static void parse_glyph(char* buf, Glyph* glyph, u32 offset, u32* glyph_locations, u32 this_glyph);
+static f32  transform_from_fixed_point(u16 x)
+{
+  return ((i16)(x)) / (f64)(1 << 14);
+}
+
 static inline u16 read_u16(Buffer* buffer)
 {
   u16 out = swap_u16(*(u16*)buffer->current_address());
   buffer->advance(sizeof(u16));
   return out;
 }
+
 static inline u32 read_u32(Buffer* buffer)
 {
   u32 out = swap_u32(*(u32*)buffer->current_address());
@@ -23,61 +30,9 @@ static inline u32 read_u32(Buffer* buffer)
   return out;
 }
 
-void swap_record(TableRecord* record)
+static void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buffer, bool reading_x)
 {
-  record->length   = swap_u32(record->length);
-  record->offset   = swap_u32(record->offset);
-  record->checksum = swap_u32(record->checksum);
-}
-void swap_directory(TableDirectory* directory)
-{
-  directory->num_tables     = swap_u16(directory->num_tables);
-  directory->range_shirt    = swap_u16(directory->range_shirt);
-  directory->search_ranges  = swap_u16(directory->search_ranges);
-  directory->entry_selector = swap_u16(directory->entry_selector);
-  directory->sfnt_version   = swap_u16(directory->sfnt_version);
-}
-
-void swap_maxp_data(TableMaxp* data)
-{
-  data->num_glyphs               = swap_u16(data->num_glyphs);
-  data->version                  = swap_u32(data->version);
-  data->max_points               = swap_u16(data->max_points);
-  data->max_contours             = swap_u16(data->max_contours);
-  data->max_component_points     = swap_u16(data->max_component_points);
-  data->max_component_contours   = swap_u16(data->max_component_contours);
-  data->max_zones                = swap_u16(data->max_zones);
-  data->max_twilight_points      = swap_u16(data->max_twilight_points);
-  data->max_storage              = swap_u16(data->max_storage);
-  data->max_function_defs        = swap_u16(data->max_function_defs);
-  data->max_instruction_defs     = swap_u16(data->max_instruction_defs);
-  data->max_stack_elements       = swap_u16(data->max_stack_elements);
-  data->max_size_of_instructions = swap_u16(data->max_size_of_instructions);
-  data->max_component_elements   = swap_u16(data->max_component_elements);
-  data->max_component_depth      = swap_u16(data->max_component_depth);
-}
-
-void swap_glyph_data(TableGlyf* data)
-{
-  data->number_of_contours = swap_u16(data->number_of_contours);
-  data->min_x              = swap_u16(data->min_x);
-  data->max_x              = swap_u16(data->max_x);
-  data->min_y              = swap_u16(data->min_y);
-  data->max_y              = swap_u16(data->max_y);
-}
-
-void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buffer, bool reading_x)
-{
-  // check if 1 or 2 byte long
-  u8 offset_size_flag_bit = reading_x ? 1 : 2;
-
-  // if offset_size_flag_bit is set
-  //    this bit describes the sign of the value, with a value of 1 equalling positive and a zero value negative
-  // if the offset_size_flag_bit bit is not set, and this bit is set,
-  //    then the current coordinate is the same as the previous one
-
-  // if the offset_size_flag_bit bit is not set, and this bit is not set
-  //    the current coordinate is a signed 16 bit delta vector. In this case, the delta vector is the change in x/y
+  u8  offset_size_flag_bit    = reading_x ? 1 : 2;
   u8  offset_sign_or_skip_bit = reading_x ? 4 : 5;
 
   i16 curr                    = 0;
@@ -103,7 +58,7 @@ void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buffer, bo
   }
 }
 
-void read_simple_glyph(Glyph* simple, Buffer* buffer, int n)
+static void read_simple_glyph(Glyph* simple, Buffer* buffer, int n)
 {
 
   simple->n = n;
@@ -191,12 +146,17 @@ static void get_all_glyph_locations(Table* tables, char* buf, u32** glyph_locati
   *glyph_locations = locations;
 }
 
-f32 transform_from_fixed_point(u16 x)
+Glyph Font::get_glyph(u32 code)
 {
-  return ((i16)(x)) / (f64)(1 << 14);
+  for (u32 i = 0; i < this->glyph_count; i++)
+  {
+    if (this->char_codes[i] == code)
+    {
+      return this->glyphs[this->glyph_indices[i]];
+    }
+  }
+  return this->glyphs[0];
 }
-
-void        parse_glyph(char* buf, Glyph* glyph, u32 offset, u32* glyph_locations, u32 this_glyph);
 
 static void read_compound_glyph(u32* glyph_locations, char* original_buf, Glyph* comp_glyph, Buffer* buffer, u32 this_glyph)
 {
@@ -317,10 +277,10 @@ static void read_compound_glyph(u32* glyph_locations, char* original_buf, Glyph*
   sta_deallocate(glyphs, sizeof(Glyph) * glyph_capacity);
 }
 
-void parse_glyph(char* buf, Glyph* glyph, u32 offset, u32* glyph_locations, u32 this_glyph)
+static void parse_glyph(char* buf, Glyph* glyph, u32 offset, u32* glyph_locations, u32 this_glyph)
 {
   TableGlyf table = *(TableGlyf*)&buf[offset];
-  swap_glyph_data(&table);
+  table.swap_endianess();
   Buffer buffer(buf + offset);
   buffer.index = 0;
   buffer.advance(sizeof(TableGlyf));
@@ -370,23 +330,14 @@ void parse_mapping(char* buf, Font* font, Table* cmap_table)
     subtable.offset               = swap_u32(subtable.offset);
     subtable.platform_specific_id = swap_u16(subtable.platform_specific_id);
     subtable.platform_id          = swap_u16(subtable.platform_id);
-    switch (subtable.platform_id)
-    {
-    // unicode
-    case 0:
+    // only parsing unicode
+    if (subtable.platform_id == 0)
     {
       if (subtable.platform_specific_id == 0 || subtable.platform_specific_id == 1 || subtable.platform_specific_id == 3 || subtable.platform_specific_id == 4)
       {
         unicode_version      = MAX(unicode_version, subtable.platform_specific_id);
         mapping_table_offset = subtable.offset;
       }
-      break;
-    }
-    default:
-    {
-      // jk this is valid?
-      // assert(0 && "Bro why are you using this encoding xD");
-    }
     }
   }
 
@@ -447,7 +398,7 @@ void parse_mapping(char* buf, Font* font, Table* cmap_table)
         break;
       }
 
-      for(;start_code <= end_code; start_code++)
+      for (; start_code <= end_code; start_code++)
       {
         u32 glyph_index;
         if (id_offset[i] == 0)
@@ -473,7 +424,6 @@ void parse_mapping(char* buf, Font* font, Table* cmap_table)
 
         font->glyph_indices[read_indices] = glyph_index;
         font->char_codes[read_indices++]  = start_code;
-
       }
     }
   }
@@ -503,7 +453,7 @@ void parse_mapping(char* buf, Font* font, Table* cmap_table)
   }
 }
 
-void read_table_hhea(Table* table, u32 offset, char* buf)
+static void read_table_hhea(Table* table, u32 offset, char* buf)
 {
   Buffer buffer(buf + offset);
   table->hhea                   = (TableHhea*)sta_allocate_struct(TableHhea, 1);
@@ -527,7 +477,7 @@ void read_table_hhea(Table* table, u32 offset, char* buf)
   hhea->num_of_long_hor_metrics = read_u16(&buffer);
 }
 
-void parse_advance_widths(Font* font, Table* hhea, Table* hmtx, char* buf)
+static void parse_advance_widths(Font* font, Table* hhea, Table* hmtx, char* buf)
 {
   u32           number_of_metrics = hhea->hhea->num_of_long_hor_metrics;
   Buffer        buffer(buf + hmtx->offset);
@@ -540,7 +490,15 @@ void parse_advance_widths(Font* font, Table* hhea, Table* hmtx, char* buf)
   }
 }
 
-void sta_font_parse_ttf(Font* font, const char* filename)
+TableDirectory TableDirectory::read(Buffer* buffer)
+{
+  TableDirectory directory = *(TableDirectory*)buffer->buffer;
+  directory.swap_endianess();
+  buffer->index += sizeof(TableDirectory);
+  return directory;
+}
+
+void Font::parse_ttf(const char* filename)
 {
 
   const int number_of_tables = DUMMY_TABLE_TYPE;
@@ -552,17 +510,14 @@ void sta_font_parse_ttf(Font* font, const char* filename)
     printf("Couldn find file %s\n", filename);
     return;
   }
+  TableDirectory directory = TableDirectory::read(&buffer);
 
-  TableDirectory directory = *(TableDirectory*)buffer.buffer;
-  swap_directory(&directory);
-  buffer.index         = sizeof(TableDirectory);
-
-  TableRecord* records = (TableRecord*)sta_allocate(sizeof(TableRecord) * directory.num_tables);
+  TableRecord*   records   = (TableRecord*)sta_allocate(sizeof(TableRecord) * directory.num_tables);
 
   for (u16 i = 0; i < directory.num_tables; i++, buffer.advance(sizeof(TableRecord)))
   {
     TableRecord record = *(TableRecord*)buffer.current_address();
-    swap_record(&record);
+    record.swap_endianess();
     records[i] = record;
 
     if (record.match_tag("glyf"))
@@ -572,7 +527,7 @@ void sta_font_parse_ttf(Font* font, const char* filename)
       table->glyf   = (TableGlyf*)sta_allocate_struct(TableGlyf, 1);
       *table->glyf  = *(TableGlyf*)&buffer.buffer[record.offset];
       table->offset = record.offset;
-      swap_glyph_data(table->glyf);
+      table->glyf->swap_endianess();
     }
     else if (record.match_tag("head"))
     {
@@ -581,14 +536,14 @@ void sta_font_parse_ttf(Font* font, const char* filename)
       table->head                      = (TableHead*)sta_allocate_struct(TableHead, 1);
       table->head->units_per_em        = swap_u16(*(u16*)&buffer.buffer[record.offset + 18]);
       table->head->index_to_loc_format = swap_u16(*(u16*)&buffer.buffer[record.offset + 50]);
-      font->scale                      = 1.0f / (f32)table->head->units_per_em;
+      this->scale                      = 1.0f / (f32)table->head->units_per_em;
     }
     else if (record.match_tag("maxp"))
     {
       Table* table = &tables[TABLE_MAXP];
       table->type  = TABLE_MAXP;
       table->maxp  = (TableMaxp*)&buffer.buffer[record.offset];
-      swap_maxp_data(table->maxp);
+      table->maxp->swap_endianess();
     }
     else if (record.match_tag("loca"))
     {
@@ -619,10 +574,10 @@ void sta_font_parse_ttf(Font* font, const char* filename)
   }
 
   u32* glyph_locations;
-  get_all_glyph_locations(tables, buffer.buffer, &glyph_locations, font->glyph_count);
-  parse_all_glyphs(buffer.buffer, &font->glyphs, glyph_locations, font->glyph_count);
-  parse_advance_widths(font, &tables[TABLE_HHEA], &tables[TABLE_HMTX], buffer.buffer);
-  parse_mapping(buffer.buffer, font, &tables[TABLE_CMAP]);
+  get_all_glyph_locations(tables, buffer.buffer, &glyph_locations, this->glyph_count);
+  parse_all_glyphs(buffer.buffer, &this->glyphs, glyph_locations, this->glyph_count);
+  parse_advance_widths(this, &tables[TABLE_HHEA], &tables[TABLE_HMTX], buffer.buffer);
+  parse_mapping(buffer.buffer, this, &tables[TABLE_CMAP]);
 }
 #undef REPEAT
 #undef BIT_IS_SET

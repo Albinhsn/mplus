@@ -1,6 +1,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include "platform.h"
 #include <cstring>
 #include <stdbool.h>
 #include <stdint.h>

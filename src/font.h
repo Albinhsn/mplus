@@ -33,6 +33,12 @@ public:
 
     return strncmp(tag, t, 4) == 0;
   }
+  void swap_endianess()
+  {
+    this->length   = swap_u32(this->length);
+    this->offset   = swap_u32(this->offset);
+    this->checksum = swap_u32(this->checksum);
+  }
   char tag[4];
   u32  checksum;
   u32  offset;
@@ -43,11 +49,19 @@ struct TableDirectory
 {
 public:
   static TableDirectory read(Buffer* buffer);
-  u32                   sfnt_version;
-  u16                   num_tables;
-  u16                   search_ranges;
-  u16                   entry_selector;
-  u16                   range_shirt;
+  void                  swap_endianess()
+  {
+    this->num_tables     = swap_u16(this->num_tables);
+    this->range_shirt    = swap_u16(this->range_shirt);
+    this->search_ranges  = swap_u16(this->search_ranges);
+    this->entry_selector = swap_u16(this->entry_selector);
+    this->sfnt_version   = swap_u16(this->sfnt_version);
+  }
+  u32 sfnt_version;
+  u16 num_tables;
+  u16 search_ranges;
+  u16 entry_selector;
+  u16 range_shirt;
 };
 
 enum TableType
@@ -104,6 +118,25 @@ public:
 
 struct TableMaxp
 {
+public:
+  void swap_endianess()
+  {
+    this->num_glyphs               = swap_u16(this->num_glyphs);
+    this->version                  = swap_u32(this->version);
+    this->max_points               = swap_u16(this->max_points);
+    this->max_contours             = swap_u16(this->max_contours);
+    this->max_component_points     = swap_u16(this->max_component_points);
+    this->max_component_contours   = swap_u16(this->max_component_contours);
+    this->max_zones                = swap_u16(this->max_zones);
+    this->max_twilight_points      = swap_u16(this->max_twilight_points);
+    this->max_storage              = swap_u16(this->max_storage);
+    this->max_function_defs        = swap_u16(this->max_function_defs);
+    this->max_instruction_defs     = swap_u16(this->max_instruction_defs);
+    this->max_stack_elements       = swap_u16(this->max_stack_elements);
+    this->max_size_of_instructions = swap_u16(this->max_size_of_instructions);
+    this->max_component_elements   = swap_u16(this->max_component_elements);
+    this->max_component_depth      = swap_u16(this->max_component_depth);
+  }
   u32 version;
   u16 num_glyphs;
   u16 max_points;
@@ -123,6 +156,15 @@ struct TableMaxp
 
 struct TableGlyf
 {
+public:
+  void swap_endianess()
+  {
+    this->number_of_contours = swap_u16(this->number_of_contours);
+    this->min_x              = swap_u16(this->min_x);
+    this->max_x              = swap_u16(this->max_x);
+    this->min_y              = swap_u16(this->min_y);
+    this->max_y              = swap_u16(this->max_y);
+  }
   i16 number_of_contours;
   i16 min_x;
   i16 min_y;
@@ -210,21 +252,13 @@ struct Table
 struct Font
 {
 public:
-  void debug()
-  {
-    printf("Glyphs %d:\n", glyph_count);
-    for (u32 i = 0; i < glyph_count; i++)
-    {
-      glyphs[i].debug();
-    }
-  }
+  void   parse_ttf(const char* filename);
+  Glyph  get_glyph(u32 code);
   u32*   char_codes;
   u32*   glyph_indices;
   Glyph* glyphs;
   f32    scale;
   u32    glyph_count;
 };
-
-void sta_font_parse_ttf(Font* font, const char* filename);
 
 #endif

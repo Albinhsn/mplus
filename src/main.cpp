@@ -1,69 +1,13 @@
 #include "common.h"
 #include "font.h"
+#include "input.h"
 #include "platform.h"
 #include "sdl.h"
-#include "shader.h"
-#include "sta_renderer.h"
 #include "vector.h"
-#include <GL/gl.h>
-#include <GL/glext.h>
-#include <SDL2/SDL_events.h>
 #include <cassert>
 #include <cfloat>
 #include <cstdlib>
 
-bool should_quit()
-{
-  SDL_Event event;
-  while (SDL_PollEvent(&event))
-  {
-    if (event.type == SDL_QUIT || (event.type == SDL_KEYUP && event.key.keysym.sym == SDLK_ESCAPE))
-    {
-      return true;
-    }
-  }
-  return false;
-}
-
-static void render_glyph(Font* font, Glyph glyph, FrameBuffer* buffer, const int width, const int height, const int offset_x, const int offset_y, f32 scale)
-{
-  u32 prev = 0;
-  for (u32 i = 0; i < glyph.n; i++)
-  {
-    // idea
-    // don't use min/max but rather the scale?
-    u32 end_contour      = glyph.end_pts_of_contours[i];
-    u32 number_of_points = end_contour - prev;
-    for (u32 point_index = 0; point_index <= number_of_points; point_index++)
-    {
-      u64 p_index = prev + point_index;
-      f32 start_x = glyph.x_coordinates[p_index] * scale;
-      f32 start_y = 1.0f - glyph.y_coordinates[p_index] * scale;
-      f32 end_x   = glyph.x_coordinates[(point_index + 1) % (number_of_points + 1) + prev] * scale;
-      f32 end_y   = 1.0f - glyph.y_coordinates[(point_index + 1) % (number_of_points + 1) + prev] * scale;
-
-      u64 sx      = offset_x + width * start_x;
-      u64 sy      = offset_y + height * start_y;
-      u64 ex      = offset_x + width * end_x;
-      u64 ey      = offset_y + height * end_y;
-      draw_line(buffer, sx, sy, ex, ey, GREEN);
-    }
-
-    prev = end_contour + 1;
-  }
-}
-
-Glyph get_glyph(Font* font, u32 code)
-{
-  for (u32 i = 0; i < font->glyph_count; i++)
-  {
-    if (font->char_codes[i] == code)
-    {
-      return font->glyphs[font->glyph_indices[i]];
-    }
-  }
-  return font->glyphs[0];
-}
 struct Triangle
 {
   Vector2 points[3];
@@ -158,7 +102,7 @@ void get_text_data(Font* font, TextData* text_data, u32* text, u32 text_count)
   u32      on_curve_point_count;
   for (u32 i = 0; i < text_count; i++)
   {
-    Glyph glyph = get_glyph(font, text[i]);
+    Glyph glyph = font->get_glyph(text[i]);
   }
 
   triangulate_simple_via_ear_clipping(&text_data->on_curve_points, on_curve_points, on_curve_point_count);
@@ -167,26 +111,10 @@ void get_text_data(Font* font, TextData* text_data, u32* text, u32 text_count)
 int main()
 {
 
-  // simple polygon
-  Vector2 vertices[10] = {
-      {-5, -10},
-      {10,  -5},
-      { 0, -15},
-      { 0, -12},
-      { 8,   0},
-      { 4,  12},
-      { 4,  10},
-      {-2,  12},
-      { 8,   8},
-      { 0,  10},
-  };
-
-  Triangle* out;
-  triangulate_simple_via_ear_clipping(&out, vertices, ArrayCount(vertices));
-  return 0;
-
   const int     screen_width  = 620;
   const int     screen_height = 480;
+
+  InputState    input_state   = {};
 
   SDL_GLContext context;
   SDL_Window*   window;
@@ -194,54 +122,27 @@ int main()
   u32  ticks = 0;
 
   Font font  = {};
-  sta_font_parse_ttf(&font, "./data/fonts/JetBrainsMono-Bold.ttf");
-
-  Shader shader("./shaders/text.vert", "./shaders/text.tcs", "./shaders/text.tes", "./shaders/text.frag");
-
-  GLuint vao, vbo;
-  sta_glCreateVertexArrays(1, &vao);
-  sta_glCreateBuffers(1, &vbo);
-  sta_glVertexArrayVertexBuffer(vao, 0, vbo, 0, 3 * sizeof(f32));
-  sta_glNamedBufferStorage(vbo, 3 * 3 * 4, 0, GL_DYNAMIC_STORAGE_BIT);
-
-  sta_glEnableVertexArrayAttrib(vao, 0);
-  sta_glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
-  sta_glVertexArrayAttribBinding(vao, 0, 0);
-
-  // float vertices[]{
-  //     0,    -0.5, 0, //
-  //     -0.5, 0,    0, //
-  //     0.5,  0,    0  //
-  // };
-  sta_glNamedBufferSubData(vbo, 0, sizeof(float) * 9, vertices);
+  font.parse_ttf("./data/fonts/JetBrainsMono-Bold.ttf");
 
   char upper_chars[] = "ABCDEFGHIJKLMNOPQRSTUVXYZ";
   char lower_chars[] = "abcdefghijklmnopqrstuvwyz";
 
-  shader.use();
-  shader.set_float("segmentCount", 40);
-  shader.set_float("stripCount", 1);
-  Color color(1.0, 1.0, 0, 1.0);
-  shader.set_float4f("inColor", (float*)&color);
 
-  // contours
-  // points
   while (true)
   {
 
-    if (should_quit())
+    input_state.update();
+    if (input_state.should_quit())
     {
       break;
     }
+
     if (ticks + 16 < SDL_GetTicks())
     {
       ticks = SDL_GetTicks() + 16;
     }
 
     sta_gl_clear_buffer(1.0, 1.0, 1.0, 1.0);
-
-    sta_glBindVertexArray(vao);
-    glDrawArrays(GL_PATCHES, 0, 3);
 
     sta_gl_render(window);
   }
