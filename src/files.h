@@ -155,6 +155,7 @@ struct JsonArray;
 
 struct JsonValue
 {
+public:
   JsonType type;
   union
   {
@@ -169,6 +170,15 @@ typedef struct JsonValue JsonValue;
 
 struct JsonObject
 {
+public:
+  void debug_keys()
+  {
+    for (u32 i = 0; i < size; i++)
+    {
+      printf("%s\n", keys[i]);
+    }
+  }
+  JsonValue* lookup_value(const char* key);
   char**     keys;
   JsonValue* values;
   u64        size;
@@ -295,6 +305,9 @@ bool  sta_deserialize_json_from_string(Buffer* fileContent, Arena* arena, Json* 
 bool  sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filename);
 bool  sta_serialize_json_to_file(Json* json, const char* filename);
 void  sta_json_debug(Json* json);
+void  sta_json_debug_object(JsonObject* object);
+void  sta_json_debug_array(JsonArray* arr);
+void  sta_json_debug_value(JsonValue* value);
 
 bool  sta_read_csv_from_file(Arena* arena, CSV* csv, const char* filelocation);
 bool  sta_write_csv_to_file(CSV* csv, const char* filelocation);

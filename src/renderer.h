@@ -1,5 +1,9 @@
-#ifndef STA_RENDERER_H
-#define STA_RENDERER_H
+#ifndef RENDERER_H
+#define RENDERER_H
 
+struct Renderer
+{
+public:
+};
 
 #endif

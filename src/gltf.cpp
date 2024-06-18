@@ -1,6 +1,8 @@
 #include "gltf.h"
 #include "common.h"
 #include "files.h"
+#include "platform.h"
+#include <cassert>
 
 #define GLTF_CHUNK_TYPE_JSON 0x4E4F534A
 #define GLTF_CHUNK_TYPE_BIN  0x004E4942
@@ -17,6 +19,16 @@ struct GLTF_Chunk
   u32            chunk_length;
   u32            chunk_type;
   unsigned char* chunk_data;
+};
+
+struct GLTF_Node
+{
+  f32*  children;
+  f32*  children_count;
+  char* name;
+  f32   rotation[4];
+  f32   scale[3];
+  f32   translation[3];
 };
 
 static inline void read_chunk(Buffer* buffer, GLTF_Chunk* chunk)
@@ -51,7 +63,34 @@ bool parse_gltf(const char* filename)
     printf("Failed to deserialize json!\n");
     return false;
   }
-  sta_json_debug(&json_data);
+  // sta_json_debug(&json_data);
+  // sta_serialize_json_to_file(&json_data, "test.json");
+
+  JsonObject* head = &json_data.obj;
+  for (u32 i = 0; i < head->size; i++)
+  {
+    printf("%s\n", head->keys[i]);
+  }
+
+  JsonValue* json_nodes = head->lookup_value("nodes");
+  sta_json_debug_value(json_nodes);
+  assert(json_nodes->type == JSON_ARRAY && "Nodes should be an array?");
+
+  GLTF_Node* nodes = (GLTF_Node*)sta_allocate_struct(GLTF_Node, json_nodes->arr->arraySize);
+  for (u32 i = 0; i < json_nodes->arr->arraySize; i++)
+  {
+    JsonObject* node_object = json_nodes->arr->values[i].obj;
+    GLTF_Node*  node        = &nodes[i];
+    node->name              = node_object->lookup_value("name")->string;
+  }
+
+  JsonValue* scenes      = head->lookup_value("scenes");
+  JsonValue* animations  = head->lookup_value("animations");
+  JsonValue* meshes      = head->lookup_value("meshes");
+  JsonValue* skins       = head->lookup_value("skins");
+  JsonValue* buffers     = head->lookup_value("buffers");
+  JsonValue* bufferViews = head->lookup_value("bufferViews");
+
   return true;
 }
 

@@ -792,6 +792,18 @@ bool sta_write_csv_to_file(CSV* csv, Buffer fileLocation)
   return fclose(filePtr) == 0;
 }
 
+JsonValue* JsonObject::lookup_value(const char* key)
+{
+  u32 key_length = strlen(key);
+  for (u32 i = 0; i < this->size; i++)
+  {
+    if (key_length == strlen(this->keys[i]) && strncmp(key, this->keys[i], key_length) == 0)
+    {
+      return &this->values[i];
+    }
+  }
+  return 0;
+}
 static void serialize_json_value(JsonValue* value, FILE* filePtr);
 static void serialize_json_object(JsonObject* object, FILE* filePtr);
 
@@ -908,10 +920,10 @@ bool sta_serialize_json_to_file(Json* json, const char* filename)
   fclose(filePtr);
   return true;
 }
-static void sta_json_debug_object(JsonObject* object);
-static void sta_json_debug_array(JsonArray* arr);
+void sta_json_debug_object(JsonObject* object);
+void sta_json_debug_array(JsonArray* arr);
 
-static void sta_json_debug_value(JsonValue* value)
+void sta_json_debug_value(JsonValue* value)
 {
   switch (value->type)
   {
@@ -959,7 +971,7 @@ static void sta_json_debug_value(JsonValue* value)
   }
 }
 
-static void sta_json_debug_object(JsonObject* object)
+void sta_json_debug_object(JsonObject* object)
 {
   printf("{\n");
   for (u32 i = 0; i < object->size; i++)
@@ -974,7 +986,7 @@ static void sta_json_debug_object(JsonObject* object)
   printf("\n}");
 }
 
-static void sta_json_debug_array(JsonArray* arr)
+void sta_json_debug_array(JsonArray* arr)
 {
   printf("[");
   for (u32 i = 0; i < arr->arraySize; i++)
@@ -1219,8 +1231,8 @@ bool sta_deserialize_json_from_string(Buffer* buffer, Arena* arena, Json* json)
   }
   if (buffer->index != buffer->len)
   {
-    printf("Didn't reach eof after parsing first value? %ld %ld %.*s\n", buffer->index, buffer->len, (i32)(buffer->len - buffer->index), buffer->current_address());
-    return true;
+    // printf("Didn't reach eof after parsing first value? %ld %ld %.*s\n", buffer->index, buffer->len, (i32)(buffer->len - buffer->index), buffer->current_address());
+    // return true;
   }
   return true;
 }
