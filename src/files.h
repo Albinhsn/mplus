@@ -17,7 +17,7 @@
 struct Buffer
 {
 public:
-  Buffer(char * b)
+  Buffer(char* b)
   {
     this->buffer = b;
     this->len    = 0;
@@ -39,6 +39,12 @@ public:
   char* current_address()
   {
     return &this->buffer[this->index];
+  }
+  void* read(u64 size)
+  {
+    void* out = this->current_address();
+    this->advance(size);
+    return out;
   }
   void  parse_string_array(char** array, u64 count);
   void  parse_vector2_array(Vector2* array, u64 count);
@@ -285,9 +291,10 @@ bool  sta_xml_parse_version_and_encoding(XML* xml, Buffer* buffer);
 bool  remove_xml_key(XML_Node* xml, const char* node_name);
 void  write_xml_to_file(XML* xml, const char* filename);
 
+bool  sta_deserialize_json_from_string(Buffer* fileContent, Arena* arena, Json* json);
 bool  sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filename);
 bool  sta_serialize_json_to_file(Json* json, const char* filename);
-void  sta_debug_json(Json* json);
+void  sta_json_debug(Json* json);
 
 bool  sta_read_csv_from_file(Arena* arena, CSV* csv, const char* filelocation);
 bool  sta_write_csv_to_file(CSV* csv, const char* filelocation);

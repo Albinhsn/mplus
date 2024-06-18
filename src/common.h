@@ -60,6 +60,19 @@ void                         sta_pool_free_all(PoolAllocator* pool);
 
 struct Arena
 {
+public:
+  Arena()
+  {
+    memory  = 0;
+    ptr     = 0;
+    maxSize = 0;
+  }
+  Arena(u64 size)
+  {
+    memory  = (u64)sta_allocate(size);
+    maxSize = size;
+    ptr     = 0;
+  }
   u64 memory;
   u64 ptr;
   u64 maxSize;

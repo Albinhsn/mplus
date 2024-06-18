@@ -1,8 +1,10 @@
 #include "common.h"
 #include "font.h"
 #include "input.h"
+#include "gltf.h"
 #include "platform.h"
 #include "sdl.h"
+// #include "ui.h"
 #include "vector.h"
 #include <cassert>
 #include <cfloat>
@@ -111,6 +113,9 @@ void get_text_data(Font* font, TextData* text_data, u32* text, u32 text_count)
 int main()
 {
 
+  parse_gltf("./data/unarmed_man/unarmed.glb");
+  return 0;
+
   const int     screen_width  = 620;
   const int     screen_height = 480;
 
@@ -126,7 +131,6 @@ int main()
 
   char upper_chars[] = "ABCDEFGHIJKLMNOPQRSTUVXYZ";
   char lower_chars[] = "abcdefghijklmnopqrstuvwyz";
-
 
   while (true)
   {

@@ -908,16 +908,16 @@ bool sta_serialize_json_to_file(Json* json, const char* filename)
   fclose(filePtr);
   return true;
 }
-static void debugJsonObject(JsonObject* object);
-static void debugJsonArray(JsonArray* arr);
+static void sta_json_debug_object(JsonObject* object);
+static void sta_json_debug_array(JsonArray* arr);
 
-static void debugJsonValue(JsonValue* value)
+static void sta_json_debug_value(JsonValue* value)
 {
   switch (value->type)
   {
   case JSON_OBJECT:
   {
-    debugJsonObject(value->obj);
+    sta_json_debug_object(value->obj);
     break;
   }
   case JSON_BOOL:
@@ -944,7 +944,7 @@ static void debugJsonValue(JsonValue* value)
   }
   case JSON_ARRAY:
   {
-    debugJsonArray(value->arr);
+    sta_json_debug_array(value->arr);
     break;
   }
   case JSON_STRING:
@@ -959,27 +959,27 @@ static void debugJsonValue(JsonValue* value)
   }
 }
 
-static void debugJsonObject(JsonObject* object)
+static void sta_json_debug_object(JsonObject* object)
 {
   printf("{\n");
   for (u32 i = 0; i < object->size; i++)
   {
     printf("\"%s\":", object->keys[i]);
-    debugJsonValue(&object->values[i]);
+    sta_json_debug_value(&object->values[i]);
     if (i != object->size - 1)
     {
       printf(",\n");
     }
   }
-  printf("\n}n");
+  printf("\n}");
 }
 
-static void debugJsonArray(JsonArray* arr)
+static void sta_json_debug_array(JsonArray* arr)
 {
   printf("[");
   for (u32 i = 0; i < arr->arraySize; i++)
   {
-    debugJsonValue(&arr->values[i]);
+    sta_json_debug_value(&arr->values[i]);
     if (i != arr->arraySize - 1)
     {
       printf(", ");
@@ -988,7 +988,7 @@ static void debugJsonArray(JsonArray* arr)
   printf("]");
 }
 
-static inline void resizeObject(JsonObject* obj)
+static inline void json_resize_object(JsonObject* obj)
 {
   if (obj->cap == 0)
   {
@@ -1018,12 +1018,12 @@ static bool json_parse_string(char** key, Buffer* buffer)
   return true;
 }
 
-static bool parseJsonValue(JsonValue* value, Buffer* buffer);
-static bool parseJsonArray(JsonArray* arr, Buffer* buffer);
+static bool json_parse_value(JsonValue* value, Buffer* buffer);
+static bool json_parse_array(JsonArray* arr, Buffer* buffer);
 
-static bool parseKeyValuePair(JsonObject* obj, Buffer* buffer)
+static bool json_parse_key_value_pair(JsonObject* obj, Buffer* buffer)
 {
-  resizeObject(obj);
+  json_resize_object(obj);
 
   json_parse_string(&obj->keys[obj->size], buffer);
   skip_whitespace(buffer);
@@ -1033,7 +1033,7 @@ static bool parseKeyValuePair(JsonObject* obj, Buffer* buffer)
     return false;
   }
 
-  bool res = parseJsonValue(&obj->values[obj->size], buffer);
+  bool res = json_parse_value(&obj->values[obj->size], buffer);
   if (!res)
   {
     return false;
@@ -1044,14 +1044,13 @@ static bool parseKeyValuePair(JsonObject* obj, Buffer* buffer)
   return true;
 }
 
-static bool parseJsonObject(JsonObject* obj, Buffer* buffer)
+static bool json_parse_object(JsonObject* obj, Buffer* buffer)
 {
-  ADVANCE(buffer);
+  buffer->advance();
   skip_whitespace(buffer);
-  // end or string
   while (!buffer->match('}'))
   {
-    bool res = parseKeyValuePair(obj, buffer);
+    bool res = json_parse_key_value_pair(obj, buffer);
     if (!res)
     {
       return false;
@@ -1061,15 +1060,15 @@ static bool parseJsonObject(JsonObject* obj, Buffer* buffer)
     if (match(buffer, ','))
     {
       // It's illegal to have a ',' and then end it
-      ADVANCE(buffer);
+      buffer->advance();
     }
     skip_whitespace(buffer);
   }
-  ADVANCE(buffer);
+  buffer->advance();
   return true;
 }
 
-static inline void resizeArray(JsonArray* arr)
+static inline void json_resize_array(JsonArray* arr)
 {
   if (arr->arraySize == 0)
   {
@@ -1082,15 +1081,15 @@ static inline void resizeArray(JsonArray* arr)
     arr->values = (JsonValue*)realloc(arr->values, arr->arrayCap * sizeof(JsonValue));
   }
 }
-static bool parseJsonArray(JsonArray* arr, Buffer* buffer)
+static bool json_parse_array(JsonArray* arr, Buffer* buffer)
 {
   ADVANCE(buffer);
   skip_whitespace(buffer);
   bool res;
   while (!buffer->match(']'))
   {
-    resizeArray(arr);
-    res = parseJsonValue(&arr->values[arr->arraySize], buffer);
+    json_resize_array(arr);
+    res = json_parse_value(&arr->values[arr->arraySize], buffer);
     if (!res)
     {
       return false;
@@ -1104,19 +1103,19 @@ static bool parseJsonArray(JsonArray* arr, Buffer* buffer)
 
   return true;
 }
-static bool parseNumber(f32* number, Buffer* buffer)
+static bool json_parse_number(f32* number, Buffer* buffer)
 {
   *number = parse_float_from_string(buffer);
   return true;
 }
 
-static bool parseJsonValue(JsonValue* value, Buffer* buffer)
+static bool json_parse_value(JsonValue* value, Buffer* buffer)
 {
   skip_whitespace(buffer);
   if (isdigit(buffer->current_char()) || buffer->match('-'))
   {
     value->type = JSON_NUMBER;
-    return parseNumber(&value->number, buffer);
+    return json_parse_number(&value->number, buffer);
   }
   switch (buffer->current_char())
   {
@@ -1128,9 +1127,10 @@ static bool parseJsonValue(JsonValue* value, Buffer* buffer)
   case '{':
   {
     value->type      = JSON_OBJECT;
+    value->obj       = (JsonObject*)malloc(sizeof(JsonObject));
     value->obj->cap  = 0;
     value->obj->size = 0;
-    return parseJsonObject(value->obj, buffer);
+    return json_parse_object(value->obj, buffer);
   }
   case '[':
   {
@@ -1138,7 +1138,7 @@ static bool parseJsonValue(JsonValue* value, Buffer* buffer)
     value->arr            = (JsonArray*)malloc(sizeof(JsonArray));
     value->arr->arrayCap  = 0;
     value->arr->arraySize = 0;
-    return parseJsonArray(value->arr, buffer);
+    return json_parse_array(value->arr, buffer);
   }
   case 't':
   {
@@ -1177,10 +1177,52 @@ static bool parseJsonValue(JsonValue* value, Buffer* buffer)
   }
   default:
   {
-    printf("Unknown value token '%c'\n", buffer->current_char());
+    printf("Unknown value token '%c' %d\n", buffer->current_char(), buffer->current_char());
     return false;
   }
   }
+}
+
+bool sta_deserialize_json_from_string(Buffer* buffer, Arena* arena, Json* json)
+{
+  bool res;
+  buffer->skip_whitespace();
+  switch (buffer->current_char())
+  {
+  case '{':
+  {
+    json->headType = JSON_OBJECT;
+    json->obj.cap  = 0;
+    json->obj.size = 0;
+    res            = json_parse_object(&json->obj, buffer);
+    break;
+  }
+  case '[':
+  {
+    json->headType        = JSON_ARRAY;
+    json->array.arrayCap  = 0;
+    json->array.arraySize = 0;
+    res                   = json_parse_array(&json->array, buffer);
+    break;
+  }
+  default:
+  {
+    json->headType = JSON_VALUE;
+    res            = json_parse_value(&json->value, buffer);
+    break;
+  }
+  }
+
+  if (!res)
+  {
+    return false;
+  }
+  if (buffer->index != buffer->len)
+  {
+    printf("Didn't reach eof after parsing first value? %ld %ld %.*s\n", buffer->index, buffer->len, (i32)(buffer->len - buffer->index), buffer->current_address());
+    return true;
+  }
+  return true;
 }
 
 bool sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filename)
@@ -1193,62 +1235,33 @@ bool sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filena
   {
     return false;
   }
-  u64  curr = 0;
-  bool res;
-  bool first = false;
-  while (!first)
+  return sta_deserialize_json_from_string(&fileContent, arena, json);
+}
+
+void sta_json_debug(Json* json)
+{
+  switch (json->headType)
   {
-    switch (fileContent.buffer[curr])
-    {
-    case '{':
-    {
-      json->headType = JSON_OBJECT;
-      json->obj.cap  = 0;
-      json->obj.size = 0;
-      res            = parseJsonObject(&json->obj, &fileContent);
-      first          = true;
-      break;
-    }
-    case '[':
-    {
-      json->headType        = JSON_ARRAY;
-      json->array.arrayCap  = 0;
-      json->array.arraySize = 0;
-      res                   = parseJsonArray(&json->array, &fileContent);
-      first                 = true;
-      break;
-    }
-    case ' ':
-    {
-    }
-    case '\n':
-    {
-    }
-    case '\t':
-    {
-      curr++;
-      break;
-    }
-    default:
-    {
-      printf("Default: %c\n", fileContent.buffer[curr]);
-      json->headType = JSON_VALUE;
-      res            = parseJsonValue(&json->value, &fileContent);
-      first          = true;
-      break;
-    }
-    }
-  }
-  if (!res)
+  case JSON_ARRAY:
   {
-    return false;
+    sta_json_debug_array(&json->array);
+    break;
   }
-  if (curr != fileContent.len)
+  case JSON_VALUE:
   {
-    printf("Didn't reach eof after parsing first value? %ld %ld\n", curr, fileContent.len);
-    return false;
+    sta_json_debug_value(&json->value);
+    break;
   }
-  return true;
+  case JSON_OBJECT:
+  {
+    sta_json_debug_object(&json->obj);
+    break;
+  }
+  default:
+  {
+    assert(0 && "Invalid json head?");
+  }
+  }
 }
 
 static void skip_until_digit(Buffer* buffer)
