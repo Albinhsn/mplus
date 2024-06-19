@@ -7,7 +7,6 @@
 struct Joint
 {
 public:
-  void  debug();
   Mat44 m_invBindPose;
   Mat44 m_mat;
   String name;

@@ -1,7 +1,8 @@
+#include "animation.h"
 #include "common.h"
 #include "font.h"
-#include "input.h"
 #include "gltf.h"
+#include "input.h"
 #include "platform.h"
 #include "sdl.h"
 // #include "ui.h"
@@ -113,7 +114,8 @@ void get_text_data(Font* font, TextData* text_data, u32* text, u32 text_count)
 int main()
 {
 
-  parse_gltf("./data/unarmed_man/unarmed.glb");
+  AnimationModel model = {};
+  parse_gltf(&model, "./data/unarmed_man/unarmed.glb");
   return 0;
 
   const int     screen_width  = 620;
