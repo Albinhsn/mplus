@@ -1,5 +1,6 @@
 #ifndef SHADER_H
 #define SHADER_H
+#include "vector.h"
 
 class Shader
 {
@@ -14,7 +15,7 @@ public:
   void set_int(const char* name, int value);
   void set_float(const char* name, float value);
   void set_float4f(const char* name, float value[4]);
-  void set_mat4(const char * name, float * v);
+  void set_mat4(const char * name, Mat44);
   void set_mat4(const char * name, float * v, int count);
 };
 

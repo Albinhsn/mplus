@@ -7,12 +7,12 @@
 struct Joint
 {
 public:
-  Mat44 m_invBindPose;
-  Mat44 m_mat;
+  Mat44  m_invBindPose;
+  Mat44  m_mat;
   String name;
-  char* m_name;
-  u32   m_name_length;
-  u8    m_iParent;
+  char*  m_name;
+  u32    m_name_length;
+  u8     m_iParent;
 };
 
 struct Skeleton
@@ -21,19 +21,18 @@ struct Skeleton
   Joint* joints;
 };
 
-
 struct JointPose
 {
 public:
   Mat44* local_transform;
+  f32*   steps;
+  u32    step_count;
 };
 
 struct Animation
 {
   f32        duration;
   JointPose* poses;
-  f32*       steps;
-  u32        pose_count;
   u32        joint_count;
 };
 
@@ -56,6 +55,7 @@ public:
   Animation      animations;
   Skeleton       skeleton;
   u64            vertex_count;
+  u64            index_count;
   u8             clip_count;
   void           debug();
 };

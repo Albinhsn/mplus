@@ -53,9 +53,9 @@ void Shader::set_float(const char* name, float value)
   sta_glUniform1f(sta_glGetUniformLocation(this->id, name), value);
 }
 
-void Shader::set_mat4(const char* name, float* v)
+void Shader::set_mat4(const char* name, Mat44 m)
 {
-  this->set_mat4(name, v, 1);
+  this->set_mat4(name, &m.m[0], 1);
 }
 void Shader::set_mat4(const char* name, float* v, int count)
 {

@@ -11,6 +11,24 @@
 #include <cstdlib>
 #include <cstring>
 
+void SkinnedVertex::debug()
+{
+  this->position.debug();
+  this->normal.debug();
+  this->uv.debug();
+  printf("%d %d %d %d\n", this->joint_index[0], this->joint_index[1], this->joint_index[2], this->joint_index[3]);
+  printf("%f %f %f %f\n", this->joint_weight[0], this->joint_weight[1], this->joint_weight[2], this->joint_weight[3]);
+}
+void AnimationModel::debug()
+{
+  printf("Vertices: %ld\n", this->vertex_count);
+  for (u32 i = 0; i < this->vertex_count; i++)
+  {
+    this->vertices[i].debug();
+    printf("-\n");
+  }
+}
+
 void calculate_new_pose(Mat44* poses, u32 count, Animation animation, u32 ticks)
 {
   u64   loop_time = 2000;

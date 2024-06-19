@@ -9,8 +9,6 @@ layout (location = 4) in ivec4 indices;
 const int MAX_JOINTS = 50;
 
 out vec2 TexCoord;
-out vec3 Normal;
-out vec4 Color;
 
 uniform mat4 view;
 uniform mat4 jointTransforms[MAX_JOINTS];
@@ -18,20 +16,14 @@ uniform mat4 jointTransforms[MAX_JOINTS];
 void main()
 {
   vec4 local_pos = vec4(0);
-  vec4 color = vec4(1.0, 1.0f, 1.0, 1.0);
   for(int i = 0; i < 4; i++){
     int index             = indices[i];
     mat4 joint_transform  = jointTransforms[index];
     vec4 pose_position    = joint_transform * vec4(aPos, 1.0);
     local_pos            += pose_position * weight[i];
-    if(i < 3){
-      color[i] = (5 * index) / 255.0;
-    }
   }
 
-  gl_Position = view * local_pos;
+  gl_Position = view * vec4(aPos, 1.0);
 
   TexCoord = aTexCoord;
-  Normal = aNormal;
-  Color = color;
 }
