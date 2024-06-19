@@ -76,6 +76,14 @@ void parse_gltf_node(GLTF_Node* node, JsonObject* object)
       node->rotation[i] = rotation->arr->values[i].number;
     }
   }
+  else
+  {
+    node->rotation[0] = 1;
+    node->rotation[1] = 1;
+    node->rotation[2] = 1;
+    node->rotation[3] = 1;
+  }
+
   JsonValue* scale = object->lookup_value("scale");
   if (scale)
   {
@@ -85,6 +93,12 @@ void parse_gltf_node(GLTF_Node* node, JsonObject* object)
       assert(scale->arr->values[i].type == JSON_NUMBER && "Scale value wasn't number?");
       node->scale[i] = scale->arr->values[i].number;
     }
+  }
+  else
+  {
+    node->scale[0] = 1;
+    node->scale[1] = 1;
+    node->scale[2] = 1;
   }
 
   JsonValue* translation = object->lookup_value("translation");
@@ -97,6 +111,13 @@ void parse_gltf_node(GLTF_Node* node, JsonObject* object)
       node->translation[i] = translation->arr->values[i].number;
     }
   }
+  else
+  {
+    node->translation[0] = 1;
+    node->translation[1] = 1;
+    node->translation[2] = 1;
+  }
+
   JsonValue* children = object->lookup_value("children");
   if (children)
   {
@@ -169,6 +190,12 @@ bool parse_gltf(AnimationModel* model, const char* filename)
     {
       skeleton->joints[(i32)(count - nodes[i].children[j])].m_iParent = count - i;
     }
+    Mat44 T      = Mat44::create_translation(nodes[i].translation);
+    Mat44 R      = Mat44::create_rotation(nodes[i].rotation);
+    Mat44 S      = Mat44::create_scale(nodes[i].scale);
+    joint->m_mat = T.mul(R).mul(S);
+    joint->m_mat.debug();
+    printf("-\n");
   }
 
   JsonValue* scenes      = head->lookup_value("scenes");

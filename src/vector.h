@@ -26,7 +26,6 @@ public:
     this->z = z;
     this->w = w;
   }
-  Mat44             to_matrix();
   static Quaternion from_mat(Mat44 m);
   static Quaternion interpolate(Quaternion q0, Quaternion q1, f32 t);
   f32               x, y, z, w;
@@ -175,6 +174,12 @@ public:
   void         debug();
   float        determinant();
   static Mat44 look_at(Vector3 x, Vector3 y, Vector3 z);
+  static Mat44 create_translation(Vector3 t);
+  static Mat44 create_translation(f32 t[3]);
+  static Mat44 create_rotation(Quaternion q);
+  static Mat44 create_rotation(f32 q[4]);
+  static Mat44 create_scale(Vector3 s);
+  static Mat44 create_scale(f32 s[3]);
   Mat44        transpose();
   Mat44        mul(Mat44 m);
   Vector4      mul(Vector4 v);
@@ -194,12 +199,11 @@ public:
 typedef Vector2 Point2;
 typedef Vector3 Point3;
 
-
-
 struct Color
 {
 public:
-  Color(f32 r, f32 g,f32 b, f32 a){
+  Color(f32 r, f32 g, f32 b, f32 a)
+  {
     this->r = r;
     this->g = g;
     this->b = b;
@@ -238,6 +242,6 @@ Mat44 interpolate_transforms(Mat44 first, Mat44 second, f32 time);
 #define WHITE Color(0, 0, 0, 0)
 #define RED   Color(1, 0, 0, 1)
 #define GREEN Color(0, 1, 0, 1)
-#define BLUE Color(0, 0, 1, 1)
+#define BLUE  Color(0, 0, 1, 1)
 
 #endif
