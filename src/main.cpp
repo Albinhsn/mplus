@@ -113,12 +113,67 @@ void get_text_data(Font* font, TextData* text_data, u32* text, u32 text_count)
   triangulate_simple_via_ear_clipping(&text_data->on_curve_points, on_curve_points, on_curve_point_count);
 }
 
+void calculate_new_pose(AnimationModel anim, Mat44* poses, u32 count, Animation animation, u32 ticks)
+{
+  u64   loop_time = (u64)(1000 * animation.duration);
+  float time      = (ticks % loop_time) / (f32)loop_time;
+  if(time == 0){
+    time += 0.001f;
+  }
+
+  for (u32 i = 0; i < animation.joint_count; i++)
+  {
+    if (time >= animation.duration - 0.001f)
+    {
+      time = animation.duration;
+    }
+    u32        pose_idx = 0;
+    JointPose* pose     = &animation.poses[i];
+    for (; pose_idx < pose->step_count && pose->steps[pose_idx] < time; pose_idx++)
+      ;
+
+    float time_between_poses = (time - pose->steps[pose_idx - 1]) / (pose->steps[pose_idx] - pose->steps[pose_idx - 1]);
+
+    Mat44 first_transform    = pose->local_transform[pose_idx - 1];
+    Mat44 second_transform   = pose->local_transform[pose_idx];
+    poses[i]                 = interpolate_transforms(first_transform, second_transform, time_between_poses);
+  }
+}
+void update_animation(AnimationModel animation, Shader shader, u32 ticks)
+{
+  Skeleton* skeleton = &animation.skeleton;
+  Mat44     transforms[skeleton->joint_count];
+  Mat44     current_poses[skeleton->joint_count];
+  calculate_new_pose(animation, current_poses, skeleton->joint_count, animation.animations, ticks);
+
+  Mat44 parent_transforms[skeleton->joint_count];
+  for (int i = 0; i < skeleton->joint_count; i++)
+  {
+    parent_transforms[i].identity();
+  }
+  for (u32 i = 0; i < skeleton->joint_count; i++)
+  {
+    Joint* joint             = &skeleton->joints[i];
+
+    Mat44  current_local     = current_poses[i];
+    Mat44  parent_transform  = parent_transforms[joint->m_iParent];
+
+    Mat44  current_transform = parent_transform.mul(current_local);
+    parent_transforms[i]     = current_transform;
+    transforms[i]            = current_transform.mul(joint->m_invBindPose);
+  }
+  shader.set_mat4("jointTransforms", &transforms[0].m[0], skeleton->joint_count);
+}
+
 int main()
 {
 
   AnimationModel model = {};
-  parse_gltf(&model, "./data/unarmed_man/unarmed.glb");
-  // model.debug();
+  if (!parse_gltf(&model, "./data/unarmed_still.glb"))
+  {
+    printf("Failed to parse model!\n");
+    return 1;
+  }
 
   const int     screen_width  = 620;
   const int     screen_height = 480;
@@ -161,28 +216,15 @@ int main()
 
   sta_glBindVertexArray(vao);
 
-  Mat44 skinning_matrices[model.skeleton.joint_count];
-  for (u32 i = 0; i < model.skeleton.joint_count; i++)
-  {
-    skinning_matrices[i].identity();
-  }
-
-  for (u32 i = 0; i < model.skeleton.joint_count; i++)
-  {
-    Joint* joint         = &model.skeleton.joints[i];
-    Mat44  current_local = model.animations.poses[i].local_transform[0];
-    skinning_matrices[i] = skinning_matrices[joint->m_iParent].mul(current_local.mul(joint->m_invBindPose));
-  }
-
   Mat44 view = {};
   view.identity();
-  view = view.scale(0.5f);
-  view = view.translate(Vector3(0, -0.2f, 0));
+  view = view.scale(0.005f);
+  view = view.rotate_y(90.0f);
+  view = view.rotate_z(90.0f);
+  view = view.translate(Vector3(-0.2f, -0.2f, 0));
 
   shader.use();
-  shader.set_mat4("view", view);
   shader.set_int("texture1", 0);
-  shader.set_mat4("jointTransforms", &skinning_matrices[0].m[0], model.skeleton.joint_count);
 
   u32 texture;
   sta_glGenTextures(1, &texture);
@@ -206,9 +248,11 @@ int main()
     if (ticks + 16 < SDL_GetTicks())
     {
       ticks = SDL_GetTicks() + 16;
-      view  = view.rotate_y(1.0f);
+      // view  = view.rotate_y(1.0f);
+      // view  = view.rotate_x(1.0f);
       shader.set_mat4("view", view);
     }
+    update_animation(model, shader, ticks);
 
     sta_gl_clear_buffer(1.0, 1.0, 1.0, 1.0);
     glDrawElements(GL_TRIANGLES, model.index_count, GL_UNSIGNED_INT, 0);

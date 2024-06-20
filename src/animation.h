@@ -1,6 +1,7 @@
 #ifndef ANIMATION_H
 #define ANIMATION_H
 
+#include "shader.h"
 #include "files.h"
 #include "vector.h"
 
@@ -90,5 +91,6 @@ struct ColladaControllers
 
 bool sta_collada_parse_from_file(AnimationModel* animation, const char* filename);
 void calculate_new_pose(Mat44* poses, u32 count, Animation animation, u32 ticks);
+void update_animation(AnimationModel animation, Shader shader, u32 ticks);
 
 #endif

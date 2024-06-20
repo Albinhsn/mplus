@@ -3,6 +3,7 @@
 #include "common.h"
 #include "files.h"
 #include "platform.h"
+#include "vector.h"
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
@@ -168,15 +169,15 @@ struct LL
 };
 struct AnimationData
 {
-  Mat44* T;
-  f32*   T_steps;
-  u32    T_count;
-  Mat44* R;
-  f32*   R_steps;
-  u32    R_count;
-  Mat44* S;
-  f32*   S_steps;
-  u32    S_count;
+  Vector3*    T;
+  f32*        T_steps;
+  u32         T_count;
+  Quaternion* R;
+  f32*        R_steps;
+  u32         R_count;
+  Vector3*    S;
+  f32*        S_steps;
+  u32         S_count;
 };
 
 static f32 calculate_steps(AnimationData* data, LL* steps, u32& step_count)
@@ -245,6 +246,15 @@ static f32 calculate_steps(AnimationData* data, LL* steps, u32& step_count)
     }
     max_duration = MAX(max_duration, data->S_steps[j]);
   }
+  if (steps[0].time > 0)
+  {
+    LL* first     = &steps[step_count++];
+    first->next   = &steps[0];
+    first->prev   = 0;
+    first->time   = 0;
+    steps[0].prev = first;
+  }
+
   return max_duration;
 }
 
@@ -271,20 +281,34 @@ bool parse_gltf(AnimationModel* model, const char* filename)
     printf("Failed to deserialize json!\n");
     return false;
   }
+  // sta_serialize_json_to_file(&json_data, "full.json");
   JsonObject* head       = &json_data.obj;
   JsonValue*  json_nodes = head->lookup_value("nodes");
   assert(json_nodes->type == JSON_ARRAY && "Nodes should be an array?");
 
-  // parse all bufferViews
-  // translate to every accessor
-
-  JsonValue*       scenes          = head->lookup_value("scenes");
-  JsonValue*       animations      = head->lookup_value("animations");
-  JsonValue*       meshes          = head->lookup_value("meshes");
-  JsonValue*       skins           = head->lookup_value("skins");
-  JsonValue*       buffers         = head->lookup_value("buffers");
-  JsonValue*       bufferViews     = head->lookup_value("bufferViews");
-  JsonValue*       accessors_value = head->lookup_value("accessors");
+  Json js           = {};
+  js.headType       = JSON_VALUE;
+  JsonValue* scenes = head->lookup_value("scenes");
+  js.value          = *scenes;
+  // sta_serialize_json_to_file(&js, "scenes.json");
+  JsonValue* animations = head->lookup_value("animations");
+  js.value              = *animations;
+  // sta_serialize_json_to_file(&js, "animations.json");
+  JsonValue* meshes = head->lookup_value("meshes");
+  js.value          = *meshes;
+  // sta_serialize_json_to_file(&js, "meshes.json");
+  JsonValue* skins = head->lookup_value("skins");
+  js.value         = *skins;
+  // sta_serialize_json_to_file(&js, "skins.json");
+  JsonValue* buffers = head->lookup_value("buffers");
+  js.value           = *buffers;
+  // sta_serialize_json_to_file(&js, "buffers.json");
+  JsonValue* bufferViews = head->lookup_value("bufferViews");
+  js.value               = *bufferViews;
+  // sta_serialize_json_to_file(&js, "bufferViews.json");
+  JsonValue* accessors_value = head->lookup_value("accessors");
+  js.value                   = *accessors_value;
+  // sta_serialize_json_to_file(&js, "accessors.json");
 
   GLTF_BufferView* buffer_views;
   u32              buffer_views_count;
@@ -310,12 +334,16 @@ bool parse_gltf(AnimationModel* model, const char* filename)
   skeleton->joint_count                             = joints_array->arraySize;
   for (u32 i = 0; i < joints_array->arraySize; i++)
   {
-    Joint* joint = &skeleton->joints[i];
-    for (u32 i = 0; i < 16; i++)
-    {
-      joint->m_invBindPose.m[i] = inverseBindMatrices_buffer[inverseBindMatrices_buffer_index * 16 + i];
-    }
+    Joint* joint     = &skeleton->joints[i];
     joint->m_iParent = 0;
+  }
+  for (u32 i = 0; i < joints_array->arraySize; i++)
+  {
+    Joint* joint = &skeleton->joints[i];
+    for (u32 j = 0; j < 16; j++)
+    {
+      joint->m_invBindPose.m[j] = inverseBindMatrices_buffer[inverseBindMatrices_buffer_index * 16 + j];
+    }
     inverseBindMatrices_buffer_index++;
 
     // grab index of node
@@ -324,16 +352,6 @@ bool parse_gltf(AnimationModel* model, const char* filename)
 
     // grab the node
     JsonObject* node_object = json_nodes->arr->values[node_index].obj;
-    JsonValue*  children    = node_object->lookup_value("children");
-    if (children)
-    {
-      JsonArray* children_array = children->arr;
-      for (u32 i = 0; i < children_array->arraySize; i++)
-      {
-        u32 child_idx                         = children_array->values[i].number;
-        skeleton->joints[child_idx].m_iParent = i;
-      }
-    }
 
     // grab the name
     joint->m_name = node_object->lookup_value("name")->string;
@@ -368,10 +386,24 @@ bool parse_gltf(AnimationModel* model, const char* filename)
     // global is from parent -> this node
     joint->m_mat = T.mul(R).mul(S);
   }
-  for (u32 i = 0; i < skeleton->joint_count; i++)
+
+  for (u32 i = 0; i < joints_array->arraySize; i++)
   {
-    Joint* joint = &skeleton->joints[i];
-    joint->m_mat = skeleton->joints[joint->m_iParent].m_mat.mul(joint->m_mat);
+    // grab index of node
+    u32 node_index = joints_array->values[i].number;
+
+    // grab the node
+    JsonObject* node_object = json_nodes->arr->values[node_index].obj;
+    JsonValue*  children    = node_object->lookup_value("children");
+    if (children)
+    {
+      JsonArray* children_array = children->arr;
+      for (u32 j = 0; j < children_array->arraySize; j++)
+      {
+        u32 child_idx                                                    = children_array->values[j].number;
+        skeleton->joints[node_index_to_joint_index[child_idx]].m_iParent = i;
+      }
+    }
   }
 
   // parse meshes
@@ -408,6 +440,8 @@ bool parse_gltf(AnimationModel* model, const char* filename)
   f32* weights_buffer  = (f32*)buffer_views[weights_accessor.buffer_view_index].buffer;
   model->vertex_count  = position_accessor.count;
   model->vertices      = (SkinnedVertex*)sta_allocate_struct(SkinnedVertex, model->vertex_count);
+  assert(model->vertex_count * 4 == buffer_views[weights_accessor.buffer_view_index].buffer_length / 4);
+  assert(model->vertex_count * 4 == buffer_views[joints_accessor.buffer_view_index].buffer_length);
   assert(model->vertex_count * 3 == buffer_views[position_accessor.buffer_view_index].buffer_length / 4);
   assert(model->vertex_count * 3 == buffer_views[normal_accessor.buffer_view_index].buffer_length / 4);
   assert(model->vertex_count * 2 == buffer_views[texcoord_accessor.buffer_view_index].buffer_length / 4);
@@ -464,42 +498,46 @@ bool parse_gltf(AnimationModel* model, const char* filename)
     f32*           data_array  = (f32*)buffer_views[output->buffer_view_index].buffer;
 
     u32            joint_index = node_index_to_joint_index[node_index];
+    assert(input->count == output->count && "mismatch in data size?");
 
-    AnimationData* data        = &animation_data[joint_index];
+    // Store this just as T,R,S instead :)
+    AnimationData* data = &animation_data[joint_index];
     if (path == CHANNEL_TARGET_PATH_TRANSLATION)
     {
       data->T_count = input->count;
-      data->T       = (Mat44*)sta_allocate_struct(Mat44, input->count);
+      data->T       = (Vector3*)sta_allocate_struct(Mat44, input->count);
       data->T_steps = (f32*)sta_allocate_struct(f32, input->count);
+      assert(buffer_views[input->buffer_view_index].buffer_length * 3 == buffer_views[output->buffer_view_index].buffer_length && "Mismatch in translation size?");
       for (u32 j = 0; j < input->count; j++)
       {
         u32 data_index   = j * 3;
         data->T_steps[j] = steps_array[j];
-        data->T[j]       = Mat44::create_translation(Vector3(data_array[data_index], data_array[data_index + 1], data_array[data_index + 2]));
+        data->T[j]       = Vector3(data_array[data_index], data_array[data_index + 1], data_array[data_index + 2]);
       }
     }
     else if (path == CHANNEL_TARGET_PATH_ROTATION)
     {
       data->R_count = input->count;
-      data->R       = (Mat44*)sta_allocate_struct(Mat44, input->count);
+      data->R       = (Quaternion*)sta_allocate_struct(Mat44, input->count);
       data->R_steps = (f32*)sta_allocate_struct(f32, input->count);
+      assert(buffer_views[input->buffer_view_index].buffer_length * 4 == buffer_views[output->buffer_view_index].buffer_length && "Mismatch in translation size?");
       for (u32 j = 0; j < input->count; j++)
       {
-        u32 data_index   = j * 3;
+        u32 data_index   = j * 4;
         data->R_steps[j] = steps_array[j];
-        data->R[j]       = Mat44::create_rotation(Quaternion(data_array[data_index], data_array[data_index + 1], data_array[data_index + 2], data_array[data_index + 3]));
+        data->R[j]       = Quaternion(data_array[data_index], data_array[data_index + 1], data_array[data_index + 2], data_array[data_index + 3]);
       }
     }
     else if (path == CHANNEL_TARGET_PATH_SCALE)
     {
       data->S_count = input->count;
-      data->S       = (Mat44*)sta_allocate_struct(Mat44, input->count);
+      data->S       = (Vector3*)sta_allocate_struct(Mat44, input->count);
       data->S_steps = (f32*)sta_allocate_struct(f32, input->count);
       for (u32 j = 0; j < input->count; j++)
       {
         u32 data_index   = j * 3;
         data->S_steps[j] = steps_array[j];
-        data->S[j]       = Mat44::create_scale(Vector3(data_array[data_index], data_array[data_index + 1], data_array[data_index + 2]));
+        data->S[j]       = Vector3(data_array[data_index], data_array[data_index + 1], data_array[data_index + 2]);
       }
     }
     else
@@ -509,59 +547,121 @@ bool parse_gltf(AnimationModel* model, const char* filename)
   }
 
   animation->duration = 0.0f;
+  i32 empty[skeleton->joint_count];
+  u32 empty_count = 0;
   for (u32 i = 0; i < skeleton->joint_count; i++)
   {
-    LL steps[animation_data->T_count + animation_data->S_count + animation_data->R_count];
+    JointPose* pose = &animation->poses[i];
+    if (animation_data[i].T_count + animation_data[i].S_count + animation_data[i].R_count == 0)
+    {
+      pose->step_count      = 2;
+      pose->steps           = (f32*)sta_allocate_struct(f32, pose->step_count);
+      pose->steps[0]        = 0;
+      pose->local_transform = (Mat44*)sta_allocate_struct(Mat44, pose->step_count);
+      pose->local_transform[0].identity();
+      pose->local_transform[1].identity();
+      empty[empty_count++] = i;
+      continue;
+    }
+
+    LL* steps = (LL*)sta_allocate_struct(LL, animation_data[i].T_count + animation_data[i].S_count + animation_data[i].R_count + 1);
     memset(steps, 0, sizeof(LL) * (animation_data->T_count + animation_data->S_count + animation_data->R_count));
-    JointPose* pose       = &animation->poses[i];
     pose->step_count      = 0;
     AnimationData* data   = &animation_data[i];
+
     animation->duration   = MAX(calculate_steps(data, steps, pose->step_count), animation->duration);
 
     pose->steps           = (f32*)sta_allocate_struct(f32, pose->step_count);
-    pose->local_transform = (Mat44*)sta_allocate_struct(f32, pose->step_count);
+    pose->local_transform = (Mat44*)sta_allocate_struct(Mat44, pose->step_count);
     LL* head              = &steps[0];
-    u32 count             = 0;
+    if (head->prev)
+    {
+      head = head->prev;
+    }
+    u32 count = 0;
     while (head)
     {
       pose->steps[count] = head->time;
-      Mat44* local       = &pose->local_transform[count];
-      local->identity();
-
-      // check if T
-      for (u32 i = 0; i < data->T_count; i++)
+      f32 current_time   = head->time;
+      head               = head->next;
+      pose->local_transform[count].identity();
+      // insert and interpolate T
+      u32 j = 0;
+      for (; j < data->T_count; j++)
       {
-        if (compare_float(data->T_steps[i], head->time))
+        if (data->T_steps[j] > current_time || compare_float(data->T_steps[j], current_time))
         {
-          pose->local_transform[count] = local->mul(data->T[i]);
           break;
         }
       }
+
+      if (j == data->T_count)
+      {
+        j--;
+      }
+      else if (j == 0)
+      {
+        j++;
+      }
+      f32     t                    = (current_time - data->T_steps[j - 1]) / (data->T_steps[j] - data->T_steps[j - 1]);
+      Vector3 translated           = interpolate_translation(data->T[j - 1], data->T[j], t);
+      pose->local_transform[count] = pose->local_transform[count].mul(Mat44::create_translation(translated));
 
       // check if R
-      for (u32 i = 0; i < data->R_count; i++)
+      for (j = 0; j < data->R_count; j++)
       {
-        if (compare_float(data->R_steps[i], head->time))
+        if (data->R_steps[j] > current_time || compare_float(data->R_steps[j], current_time))
         {
-          pose->local_transform[count] = local->mul(data->R[i]);
           break;
         }
       }
+      if (j == data->R_count)
+      {
+        j--;
+      }
+      else if (j == 0)
+      {
+        j++;
+      }
+      t                            = (current_time - data->R_steps[j - 1]) / (data->R_steps[j] - data->R_steps[j - 1]);
+      Quaternion q                 = Quaternion::interpolate(data->R[j - 1], data->R[j], t);
+      pose->local_transform[count] = pose->local_transform[count].mul(Mat44::create_rotation(q));
 
       // check if S
-      for (u32 i = 0; i < data->S_count; i++)
+      for (j = 0; j < data->S_count; j++)
       {
-        if (compare_float(data->S_steps[i], head->time))
+        if (data->S_steps[j] > current_time || compare_float(data->S_steps[j], current_time))
         {
-          pose->local_transform[count] = local->mul(data->S[i]);
           break;
         }
       }
+      if (j == data->S_count)
+      {
+        j--;
+      }
+      else if (j == 0)
+      {
+        j++;
+      }
 
-      head = head->next;
+      t                            = (current_time - data->S_steps[j - 1]) / (data->S_steps[j] - data->S_steps[j - 1]);
+      Vector3 scaled               = interpolate_translation(data->S[j - 1], data->S[j], t);
+      pose->local_transform[count] = pose->local_transform[count].mul(Mat44::create_scale(scaled));
+
       count++;
     }
-    assert(count == pose->step_count && "Really");
+  }
+  for (u32 i = 0; i < empty_count; i++)
+  {
+    animation->poses[empty[i]].steps[1] = animation->duration;
+  }
+  for (u32 i = 0; i < animation->joint_count; i++)
+  {
+    for (u32 j = 0; j < animation->poses[i].step_count; j++)
+    {
+      // printf("%f ", animation->poses[i].steps[j]);
+    }
+    // printf("\n");
   }
 
   return true;

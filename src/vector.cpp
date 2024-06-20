@@ -2,6 +2,7 @@
 #include "common.h"
 #include <cmath>
 #include <cstring>
+
 Quaternion Quaternion::from_mat(Mat44 m)
 {
   f32 x, y, z, w;
@@ -20,8 +21,8 @@ Quaternion Quaternion::from_mat(Mat44 m)
     f32 S = 2 * sqrtf(1.0f + m.rc[0][0] - m.rc[1][1] - m.rc[2][2]);
     w     = (m.rc[2][1] - m.rc[1][2]) / S;
     x     = 0.25f * S;
-    y     = (m.rc[0][1] - m.rc[1][0]) / S;
-    z     = (m.rc[0][2] - m.rc[2][0]) / S;
+    y     = (m.rc[0][1] + m.rc[1][0]) / S;
+    z     = (m.rc[0][2] + m.rc[2][0]) / S;
   }
   else if (m.rc[1][1] > m.rc[2][2])
   {
@@ -34,7 +35,7 @@ Quaternion Quaternion::from_mat(Mat44 m)
   else
   {
     f32 S = 2 * sqrtf(1.0f - m.rc[0][0] - m.rc[1][1] + m.rc[2][2]);
-    w     = (m.rc[1][0] - m.rc[1][0]) / S;
+    w     = (m.rc[1][0] - m.rc[0][1]) / S;
     x     = (m.rc[0][2] + m.rc[2][0]) / S;
     y     = (m.rc[1][2] + m.rc[2][1]) / S;
     z     = 0.25f * S;
@@ -46,9 +47,9 @@ Mat44 Mat44::create_translation(f32 t[3])
 {
   Mat44 out = {};
   out.identity();
-  out.rc[0][3] = t[0];
-  out.rc[1][3] = t[1];
-  out.rc[2][3] = t[2];
+  out.rc[3][0] = t[0];
+  out.rc[3][1] = t[1];
+  out.rc[3][2] = t[2];
   return out;
 }
 
@@ -56,16 +57,16 @@ Mat44 Mat44::create_translation(Vector3 t)
 {
   Mat44 out = {};
   out.identity();
-  out.rc[0][3] = t.x;
-  out.rc[1][3] = t.y;
-  out.rc[2][3] = t.z;
+  out.rc[3][0] = t.x;
+  out.rc[3][1] = t.y;
+  out.rc[3][2] = t.z;
   return out;
 }
 Mat44 Mat44::create_rotation(f32 q[4])
 {
   return Mat44::create_rotation(Quaternion(q[0], q[1], q[2], q[3]));
 }
-Mat44 Mat44::create_rotation(Quaternion q)
+Mat44 Mat44::create_rotation2(Quaternion q)
 {
   Mat44 out       = {};
   f32   xy        = q.x * q.y;
@@ -74,8 +75,8 @@ Mat44 Mat44::create_rotation(Quaternion q)
   f32   yz        = q.y * q.z;
   f32   yw        = q.y * q.w;
   f32   zw        = q.z * q.w;
-  f32   y_squared = q.y * q.y;
   f32   x_squared = q.x * q.x;
+  f32   y_squared = q.y * q.y;
   f32   z_squared = q.z * q.z;
 
   out.rc[0][0]    = 1 - 2 * (y_squared + z_squared);
@@ -92,6 +93,34 @@ Mat44 Mat44::create_rotation(Quaternion q)
 
   out.rc[3][3]    = 1;
   return out;
+}
+Mat44 Mat44::create_rotation(Quaternion q)
+{
+  Mat44 out       = {};
+  f32   xy        = q.x * q.y;
+  f32   xz        = q.x * q.z;
+  f32   xw        = q.w * q.x;
+  f32   yz        = q.y * q.z;
+  f32   yw        = q.y * q.w;
+  f32   zw        = q.z * q.w;
+  f32   x_squared = q.x * q.x;
+  f32   y_squared = q.y * q.y;
+  f32   z_squared = q.z * q.z;
+
+  out.rc[0][0]    = 1 - 2 * (y_squared + z_squared);
+  out.rc[0][1]    = 2 * (xy - zw);
+  out.rc[0][2]    = 2 * (xz + yw);
+
+  out.rc[1][0]    = 2 * (xy + zw);
+  out.rc[1][1]    = 1 - 2 * (x_squared + z_squared);
+  out.rc[1][2]    = 2 * (yz - xw);
+
+  out.rc[2][0]    = 2 * (xz - yw);
+  out.rc[2][1]    = 2 * (yz + xw);
+  out.rc[2][2]    = 1 - 2 * (x_squared + y_squared);
+
+  out.rc[3][3]    = 1;
+  return out.transpose();
 }
 Mat44 Mat44::create_scale(f32 s[3])
 {
@@ -114,7 +143,7 @@ Mat44 Mat44::create_scale(Vector3 s)
 
 Mat44 Mat44::rotate(Quaternion q)
 {
-  return this->mul(Mat44::create_rotation(q));
+  return this->mul(Mat44::create_rotation2(q));
 }
 
 Quaternion Quaternion::interpolate(Quaternion q0, Quaternion q1, f32 t0)
@@ -160,6 +189,7 @@ Mat44 interpolate_transforms(Mat44 first, Mat44 second, f32 time)
 {
   Vector3    first_translation(first.rc[3][0], first.rc[3][1], first.rc[3][2]);
   Vector3    second_translation(second.rc[3][0], second.rc[3][1], second.rc[3][2]);
+
   Vector3    final_translation = interpolate_translation(first_translation, second_translation, time);
 
   Quaternion first_q           = Quaternion::from_mat(first);
