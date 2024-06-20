@@ -29,59 +29,60 @@ void AnimationModel::debug()
   }
 }
 
-// void calculate_new_pose(Mat44* poses, u32 count, Animation animation, u32 ticks)
-// {
+void calculate_new_pose(AnimationModel anim, Mat44* poses, u32 count, Animation animation, u32 ticks)
+{
+  const f32 EPSILON   = 0.0001f;
+  u64       loop_time = (u64)(1000 * animation.duration);
+  f32       time      = (ticks % loop_time) / (f32)loop_time;
+  if (time == 0)
+  {
+    time += EPSILON;
+  }
 
-//   u64   loop_time = (u64)(5000 * animation.duration);
-//   float time      = (ticks % loop_time) / (f32)loop_time;
+  for (u32 i = 0; i < animation.joint_count; i++)
+  {
+    if (time >= animation.duration - EPSILON)
+    {
+      time = animation.duration;
+    }
+    u32        pose_idx = 0;
+    JointPose* pose     = &animation.poses[i];
+    for (; pose_idx < pose->step_count && pose->steps[pose_idx] < time; pose_idx++)
+      ;
 
-//   for (u32 i = 0; i < animation.joint_count; i++)
-//   {
-//     if (time >= animation.duration - 0.001f)
-//     {
-//       time = animation.duration;
-//     }
-//     u32        pose_idx = 0;
-//     JointPose* pose     = &animation.poses[i];
-//     for (; pose_idx < pose->step_count && pose->steps[pose_idx] < time; pose_idx++)
-//       ;
+    float time_between_poses = (time - pose->steps[pose_idx - 1]) / (pose->steps[pose_idx] - pose->steps[pose_idx - 1]);
 
-//     float time_between_poses = (time - pose->steps[pose_idx - 1]) / (pose->steps[pose_idx] - pose->steps[pose_idx - 1]);
-//     time_between_poses       = 0;
+    Mat44 first_transform    = pose->local_transform[pose_idx - 1];
+    Mat44 second_transform   = pose->local_transform[pose_idx];
+    poses[i]                 = interpolate_transforms(first_transform, second_transform, time_between_poses);
+  }
+}
 
-//     pose_idx = 1;
-//     Mat44 first_transform    = pose->local_transform[pose_idx - 1];
-//     Mat44 second_transform   = pose->local_transform[pose_idx];
-//     poses[i]                 = interpolate_transforms(first_transform, second_transform, time_between_poses);
-//   }
-// }
+void update_animation(AnimationModel animation, Shader shader, u32 ticks)
+{
+  Skeleton* skeleton = &animation.skeleton;
+  Mat44     transforms[skeleton->joint_count];
+  Mat44     current_poses[skeleton->joint_count];
+  calculate_new_pose(animation, current_poses, skeleton->joint_count, animation.animations, ticks);
 
-// void update_animation(AnimationModel animation, Shader shader, u32 ticks)
-// {
-//   Skeleton* skeleton = &animation.skeleton;
-//   Mat44     transforms[skeleton->joint_count];
-//   Mat44     current_poses[skeleton->joint_count];
-//   calculate_new_pose(current_poses, skeleton->joint_count, animation.animations, ticks);
+  Mat44 parent_transforms[skeleton->joint_count];
+  for (int i = 0; i < skeleton->joint_count; i++)
+  {
+    parent_transforms[i].identity();
+  }
+  for (u32 i = 0; i < skeleton->joint_count; i++)
+  {
+    Joint* joint             = &skeleton->joints[i];
 
-//   Mat44 parent_transforms[skeleton->joint_count];
-//   for (int i = 0; i < skeleton->joint_count; i++)
-//   {
-//     parent_transforms[i].identity();
-//   }
+    Mat44  current_local     = current_poses[i];
+    Mat44  parent_transform  = parent_transforms[joint->m_iParent];
 
-//   for (u32 i = 0; i < skeleton->joint_count; i++)
-//   {
-//     Joint* joint             = &skeleton->joints[i];
-
-//     Mat44  current_local     = current_poses[i];
-//     Mat44  parent_transform  = parent_transforms[joint->m_iParent];
-
-//     Mat44  current_transform = parent_transform.mul(current_local);
-//     parent_transforms[i]     = current_transform;
-//     transforms[i]            = current_transform.mul(joint->m_invBindPose);
-//   }
-//   shader.set_mat4("jointTransforms", &transforms[0].m[0], skeleton->joint_count);
-// }
+    Mat44  current_transform = parent_transform.mul(current_local);
+    parent_transforms[i]     = current_transform;
+    transforms[i]            = current_transform.mul(joint->m_invBindPose);
+  }
+  shader.set_mat4("jointTransforms", &transforms[0].m[0], skeleton->joint_count);
+}
 
 static Buffer sta_xml_create_buffer_from_content(XML_Node* node)
 {
@@ -293,7 +294,8 @@ static Mat44 convert_z_to_y_up()
   Mat44 res;
   res.identity();
   res = res.rotate_x(-90);
-  return res.transpose();
+  res.transpose();
+  return res;
 }
 
 static Mat44 CORRECTION = convert_z_to_y_up();
@@ -311,7 +313,7 @@ static void  extract_main_joint_data(JointData* joint, XML_Node* child, bool is_
   Buffer    buffer      = sta_xml_create_buffer_from_content(matrix_node);
 
   buffer.parse_float_array(&joint->local_bind_transform.m[0], 16);
-  joint->local_bind_transform = joint->local_bind_transform.transpose();
+  joint->local_bind_transform.transpose();
 }
 
 static void load_joint_data(JointData* joint, XML_Node* node, bool is_root, SkinningData* skinning_data)
@@ -590,7 +592,7 @@ static void load_joint_transforms(Skeleton* skeleton, AnimationData* animation_d
     JointTransformData* transform  = &frame_data->transforms[joint_transform_index];
 
     buffer.parse_float_array(&transform->local_transform.m[0], 16);
-    transform->local_transform = transform->local_transform.transpose();
+    transform->local_transform.transpose();
   }
 }
 

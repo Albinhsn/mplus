@@ -8,63 +8,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#define GLTF_CHUNK_TYPE_JSON 0x4E4F534A
-#define GLTF_CHUNK_TYPE_BIN  0x004E4942
-
-enum GLTF_ChannelTargetPath
-{
-  CHANNEL_TARGET_PATH_TRANSLATION,
-  CHANNEL_TARGET_PATH_SCALE,
-  CHANNEL_TARGET_PATH_ROTATION
-};
-
-enum GLTF_ComponentType
-{
-  COMPONENT_TYPE_BYTE           = 5120,
-  COMPONENT_TYPE_UNSIGNED_BYTE  = 5121,
-  COMPONENT_TYPE_SHORT          = 5122,
-  COMPONENT_TYPE_UNSIGNED_SHORT = 5123,
-  COMPONENT_TYPE_UNSIGNED_INT   = 5125,
-  COMPONENT_TYPE_FLOAT          = 5126
-};
-
-enum GLTF_AccessorType
-{
-  ACCESSOR_TYPE_VEC2,
-  ACCESSOR_TYPE_VEC3,
-  ACCESSOR_TYPE_VEC4,
-  ACCESSOR_TYPE_SCALAR,
-  ACCESSOR_TYPE_MAT4
-};
-
-struct GLTF_Header
-{
-  u32 magic;
-  u32 version;
-  u32 length;
-};
-
-struct GLTF_Chunk
-{
-  u32            chunk_length;
-  u32            chunk_type;
-  unsigned char* chunk_data;
-};
-
-struct GLTF_BufferView
-{
-  u8* buffer;
-  u32 buffer_length;
-};
-
-struct GLTF_Accessor
-{
-  u32                buffer_view_index;
-  GLTF_ComponentType component_type;
-  u32                count;
-  GLTF_AccessorType  type;
-};
-
 static inline void read_chunk(Buffer* buffer, GLTF_Chunk* chunk)
 {
 
@@ -258,85 +201,18 @@ static f32 calculate_steps(AnimationData* data, LL* steps, u32& step_count)
   return max_duration;
 }
 
-bool parse_gltf(AnimationModel* model, const char* filename)
+static void parse_skeleton(Skeleton* skeleton, JsonValue* skins, u32** node_index_to_joint_index, GLTF_BufferView* buffer_views, JsonValue* json_nodes)
 {
-
-  Buffer buffer = {};
-  sta_read_file(&buffer, filename);
-  GLTF_Header header = *(GLTF_Header*)buffer.read(sizeof(GLTF_Header));
-
-  GLTF_Chunk  chunk0 = {};
-  GLTF_Chunk  chunk1 = {};
-  read_chunk(&buffer, &chunk0);
-  read_chunk(&buffer, &chunk1);
-
-  Json   json_data = {};
-  Arena  arena(4096 * 4096);
-  Buffer buffer_chunk0 = {};
-  buffer_chunk0.buffer = (char*)chunk0.chunk_data;
-  buffer_chunk0.len    = chunk0.chunk_length;
-  bool result          = sta_deserialize_json_from_string(&buffer_chunk0, &arena, &json_data);
-  if (!result)
-  {
-    printf("Failed to deserialize json!\n");
-    return false;
-  }
-  // sta_serialize_json_to_file(&json_data, "full.json");
-  JsonObject* head       = &json_data.obj;
-  JsonValue*  json_nodes = head->lookup_value("nodes");
-  assert(json_nodes->type == JSON_ARRAY && "Nodes should be an array?");
-
-  Json js           = {};
-  js.headType       = JSON_VALUE;
-  JsonValue* scenes = head->lookup_value("scenes");
-  js.value          = *scenes;
-  // sta_serialize_json_to_file(&js, "scenes.json");
-  JsonValue* animations = head->lookup_value("animations");
-  js.value              = *animations;
-  // sta_serialize_json_to_file(&js, "animations.json");
-  JsonValue* meshes = head->lookup_value("meshes");
-  js.value          = *meshes;
-  // sta_serialize_json_to_file(&js, "meshes.json");
-  JsonValue* skins = head->lookup_value("skins");
-  js.value         = *skins;
-  // sta_serialize_json_to_file(&js, "skins.json");
-  JsonValue* buffers = head->lookup_value("buffers");
-  js.value           = *buffers;
-  // sta_serialize_json_to_file(&js, "buffers.json");
-  JsonValue* bufferViews = head->lookup_value("bufferViews");
-  js.value               = *bufferViews;
-  // sta_serialize_json_to_file(&js, "bufferViews.json");
-  JsonValue* accessors_value = head->lookup_value("accessors");
-  js.value                   = *accessors_value;
-  // sta_serialize_json_to_file(&js, "accessors.json");
-
-  GLTF_BufferView* buffer_views;
-  u32              buffer_views_count;
-  parse_buffer_views(&chunk1, &buffer_views, buffer_views_count, bufferViews);
-
-  GLTF_Accessor* accessors;
-  u32            accessor_count;
-  parse_accessors(&accessors, accessor_count, accessors_value);
-
-  // parse the correct order from skins
-  // parse the inverse bind matrices
 
   JsonObject*      skin                             = skins->arr->values[0].obj;
   u32              inverse_bind_matrices_index      = skin->lookup_value("inverseBindMatrices")->number;
   GLTF_BufferView* inverse_bind_matrix_buffer_view  = &buffer_views[inverse_bind_matrices_index];
   f32*             inverseBindMatrices_buffer       = (f32*)inverse_bind_matrix_buffer_view->buffer;
   u32              inverseBindMatrices_buffer_index = 0;
-
   JsonArray*       joints_array                     = skin->lookup_value("joints")->arr;
-  Skeleton*        skeleton                         = &model->skeleton;
   skeleton->joints                                  = (Joint*)sta_allocate_struct(Joint, joints_array->arraySize);
-  u32* node_index_to_joint_index                    = (u32*)sta_allocate_struct(u32, joints_array->arraySize);
+  *node_index_to_joint_index                        = (u32*)sta_allocate_struct(u32, joints_array->arraySize);
   skeleton->joint_count                             = joints_array->arraySize;
-  for (u32 i = 0; i < joints_array->arraySize; i++)
-  {
-    Joint* joint     = &skeleton->joints[i];
-    joint->m_iParent = 0;
-  }
   for (u32 i = 0; i < joints_array->arraySize; i++)
   {
     Joint* joint = &skeleton->joints[i];
@@ -346,12 +222,10 @@ bool parse_gltf(AnimationModel* model, const char* filename)
     }
     inverseBindMatrices_buffer_index++;
 
-    // grab index of node
-    u32 node_index                        = joints_array->values[i].number;
-    node_index_to_joint_index[node_index] = i;
+    u32 node_index                           = joints_array->values[i].number;
+    (*node_index_to_joint_index)[node_index] = i;
 
-    // grab the node
-    JsonObject* node_object = json_nodes->arr->values[node_index].obj;
+    JsonObject* node_object                  = json_nodes->arr->values[node_index].obj;
 
     // grab the name
     joint->m_name = node_object->lookup_value("name")->string;
@@ -381,9 +255,6 @@ bool parse_gltf(AnimationModel* model, const char* filename)
       R = Mat44::create_rotation(Quaternion(rotation_array->values[0].number, rotation_array->values[1].number, rotation_array->values[2].number, rotation_array->values[3].number));
     }
 
-    // do the matmuls to get m_mat
-    // local transformation
-    // global is from parent -> this node
     joint->m_mat = T.mul(R).mul(S);
   }
 
@@ -400,13 +271,15 @@ bool parse_gltf(AnimationModel* model, const char* filename)
       JsonArray* children_array = children->arr;
       for (u32 j = 0; j < children_array->arraySize; j++)
       {
-        u32 child_idx                                                    = children_array->values[j].number;
-        skeleton->joints[node_index_to_joint_index[child_idx]].m_iParent = i;
+        u32 child_idx                                                       = children_array->values[j].number;
+        skeleton->joints[(*node_index_to_joint_index)[child_idx]].m_iParent = i;
       }
     }
   }
+}
 
-  // parse meshes
+static void parse_mesh(AnimationModel* model, GLTF_Accessor* accessors, JsonValue* meshes, GLTF_BufferView* buffer_views)
+{
   JsonObject*   primitives             = meshes->arr->values[0].obj->lookup_value("primitives")->arr->values[0].obj;
   JsonObject*   attributes             = primitives->lookup_value("attributes")->obj;
   u32           indices_accessor_index = primitives->lookup_value("indices")->number;
@@ -440,11 +313,6 @@ bool parse_gltf(AnimationModel* model, const char* filename)
   f32* weights_buffer  = (f32*)buffer_views[weights_accessor.buffer_view_index].buffer;
   model->vertex_count  = position_accessor.count;
   model->vertices      = (SkinnedVertex*)sta_allocate_struct(SkinnedVertex, model->vertex_count);
-  assert(model->vertex_count * 4 == buffer_views[weights_accessor.buffer_view_index].buffer_length / 4);
-  assert(model->vertex_count * 4 == buffer_views[joints_accessor.buffer_view_index].buffer_length);
-  assert(model->vertex_count * 3 == buffer_views[position_accessor.buffer_view_index].buffer_length / 4);
-  assert(model->vertex_count * 3 == buffer_views[normal_accessor.buffer_view_index].buffer_length / 4);
-  assert(model->vertex_count * 2 == buffer_views[texcoord_accessor.buffer_view_index].buffer_length / 4);
   for (u32 i = 0; i < model->vertex_count; i++)
   {
     SkinnedVertex* vertex   = &model->vertices[i];
@@ -465,7 +333,10 @@ bool parse_gltf(AnimationModel* model, const char* filename)
     vertex->joint_weight[2] = weights_buffer[v4_index + 2];
     vertex->joint_weight[3] = weights_buffer[v4_index + 3];
   }
+}
 
+static void parse_animations(AnimationModel* model, Skeleton* skeleton, JsonValue* animations, GLTF_Accessor* accessors, GLTF_BufferView* buffer_views, u32* node_index_to_joint_index)
+{
   JsonArray* animations_array   = animations->arr;
   model->clip_count             = animations_array->arraySize;
   JsonObject* animation_obj     = animations_array->values[0].obj;
@@ -498,7 +369,6 @@ bool parse_gltf(AnimationModel* model, const char* filename)
     f32*           data_array  = (f32*)buffer_views[output->buffer_view_index].buffer;
 
     u32            joint_index = node_index_to_joint_index[node_index];
-    assert(input->count == output->count && "mismatch in data size?");
 
     // Store this just as T,R,S instead :)
     AnimationData* data = &animation_data[joint_index];
@@ -520,7 +390,6 @@ bool parse_gltf(AnimationModel* model, const char* filename)
       data->R_count = input->count;
       data->R       = (Quaternion*)sta_allocate_struct(Mat44, input->count);
       data->R_steps = (f32*)sta_allocate_struct(f32, input->count);
-      assert(buffer_views[input->buffer_view_index].buffer_length * 4 == buffer_views[output->buffer_view_index].buffer_length && "Mismatch in translation size?");
       for (u32 j = 0; j < input->count; j++)
       {
         u32 data_index   = j * 4;
@@ -655,14 +524,56 @@ bool parse_gltf(AnimationModel* model, const char* filename)
   {
     animation->poses[empty[i]].steps[1] = animation->duration;
   }
-  for (u32 i = 0; i < animation->joint_count; i++)
+}
+
+bool parse_gltf(AnimationModel* model, const char* filename)
+{
+
+  Buffer buffer = {};
+  sta_read_file(&buffer, filename);
+  GLTF_Header header = *(GLTF_Header*)buffer.read(sizeof(GLTF_Header));
+
+  GLTF_Chunk  chunk0 = {};
+  GLTF_Chunk  chunk1 = {};
+  read_chunk(&buffer, &chunk0);
+  read_chunk(&buffer, &chunk1);
+
+  Json   json_data = {};
+  Buffer buffer_chunk0((char*)chunk0.chunk_data, chunk0.chunk_length);
+  bool   result = sta_deserialize_json_from_string(&buffer_chunk0, &json_data);
+  if (!result)
   {
-    for (u32 j = 0; j < animation->poses[i].step_count; j++)
-    {
-      // printf("%f ", animation->poses[i].steps[j]);
-    }
-    // printf("\n");
+    printf("Failed to deserialize json!\n");
+    return false;
   }
+
+  JsonObject* head       = &json_data.obj;
+  JsonValue*  json_nodes = head->lookup_value("nodes");
+  assert(json_nodes->type == JSON_ARRAY && "Nodes should be an array?");
+
+  JsonValue*       scenes          = head->lookup_value("scenes");
+  JsonValue*       animations      = head->lookup_value("animations");
+  JsonValue*       meshes          = head->lookup_value("meshes");
+  JsonValue*       skins           = head->lookup_value("skins");
+  JsonValue*       buffers         = head->lookup_value("buffers");
+  JsonValue*       bufferViews     = head->lookup_value("bufferViews");
+  JsonValue*       accessors_value = head->lookup_value("accessors");
+
+  GLTF_BufferView* buffer_views;
+  u32              buffer_views_count;
+  parse_buffer_views(&chunk1, &buffer_views, buffer_views_count, bufferViews);
+
+  GLTF_Accessor* accessors;
+  u32            accessor_count;
+  parse_accessors(&accessors, accessor_count, accessors_value);
+
+  Skeleton* skeleton = &model->skeleton;
+  u32*      node_index_to_joint_index;
+  parse_skeleton(skeleton, skins, &node_index_to_joint_index, buffer_views, json_nodes);
+
+  parse_mesh(model, accessors, meshes, buffer_views);
+
+  parse_animations(model, skeleton, animations, accessors, buffer_views, node_index_to_joint_index);
 
   return true;
 }

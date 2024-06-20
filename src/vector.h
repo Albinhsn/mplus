@@ -181,7 +181,7 @@ public:
   static Mat44 create_rotation(f32 q[4]);
   static Mat44 create_scale(Vector3 s);
   static Mat44 create_scale(f32 s[3]);
-  Mat44        transpose();
+  void transpose();
   Mat44        mul(Mat44 m);
   Vector4      mul(Vector4 v);
   Mat44        inverse();

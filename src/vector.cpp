@@ -108,19 +108,19 @@ Mat44 Mat44::create_rotation(Quaternion q)
   f32   z_squared = q.z * q.z;
 
   out.rc[0][0]    = 1 - 2 * (y_squared + z_squared);
-  out.rc[0][1]    = 2 * (xy - zw);
-  out.rc[0][2]    = 2 * (xz + yw);
+  out.rc[1][0]    = 2 * (xy - zw);
+  out.rc[2][0]    = 2 * (xz + yw);
 
-  out.rc[1][0]    = 2 * (xy + zw);
+  out.rc[0][1]    = 2 * (xy + zw);
   out.rc[1][1]    = 1 - 2 * (x_squared + z_squared);
-  out.rc[1][2]    = 2 * (yz - xw);
+  out.rc[2][1]    = 2 * (yz - xw);
 
-  out.rc[2][0]    = 2 * (xz - yw);
-  out.rc[2][1]    = 2 * (yz + xw);
+  out.rc[0][2]    = 2 * (xz - yw);
+  out.rc[1][2]    = 2 * (yz + xw);
   out.rc[2][2]    = 1 - 2 * (x_squared + y_squared);
 
   out.rc[3][3]    = 1;
-  return out.transpose();
+  return out;
 }
 Mat44 Mat44::create_scale(f32 s[3])
 {
@@ -305,7 +305,8 @@ Mat44 Mat44::inverse()
   f32 det   = this->determinant();
   f32 scale = 1.0f / det;
   res.scale(Vector3(scale, scale, scale));
-  return res.transpose();
+  res.transpose();
+  return res;
 }
 
 Mat44 Mat44::rotate_x(f32 degrees)
@@ -443,7 +444,7 @@ Vector4 Mat44::mul(Vector4 v)
   return res;
 }
 
-Mat44 Mat44::transpose()
+void Mat44::transpose()
 {
   Mat44 out = {};
   for (int i = 0; i < 4; i++)
@@ -453,7 +454,7 @@ Mat44 Mat44::transpose()
       out.rc[i][j] = this->rc[j][i];
     }
   }
-  return out;
+  *this = out;
 }
 
 Mat44 Mat44::look_at(Vector3 x, Vector3 y, Vector3 z)

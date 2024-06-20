@@ -1195,7 +1195,7 @@ static bool json_parse_value(JsonValue* value, Buffer* buffer)
   }
 }
 
-bool sta_deserialize_json_from_string(Buffer* buffer, Arena* arena, Json* json)
+bool sta_deserialize_json_from_string(Buffer* buffer, Json* json)
 {
   bool res;
   buffer->skip_whitespace();
@@ -1247,7 +1247,7 @@ bool sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filena
   {
     return false;
   }
-  return sta_deserialize_json_from_string(&fileContent, arena, json);
+  return sta_deserialize_json_from_string(&fileContent, json);
 }
 
 void sta_json_debug(Json* json)

@@ -301,7 +301,7 @@ bool  sta_xml_parse_version_and_encoding(XML* xml, Buffer* buffer);
 bool  remove_xml_key(XML_Node* xml, const char* node_name);
 void  write_xml_to_file(XML* xml, const char* filename);
 
-bool  sta_deserialize_json_from_string(Buffer* fileContent, Arena* arena, Json* json);
+bool  sta_deserialize_json_from_string(Buffer* buffer, Json* json);
 bool  sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filename);
 bool  sta_serialize_json_to_file(Json* json, const char* filename);
 void  sta_json_debug(Json* json);
