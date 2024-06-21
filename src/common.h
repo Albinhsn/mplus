@@ -154,24 +154,31 @@ void                        exitProfileBlock(ProfileBlock* block);
 #define TimeFunction
 #endif
 
-struct Logger
-{
-  FILE* filePtr;
-};
-typedef struct Logger Logger;
-
 enum LoggingLevel
 {
   LOGGING_LEVEL_INFO,
   LOGGING_LEVEL_WARNING,
   LOGGING_LEVEL_ERROR,
+  LOGGING_LEVEL_COUNT
 };
 typedef enum LoggingLevel LoggingLevel;
 
-void                      sta_log(Logger* logger, LoggingLevel level, const char* msg);
+struct Logger
+{
+  FILE* file_ptr;
 
-bool                      sta_initLogger(Logger* logger, const char* filename);
-bool                      sta_destroyLogger(Logger* logger);
+public:
+  Logger()
+  {
+  }
+  bool init_log_to_file(const char* filename);
+  bool destroy_log_to_file();
+  void log(LoggingLevel level, const char* msg);
+
+private:
+  inline void send_log_message(const char* msg, const char* color);
+};
+typedef struct Logger Logger;
 
 struct String
 {

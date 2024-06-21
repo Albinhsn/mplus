@@ -59,6 +59,7 @@ public:
   u32            add_sequence(InputEvent* events, u32 event_count);
   bool           check_sequence(u32 id);
   bool           should_quit();
+  bool           is_left_mouse_clicked();
 
 private:
 };

@@ -213,6 +213,7 @@ typedef Vector3 Point3;
 struct Color
 {
 public:
+  Color(){}
   Color(f32 r, f32 g, f32 b, f32 a)
   {
     this->r = r;
@@ -251,7 +252,7 @@ float   in_sphere(Point3 a, Point3 b, Point3 c, Point3 d, Point3 e);
 Vector3 interpolate_translation(Vector3 v0, Vector3 v1, f32 t);
 Mat44   interpolate_transforms(Mat44 first, Mat44 second, f32 time);
 #define BLACK Color(0, 0, 0, 0)
-#define WHITE Color(0, 0, 0, 0)
+#define WHITE Color(1, 1, 1, 1)
 #define RED   Color(1, 0, 0, 1)
 #define GREEN Color(0, 1, 0, 1)
 #define BLUE  Color(0, 0, 1, 1)

@@ -243,52 +243,33 @@ void displayProfilingResult()
  =========================================
 */
 
-static inline void sta_writeToLogFile(Logger* logger, const char* msg)
-{
-  if (logger && logger->filePtr)
-  {
-    fprintf(logger->filePtr, "%s\n", msg);
-  }
-}
-
-static inline void sta_sendLogMessage(Logger* logger, const char* msg, const char* color)
+inline void Logger::send_log_message(const char* msg, const char* color)
 {
   fprintf(stderr, "%s%s\n", color, msg);
-  sta_writeToLogFile(logger, msg);
+  if (this->file_ptr)
+  {
+    fprintf(this->file_ptr, "%s\n", msg);
+  }
 }
 
-void sta_log(Logger* logger, LoggingLevel level, const char* msg)
+bool Logger::init_log_to_file(const char* filename)
 {
-  switch (level)
-  {
-  case LOGGING_LEVEL_INFO:
-  {
-    sta_sendLogMessage(logger, msg, ANSI_COLOR_GREEN);
-    break;
-  }
-  case LOGGING_LEVEL_WARNING:
-  {
-    sta_sendLogMessage(logger, msg, ANSI_COLOR_YELLOW);
-    break;
-  }
-  case LOGGING_LEVEL_ERROR:
-  {
-    sta_sendLogMessage(logger, msg, ANSI_COLOR_RED);
-    break;
-  }
-  }
+
+  this->file_ptr = fopen(filename, "a");
+  return this->file_ptr != 0;
+}
+bool Logger::destroy_log_to_file()
+{
+  return fclose(this->file_ptr);
+}
+void Logger::log(LoggingLevel level, const char* msg)
+{
+  const char* levels[LOGGING_LEVEL_COUNT] = {
+      ANSI_COLOR_GREEN,
+      ANSI_COLOR_YELLOW,
+      ANSI_COLOR_RED,
+  };
+  assert(LOGGING_LEVEL_COUNT == 3 && "Need to fill in the color for the logging level!");
+  this->send_log_message(msg, levels[level]);
   printf(ANSI_COLOR_RESET);
 }
-
-bool sta_initLogger(Logger* logger, const char* file_name)
-{
-  logger->filePtr = fopen(file_name, "a");
-  return logger->filePtr != 0;
-}
-
-bool sta_destroyLogger(Logger* logger)
-{
-  return fclose(logger->filePtr);
-}
-
-

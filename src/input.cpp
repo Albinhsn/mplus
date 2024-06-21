@@ -4,6 +4,18 @@
 #include <SDL2/SDL_timer.h>
 #include <cassert>
 
+bool InputState::is_left_mouse_clicked()
+{
+  for (u32 i = 0; i < this->event_count; i++)
+  {
+    if (this->events[i].state == EVENT_MOUSE_RELEASE && this->events[i].key == MOUSE_BUTTON_LEFT)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 void InputSequence::update(InputEvent* new_events, u32 new_event_count)
 {
   u32 currently_matched = __builtin_popcount(this->matched);

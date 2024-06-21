@@ -6,6 +6,7 @@ class Shader
 {
 public:
   unsigned int id;
+  Shader(){}
   Shader(const char* vertex_path, const char* fragment_path);
   Shader(const char* vertex_path, const char * tessellation_control_path, const char * tessellation_evaluation_path, const char* fragment_path);
 
