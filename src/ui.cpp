@@ -11,12 +11,12 @@ void UI::add_layout(f32 min[2], f32 max[2])
 
 UI_Comm UI::comm_from_widget(UI_Widget* widget)
 {
-  UI_Comm comm  = {};
+  UI_Comm comm      = {};
 
-  f32     x     = (this->input->mouse_position[0] / (f32)this->renderer->screen_width) * 2.0f - 1.0f;
-  f32     y     = (this->input->mouse_position[1] / (f32)this->renderer->screen_height) * 2.0f - 1.0f;
+  f32     x         = (this->input->mouse_position[0] / (f32)this->renderer->screen_width) * 2.0f - 1.0f;
+  f32     y         = (this->input->mouse_position[1] / (f32)this->renderer->screen_height) * 2.0f - 1.0f;
 
-  comm.hovering = widget->x[0] <= x && x <= widget->x[1] && widget->y[1] <= y && y <= widget->y[0];
+  comm.hovering     = widget->x[0] <= x && x <= widget->x[1] && widget->y[1] <= y && y <= widget->y[0];
 
   comm.left_clicked = comm.hovering && this->input->is_left_mouse_clicked();
   comm.widget       = widget;

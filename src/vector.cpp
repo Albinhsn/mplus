@@ -565,6 +565,11 @@ Vector3 Vector3::cross(Vector3 v0, Vector3 v1)
   return out;
 }
 
+Vector2 Vector2::sub(Vector2 v)
+{
+  return Vector2(this->x - v.x, this->y - v.y);
+}
+
 float Vector2::dot_perp(Vector2 v)
 {
   return this->x * v.y - this->y * v.x;

@@ -244,11 +244,6 @@ public:
   static ConvexHull2D create_quick(Point2* points, int point_count);
 };
 
-float   orient2d(Point2 a, Point2 b, Point2 c);
-float   orient3d(Point3 a, Point3 b, Point3 c);
-float   in_circle2d(Point2 a, Point2 b, Point2 c, Point2 d);
-float   in_sphere(Point3 a, Point3 b, Point3 c, Point3 d, Point3 e);
-
 Vector3 interpolate_translation(Vector3 v0, Vector3 v1, f32 t);
 Mat44   interpolate_transforms(Mat44 first, Mat44 second, f32 time);
 #define BLACK Color(0, 0, 0, 0)

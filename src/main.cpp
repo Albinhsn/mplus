@@ -22,6 +22,28 @@ public:
   Vector2 points[3];
 };
 
+inline float cross_2d(Point2 u, Point2 v)
+{
+  return u.y * v.x - u.x * v.y;
+}
+
+inline bool point_in_triangle_2d(Triangle t, Point2 p)
+{
+  if (cross_2d(p.sub(t.points[0]), t.points[1].sub(t.points[0])) < 0.0f)
+  {
+    return false;
+  }
+  if (cross_2d(p.sub(t.points[1]), t.points[2].sub(t.points[1])) < 0.0f)
+  {
+    return false;
+  }
+  if (cross_2d(p.sub(t.points[2]), t.points[0].sub(t.points[2])) < 0.0f)
+  {
+    return false;
+  }
+  return true;
+}
+
 inline float orient_2d(Vector2 v0, Vector2 v1, Vector2 p)
 {
   return (v0.x - p.x) * (v1.y - p.y) - (v0.y - p.y) * (v1.x - p.x);
@@ -42,18 +64,60 @@ void get_convex_vertices(PointDLL** _convex, u32& convex_count, Vector2* v_point
 
 void get_ear_vertices(PointDLL** _ears, u32& ear_count, Vector2* v_points, u32 point_count)
 {
+  ear_count      = 0;
   PointDLL* ears = (PointDLL*)sta_allocate_struct(PointDLL, point_count);
+
+  for (i32 i = 0; i < point_count; i++)
+  {
+    printf("%d: ", i);
+    v_points[i].debug();
+  }
 
   // constructs a doubly linked list of the points
   for (i32 i = 0; i < point_count; i++)
   {
-    ears[i].point = v_points[i];
-    ears[i].next  = &ears[(i + 1) % point_count];
-    ears[i].prev  = &ears[i - 1 < 0 ? point_count - 1 : i - 1];
-    ears[i].idx   = i;
-  }
+    Vector2 v0   = v_points[i - 1 < 0 ? point_count - 1 : i - 1];
+    Vector2 v1   = v_points[i];
+    Vector2 v2   = v_points[(i + 1) % point_count];
+    f32     v0v1 = orient_2d(v0, v1, v2);
+    f32     v1v2 = orient_2d(v1, v2, v0);
 
-  *_ears = ears;
+    // test if any other vertex is inside the triangle from these vertices
+    Triangle t = {v0, v1, v2};
+
+    if (v0v1 > 0 && v1v2 > 0)
+    {
+      bool found = false;
+      for (u32 j = 0; j < point_count; j++)
+      {
+        if (j < i - 1 && j > i + 1 && point_in_triangle_2d(t, v_points[j]))
+        {
+          printf("Found intersection %d: %d\n", j, i);
+          found = true;
+          break;
+        }
+      }
+
+      if (!found)
+      {
+        ears[ear_count].point = v_points[i];
+        ears[ear_count].next  = &ears[(ear_count + 1) % point_count];
+        ears[ear_count].prev  = &ears[i - 1 < 0 ? 0 : i - 1];
+        printf("Ear: %d\n", i);
+        printf("%f %f\n", v0v1, v1v2);
+        printf("-\n");
+        v0.debug();
+        v1.debug();
+        v2.debug();
+        printf("----\n");
+        ear_count++;
+      }
+    }
+  }
+  ears[0].prev             = &ears[ear_count - 1];
+  ears[ear_count - 1].next = &ears[0];
+
+  *_ears                   = ears;
 }
 
 // assumes that it is a simple polygon!
@@ -138,7 +202,7 @@ int main()
   };
   for (u32 i = 0; i < ArrayCount(point_data); i++)
   {
-    point_data[i].x = (point_data[i].x - 1.0f) / 2.0f;
+    // point_data[i].x = (point_data[i].x - 1.0f) / 2.0f;
   }
 
   Triangle* result;
@@ -163,7 +227,7 @@ int main()
   // run algorithm and render triangles
   // do this split screen style
 
-    ui.add_layout(min, max);
+  ui.add_layout(min, max);
   while (true)
   {
     input_state.update();
@@ -179,19 +243,20 @@ int main()
 
     renderer.clear_framebuffer();
 
-    // line_shader.use();
-    // renderer.render_arrays(line_buffer, GL_LINES, ArrayCount(point_data));
+    line_shader.use();
+    renderer.render_arrays(line_buffer, GL_LINES, ArrayCount(point_data));
 
-    // tri_shader.use();
-    // renderer.render_buffer(tri_buffer);
+    tri_shader.use();
+    renderer.render_buffer(tri_buffer);
 
-    String s = {};
-    f32 loc_min[2] = {-0.25f, 0.25f};
-    f32 loc_max[2] = {0.25f, -0.25f};
-    if (ui.UI_Button(s, loc_min, loc_max).left_clicked)
-    {
-      printf("Clicked!\n");
-    }
+    // String s          = {};
+    // f32    loc_min[2] = {-0.25f, 0.25f};
+    // f32    loc_max[2] = {0.25f, -0.25f};
+    // if (ui.UI_Button(s, loc_min, loc_max).left_clicked)
+    // {
+    //   printf("Clicked!\n");
+    //   break;
+    // }
 
     renderer.swap_buffers();
   }
