@@ -129,7 +129,7 @@ int main()
   Shader     shader("./shaders/animation.vert", "./shaders/animation.frag");
 
   TargaImage image = {};
-  sta_read_targa_from_file_rgba(&image, "./data/unarmed_man/Peasant_Man_diffuse.tga");
+  sta_targa_read_from_file_rgba(&image, "./data/unarmed_man/Peasant_Man_diffuse.tga");
 
   BufferAttributes attributes[5] = {
       {3, GL_FLOAT},

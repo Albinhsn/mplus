@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include <cstdio>
+#include <cstring>
 
 typedef class Mat44 Mat44;
 struct Quaternion
@@ -27,7 +28,8 @@ public:
     this->w = w;
   }
   static Quaternion from_mat(Mat44 m);
-  static Quaternion interpolate(Quaternion q0, Quaternion q1, f32 t);
+  static Quaternion interpolate_linear(Quaternion q0, Quaternion q1, f32 t);
+  static Quaternion interpolate_slerp(Quaternion q0, Quaternion q1, f32 t);
   f32               x, y, z, w;
 };
 
@@ -165,12 +167,20 @@ public:
 class Mat44
 {
 public:
+  Mat44()
+  {
+    this->identity();
+  }
   union
   {
     float m[16];
     float rc[4][4];
   };
 
+  void clear()
+  {
+    memset(&this->m[0], 0, 16 * 4);
+  }
   void         debug();
   float        determinant();
   static Mat44 look_at(Vector3 x, Vector3 y, Vector3 z);
@@ -181,7 +191,7 @@ public:
   static Mat44 create_rotation(f32 q[4]);
   static Mat44 create_scale(Vector3 s);
   static Mat44 create_scale(f32 s[3]);
-  void transpose();
+  void         transpose();
   Mat44        mul(Mat44 m);
   Vector4      mul(Vector4 v);
   Mat44        inverse();
@@ -233,13 +243,13 @@ public:
   static ConvexHull2D create_quick(Point2* points, int point_count);
 };
 
-float orient2d(Point2 a, Point2 b, Point2 c);
-float orient3d(Point3 a, Point3 b, Point3 c);
-float in_circle2d(Point2 a, Point2 b, Point2 c, Point2 d);
-float in_sphere(Point3 a, Point3 b, Point3 c, Point3 d, Point3 e);
+float   orient2d(Point2 a, Point2 b, Point2 c);
+float   orient3d(Point3 a, Point3 b, Point3 c);
+float   in_circle2d(Point2 a, Point2 b, Point2 c, Point2 d);
+float   in_sphere(Point3 a, Point3 b, Point3 c, Point3 d, Point3 e);
 
 Vector3 interpolate_translation(Vector3 v0, Vector3 v1, f32 t);
-Mat44 interpolate_transforms(Mat44 first, Mat44 second, f32 time);
+Mat44   interpolate_transforms(Mat44 first, Mat44 second, f32 time);
 #define BLACK Color(0, 0, 0, 0)
 #define WHITE Color(0, 0, 0, 0)
 #define RED   Color(1, 0, 0, 1)

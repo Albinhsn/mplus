@@ -146,7 +146,7 @@ Mat44 Mat44::rotate(Quaternion q)
   return this->mul(Mat44::create_rotation2(q));
 }
 
-Quaternion Quaternion::interpolate(Quaternion q0, Quaternion q1, f32 t0)
+Quaternion Quaternion::interpolate_linear(Quaternion q0, Quaternion q1, f32 t0)
 {
   float x, y, z, w;
 
@@ -194,7 +194,7 @@ Mat44 interpolate_transforms(Mat44 first, Mat44 second, f32 time)
 
   Quaternion first_q           = Quaternion::from_mat(first);
   Quaternion second_q          = Quaternion::from_mat(second);
-  Quaternion final_q           = Quaternion::interpolate(first_q, second_q, time);
+  Quaternion final_q           = Quaternion::interpolate_linear(first_q, second_q, time);
 
   Mat44      res               = {};
   res.identity();
@@ -294,13 +294,23 @@ Mat44 Mat44::inverse()
              {this->rc[1][0], this->rc[1][1], this->rc[1][2]}, //
              {this->rc[2][0], this->rc[2][1], this->rc[2][2]}}  //
   };
-  Mat44 res = {
-      .rc = {{m00.determinant(), -m01.determinant(), m02.determinant(), -m03.determinant()},
-             {-m10.determinant(), m11.determinant(), -m12.determinant(), m13.determinant()},
-             {m20.determinant(), -m21.determinant(), m22.determinant(), -m23.determinant()},
-             {-m30.determinant(), m31.determinant(), -m32.determinant(), m33.determinant()}}
-  };
-  // debugmat4x4(res);
+  Mat44 res = {};
+  res.m[0]  = m00.determinant();
+  res.m[1]  = -m01.determinant();
+  res.m[2]  = m02.determinant();
+  res.m[3]  = -m03.determinant();
+  res.m[4]  = -m10.determinant();
+  res.m[5]  = m11.determinant();
+  res.m[6]  = -m12.determinant();
+  res.m[7]  = m13.determinant();
+  res.m[8]  = m20.determinant();
+  res.m[9]  = -m21.determinant();
+  res.m[10] = m22.determinant();
+  res.m[11] = -m23.determinant();
+  res.m[12] = -m30.determinant();
+  res.m[13] = m31.determinant();
+  res.m[14] = -m32.determinant();
+  res.m[15] = m33.determinant();
 
   f32 det   = this->determinant();
   f32 scale = 1.0f / det;

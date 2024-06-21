@@ -298,27 +298,27 @@ struct XML
 bool  sta_xml_parse_from_buffer(XML_Node* xml, Buffer* buffer);
 u32   sta_xml_get_child_count_by_name(XML_Node* node, const char* name);
 bool  sta_xml_parse_version_and_encoding(XML* xml, Buffer* buffer);
-bool  remove_xml_key(XML_Node* xml, const char* node_name);
-void  write_xml_to_file(XML* xml, const char* filename);
+bool  sta_xml_remove_key(XML_Node* xml, const char* node_name);
+void  sta_xml_write_to_file(XML* xml, const char* filename);
 
-bool  sta_deserialize_json_from_string(Buffer* buffer, Json* json);
-bool  sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filename);
-bool  sta_serialize_json_to_file(Json* json, const char* filename);
+bool  sta_json_deserialize_from_string(Buffer* buffer, Json* json);
+bool  sta_json_deserialize_from_file(Arena* arena, Json* json, const char* filename);
+bool  sta_json_serialize_to_file(Json* json, const char* filename);
 void  sta_json_debug(Json* json);
 void  sta_json_debug_object(JsonObject* object);
 void  sta_json_debug_array(JsonArray* arr);
 void  sta_json_debug_value(JsonValue* value);
 
-bool  sta_read_csv_from_file(Arena* arena, CSV* csv, const char* filelocation);
-bool  sta_write_csv_to_file(CSV* csv, const char* filelocation);
-void  sta_debug_csv(CSV* csv);
-bool  sta_read_csv_from_string(CSV* csv, const char* csv_data);
-void  sta_save_targa(TargaImage* image, const char* filename);
+bool  sta_csv_read_from_file(Arena* arena, CSV* csv, const char* filelocation);
+bool  sta_csv_write_to_file(CSV* csv, const char* filelocation);
+void  sta_csv_debug(CSV* csv);
+bool  sta_csv_read_from_string(CSV* csv, const char* csv_data);
+void  sta_targa_save_to_file(TargaImage* image, const char* filename);
 
-bool  sta_write_ppm(const char* filename, u8* data, u64 width, u64 height);
+bool  sta_ppm_write_to_file(const char* filename, u8* data, u64 width, u64 height);
 void  sta_draw_rect_to_image(u8* data, u64 image_width, u64 x, u64 y, u64 width, u64 height, u8 r, u8 g, u8 b, u8 a);
-bool  sta_read_targa_from_file_rgba(TargaImage* image, const char* filename);
-bool  sta_read_targa_from_file(Arena* arena, TargaImage* image, const char* filename);
+bool  sta_targa_read_from_file_rgba(TargaImage* image, const char* filename);
+bool  sta_targa_read_from_file(Arena* arena, TargaImage* image, const char* filename);
 bool  sta_read_file(Arena* arena, Buffer* string, const char* fileName);
 bool  sta_read_file(Buffer* buffer, const char* fileName);
 bool  sta_append_to_file(const char* filename, const char* message);

@@ -277,7 +277,7 @@ void skip_whitespace(Buffer* buffer)
   SKIP(buffer, !buffer->is_out_of_bounds() && (match(buffer, ' ') || match(buffer, '\n') || match(buffer, '\t')));
 }
 
-void sta_save_targa(TargaImage* image, const char* filename)
+void sta_targa_save_to_file(TargaImage* image, const char* filename)
 {
   printf("Saving at '%s'\n", filename);
   FILE*         filePtr;
@@ -437,7 +437,7 @@ static inline void read_safe(void* target, u64 size, FILE* ptr)
   }
 }
 
-bool sta_read_targa_from_file_rgba(TargaImage* image, const char* filename)
+bool sta_targa_read_from_file_rgba(TargaImage* image, const char* filename)
 {
 
   TargaHeader   targa_file_header;
@@ -594,7 +594,7 @@ bool sta_read_targa_from_file_rgba(TargaImage* image, const char* filename)
   return true;
 }
 
-bool sta_read_targa_from_file(Arena* arena, TargaImage* image, const char* filename)
+bool sta_targa_read_from_file(Arena* arena, TargaImage* image, const char* filename)
 {
 
   TargaHeader   targaFileHeader;
@@ -884,7 +884,7 @@ static void serialize_json_value(JsonValue* value, FILE* filePtr)
   }
 }
 
-bool sta_serialize_json_to_file(Json* json, const char* filename)
+bool sta_json_serialize_to_file(Json* json, const char* filename)
 {
   FILE* filePtr;
 
@@ -1195,7 +1195,7 @@ static bool json_parse_value(JsonValue* value, Buffer* buffer)
   }
 }
 
-bool sta_deserialize_json_from_string(Buffer* buffer, Json* json)
+bool sta_json_deserialize_from_string(Buffer* buffer, Json* json)
 {
   bool res;
   buffer->skip_whitespace();
@@ -1237,7 +1237,7 @@ bool sta_deserialize_json_from_string(Buffer* buffer, Json* json)
   return true;
 }
 
-bool sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filename)
+bool sta_json_deserialize_from_file(Arena* arena, Json* json, const char* filename)
 {
   Buffer fileContent;
   bool   result;
@@ -1247,7 +1247,7 @@ bool sta_deserialize_json_from_file(Arena* arena, Json* json, const char* filena
   {
     return false;
   }
-  return sta_deserialize_json_from_string(&fileContent, json);
+  return sta_json_deserialize_from_string(&fileContent, json);
 }
 
 void sta_json_debug(Json* json)

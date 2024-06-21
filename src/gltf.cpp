@@ -204,66 +204,33 @@ static f32 calculate_steps(AnimationData* data, LL* steps, u32& step_count)
 static void parse_skeleton(Skeleton* skeleton, JsonValue* skins, u32** node_index_to_joint_index, GLTF_BufferView* buffer_views, JsonValue* json_nodes)
 {
 
-  JsonObject*      skin                             = skins->arr->values[0].obj;
-  u32              inverse_bind_matrices_index      = skin->lookup_value("inverseBindMatrices")->number;
-  GLTF_BufferView* inverse_bind_matrix_buffer_view  = &buffer_views[inverse_bind_matrices_index];
-  f32*             inverseBindMatrices_buffer       = (f32*)inverse_bind_matrix_buffer_view->buffer;
-  u32              inverseBindMatrices_buffer_index = 0;
-  JsonArray*       joints_array                     = skin->lookup_value("joints")->arr;
-  skeleton->joints                                  = (Joint*)sta_allocate_struct(Joint, joints_array->arraySize);
-  *node_index_to_joint_index                        = (u32*)sta_allocate_struct(u32, joints_array->arraySize);
-  skeleton->joint_count                             = joints_array->arraySize;
+  JsonObject* skin             = skins->arr->values[0].obj;
+
+  f32*        ibm_buffer       = (f32*)buffer_views[(u32)skin->lookup_value("inverseBindMatrices")->number].buffer;
+  u32         ibm_buffer_index = 0;
+
+  JsonArray*  joints_array     = skin->lookup_value("joints")->arr;
+  skeleton->joint_count        = joints_array->arraySize;
+  skeleton->joints             = (Joint*)sta_allocate_struct(Joint, skeleton->joint_count);
+  *node_index_to_joint_index   = (u32*)sta_allocate_struct(u32, skeleton->joint_count);
+
   for (u32 i = 0; i < joints_array->arraySize; i++)
   {
     Joint* joint = &skeleton->joints[i];
-    for (u32 j = 0; j < 16; j++)
-    {
-      joint->m_invBindPose.m[j] = inverseBindMatrices_buffer[inverseBindMatrices_buffer_index * 16 + j];
-    }
-    inverseBindMatrices_buffer_index++;
+    memcpy(&joint->m_invBindPose.m[0], &ibm_buffer[ibm_buffer_index * 16], 16 * sizeof(float));
+    ibm_buffer_index++;
 
     u32 node_index                           = joints_array->values[i].number;
     (*node_index_to_joint_index)[node_index] = i;
 
     JsonObject* node_object                  = json_nodes->arr->values[node_index].obj;
 
-    // grab the name
-    joint->m_name = node_object->lookup_value("name")->string;
-    // add name, translation, rotation and scale
-    JsonValue* translation = node_object->lookup_value("translation");
-    Mat44      T           = {};
-    T.identity();
-    if (translation)
-    {
-      JsonArray* translation_array = translation->arr;
-      T                            = Mat44::create_translation(Vector3(translation_array->values[0].number, translation_array->values[1].number, translation_array->values[2].number));
-    }
-    JsonValue* scale = node_object->lookup_value("scale");
-    Mat44      S     = {};
-    S.identity();
-    if (scale)
-    {
-      JsonArray* scale_array = scale->arr;
-      S                      = Mat44::create_scale(Vector3(scale_array->values[0].number, scale_array->values[1].number, scale_array->values[2].number));
-    }
-    JsonValue* rotation = node_object->lookup_value("rotation");
-    Mat44      R        = {};
-    R.identity();
-    if (rotation)
-    {
-      JsonArray* rotation_array = rotation->arr;
-      R = Mat44::create_rotation(Quaternion(rotation_array->values[0].number, rotation_array->values[1].number, rotation_array->values[2].number, rotation_array->values[3].number));
-    }
-
-    joint->m_mat = T.mul(R).mul(S);
+    joint->m_name                            = node_object->lookup_value("name")->string;
   }
 
   for (u32 i = 0; i < joints_array->arraySize; i++)
   {
-    // grab index of node
-    u32 node_index = joints_array->values[i].number;
-
-    // grab the node
+    u32         node_index  = joints_array->values[i].number;
     JsonObject* node_object = json_nodes->arr->values[node_index].obj;
     JsonValue*  children    = node_object->lookup_value("children");
     if (children)
@@ -352,32 +319,31 @@ static void parse_animations(AnimationModel* model, Skeleton* skeleton, JsonValu
 
   for (u32 i = 0; i < channels->arraySize; i++)
   {
-    JsonObject*            channel       = channels->values[i].obj;
-    JsonObject*            target        = channel->lookup_value("target")->obj;
-    u32                    node_index    = target->lookup_value("node")->number;
-    GLTF_ChannelTargetPath path          = get_channel_target_path(target->lookup_value("path")->string);
-    u32                    sampler_index = channel->lookup_value("sampler")->number;
+    JsonObject* channel       = channels->values[i].obj;
+    JsonObject* target        = channel->lookup_value("target")->obj;
+    u32         node_index    = target->lookup_value("node")->number;
+    u32         sampler_index = channel->lookup_value("sampler")->number;
 
-    JsonObject*            sampler       = samplers->values[sampler_index].obj;
-    u32                    input_index   = sampler->lookup_value("input")->number;
-    u32                    output_index  = sampler->lookup_value("output")->number;
+    JsonObject* sampler       = samplers->values[sampler_index].obj;
+    u32         input_index   = sampler->lookup_value("input")->number;
+    u32         output_index  = sampler->lookup_value("output")->number;
     // the times of the key frames of the animation
     GLTF_Accessor* input       = &accessors[input_index];
     f32*           steps_array = (f32*)buffer_views[input->buffer_view_index].buffer;
     // values for the animated property at the respective key frames
-    GLTF_Accessor* output      = &accessors[output_index];
-    f32*           data_array  = (f32*)buffer_views[output->buffer_view_index].buffer;
+    GLTF_Accessor*         output      = &accessors[output_index];
+    f32*                   data_array  = (f32*)buffer_views[output->buffer_view_index].buffer;
 
-    u32            joint_index = node_index_to_joint_index[node_index];
+    u32                    joint_index = node_index_to_joint_index[node_index];
+    GLTF_ChannelTargetPath path        = get_channel_target_path(target->lookup_value("path")->string);
 
     // Store this just as T,R,S instead :)
     AnimationData* data = &animation_data[joint_index];
     if (path == CHANNEL_TARGET_PATH_TRANSLATION)
     {
       data->T_count = input->count;
-      data->T       = (Vector3*)sta_allocate_struct(Mat44, input->count);
+      data->T       = (Vector3*)sta_allocate_struct(Vector3, input->count);
       data->T_steps = (f32*)sta_allocate_struct(f32, input->count);
-      assert(buffer_views[input->buffer_view_index].buffer_length * 3 == buffer_views[output->buffer_view_index].buffer_length && "Mismatch in translation size?");
       for (u32 j = 0; j < input->count; j++)
       {
         u32 data_index   = j * 3;
@@ -388,7 +354,7 @@ static void parse_animations(AnimationModel* model, Skeleton* skeleton, JsonValu
     else if (path == CHANNEL_TARGET_PATH_ROTATION)
     {
       data->R_count = input->count;
-      data->R       = (Quaternion*)sta_allocate_struct(Mat44, input->count);
+      data->R       = (Quaternion*)sta_allocate_struct(Quaternion, input->count);
       data->R_steps = (f32*)sta_allocate_struct(f32, input->count);
       for (u32 j = 0; j < input->count; j++)
       {
@@ -400,7 +366,7 @@ static void parse_animations(AnimationModel* model, Skeleton* skeleton, JsonValu
     else if (path == CHANNEL_TARGET_PATH_SCALE)
     {
       data->S_count = input->count;
-      data->S       = (Vector3*)sta_allocate_struct(Mat44, input->count);
+      data->S       = (Vector3*)sta_allocate_struct(Vector3, input->count);
       data->S_steps = (f32*)sta_allocate_struct(f32, input->count);
       for (u32 j = 0; j < input->count; j++)
       {
@@ -493,7 +459,7 @@ static void parse_animations(AnimationModel* model, Skeleton* skeleton, JsonValu
         j++;
       }
       t                            = (current_time - data->R_steps[j - 1]) / (data->R_steps[j] - data->R_steps[j - 1]);
-      Quaternion q                 = Quaternion::interpolate(data->R[j - 1], data->R[j], t);
+      Quaternion q                 = Quaternion::interpolate_linear(data->R[j - 1], data->R[j], t);
       pose->local_transform[count] = pose->local_transform[count].mul(Mat44::create_rotation(q));
 
       // check if S
@@ -540,12 +506,13 @@ bool parse_gltf(AnimationModel* model, const char* filename)
 
   Json   json_data = {};
   Buffer buffer_chunk0((char*)chunk0.chunk_data, chunk0.chunk_length);
-  bool   result = sta_deserialize_json_from_string(&buffer_chunk0, &json_data);
+  bool   result = sta_json_deserialize_from_string(&buffer_chunk0, &json_data);
   if (!result)
   {
     printf("Failed to deserialize json!\n");
     return false;
   }
+  sta_json_serialize_to_file(&json_data, "full.json");
 
   JsonObject* head       = &json_data.obj;
   JsonValue*  json_nodes = head->lookup_value("nodes");
@@ -555,7 +522,6 @@ bool parse_gltf(AnimationModel* model, const char* filename)
   JsonValue*       animations      = head->lookup_value("animations");
   JsonValue*       meshes          = head->lookup_value("meshes");
   JsonValue*       skins           = head->lookup_value("skins");
-  JsonValue*       buffers         = head->lookup_value("buffers");
   JsonValue*       bufferViews     = head->lookup_value("bufferViews");
   JsonValue*       accessors_value = head->lookup_value("accessors");
 
