@@ -5,13 +5,21 @@
 #include "vector.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
-void Renderer::toggle_wireframe()
+void Renderer::toggle_wireframe_on()
 {
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+}
+void Renderer::toggle_wireframe_off()
+{
+  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 void Renderer::change_screen_size(u32 screen_width, u32 screen_height)
 {
 }
 
+void Renderer::render_text(const char* string, f32 font_size, f32 x, f32 y, TextAlignment alignment)
+{
+}
 void Renderer::bind_texture(u32 texture_id, u32 texture_unit)
 {
   glActiveTexture(texture_unit);

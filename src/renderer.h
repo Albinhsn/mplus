@@ -7,6 +7,13 @@
 #include "sdl.h"
 #include "shader.h"
 
+enum TextAlignment
+{
+  TextAlignment_Start_At,
+  TextAlignment_End_At,
+  TextAlignment_Centered
+};
+
 struct BufferAttributes
 {
 
@@ -55,7 +62,9 @@ public:
   void          render_buffer(u32 buffer_id);
   void          render_2d_quad(f32 min[2], f32 max[2], Color color);
 
-  void          toggle_wireframe();
+  void          render_text(const char* string, f32 font_size, f32 x, f32 y, TextAlignment alignment);
+  void          toggle_wireframe_on();
+  void          toggle_wireframe_off();
   void          change_screen_size(u32 screen_width, u32 screen_height);
 
 private:

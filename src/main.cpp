@@ -19,17 +19,7 @@ public:
     points[1] = v1;
     points[2] = v2;
   }
-  Triangle(Vector2 v0, Vector2 v1, Vector2 v2, u32 a, u32 b, u32 c)
-  {
-    points[0]        = v0;
-    points[1]        = v1;
-    points[2]        = v2;
-    point_indices[0] = a;
-    point_indices[1] = b;
-    point_indices[2] = c;
-  }
   Vector2 points[3];
-  u32     point_indices[3];
 };
 
 inline float cross_2d(Point2 u, Point2 v)
@@ -108,7 +98,7 @@ void get_vertices(PointDLL** head_ear, PointDLL** _vertices, Vector2* v_points, 
 
     // test if any other vertex is inside the triangle from these vertices
 
-    Triangle t(v0, v1, v2, i_low, i, i_high);
+    Triangle t(v0, v1, v2);
 
     if (v0v1 > 0 && v1v2 > 0)
     {
@@ -221,7 +211,7 @@ void test_vertex(PointDLL* vertex, PointDLL* vertices, u32 point_count, PointDLL
     Vector2   v0          = vertex->prev->point;
     Vector2   v1          = vertex->point;
     Vector2   v2          = vertex->next->point;
-    Triangle  triangle    = {v0, v1, v2, vertex->prev->idx, vertex->idx, vertex->next->idx};
+    Triangle  triangle    = {v0, v1, v2};
 
     PointDLL* head_reflex = get_reflex_vertex(vertices, point_count, vertex);
 
@@ -286,7 +276,7 @@ void test_vertex(PointDLL* vertex, PointDLL* vertices, u32 point_count, PointDLL
 
       bool      found  = false;
       PointDLL* reflex = get_reflex_vertex(vertices, point_count, vertex);
-      Triangle t = {v0, v1, v2};
+      Triangle  t      = {v0, v1, v2};
       while (reflex)
       {
         if (reflex != vertex->prev && reflex != vertex->next && point_in_triangle_2d(t, reflex->point))
@@ -398,25 +388,19 @@ void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2
   {
 
     // add the removed ear to something
-    Triangle* triangle         = &triangles[point_count - remaining];
-    triangle->points[0]        = ear->prev->point;
-    triangle->points[1]        = ear->point;
-    triangle->points[2]        = ear->next->point;
-    triangle->point_indices[0] = ear->prev->idx;
-    triangle->point_indices[1] = ear->idx;
-    triangle->point_indices[2] = ear->next->idx;
+    Triangle* triangle  = &triangles[point_count - remaining];
+    triangle->points[0] = ear->prev->point;
+    triangle->points[1] = ear->point;
+    triangle->points[2] = ear->next->point;
     remaining--;
     if (remaining <= 3)
     {
       // add last triangle
-      Triangle* triangle         = &triangles[point_count - 3];
-      ear                        = ear->next->next;
-      triangle->points[0]        = ear->prev->point;
-      triangle->points[1]        = ear->point;
-      triangle->points[2]        = ear->next->point;
-      triangle->point_indices[0] = ear->prev->idx;
-      triangle->point_indices[1] = ear->idx;
-      triangle->point_indices[2] = ear->next->idx;
+      Triangle* triangle  = &triangles[point_count - 3];
+      ear                 = ear->next->next;
+      triangle->points[0] = ear->prev->point;
+      triangle->points[1] = ear->point;
+      triangle->points[2] = ear->next->point;
       break;
     }
 
@@ -490,6 +474,9 @@ void get_text_data(Font* font, TextData* text_data, u32* text, u32 text_count)
 int main()
 {
 
+  Font font;
+  font.parse_ttf("./data/fonts/JetBrainsMono-Bold.ttf");
+  Glyph      glyph         = font.get_glyph('a');
   const int  screen_width  = 620;
   const int  screen_height = 480;
   Renderer   renderer(screen_width, screen_height, 0, 0);
@@ -519,27 +506,34 @@ int main()
   };
   for (u32 i = 0; i < ArrayCount(point_data); i++)
   {
-    // point_data[i].x = (point_data[i].x - 1.0f) / 2.0f;
+    point_data[i].x = (point_data[i].x - 1.0f) / 2.0f;
   }
 
   Triangle* result;
   u32       result_count;
   triangulate_simple_via_ear_clipping(&result, result_count, points, ArrayCount(points));
-  u32* result_indices = (u32*)sta_allocate_struct(u32, result_count);
-  for (u32 i = 0; i < result_count; i++)
+  u32  indices_count  = result_count * 3;
+  u32* result_indices = (u32*)sta_allocate_struct(u32, indices_count);
+  for (u32 i = 0; i < indices_count; i++)
   {
     result_indices[i] = i;
-    printf("%d %d %d\n", result[i].point_indices[0], result[i].point_indices[1], result[i].point_indices[2]);
+  }
+  for (u32 i = 0; i < result_count; i++)
+  {
+    result[i].points[0].x = (result[i].points[0].x + 1.0f) / 2.0f;
+    result[i].points[1].x = (result[i].points[1].x + 1.0f) / 2.0f;
+    result[i].points[2].x = (result[i].points[2].x + 1.0f) / 2.0f;
   }
 
   Shader           line_shader("./shaders/line.vert", "./shaders/line.frag");
   Shader           tri_shader("./shaders/tri.vert", "./shaders/tri.frag");
 
   BufferAttributes attributes[1]     = {2, GL_FLOAT};
-  BufferAttributes tri_attributes[1] = {3, GL_FLOAT};
+  BufferAttributes tri_attributes[1] = {2, GL_FLOAT};
 
   u32              line_buffer       = renderer.create_buffer(sizeof(Vector2) * ArrayCount(point_data), (void*)point_data, attributes, ArrayCount(attributes));
-  u32              tri_buffer = renderer.create_buffer_indices(sizeof(Triangle) * result_count, (void*)result, result_count * sizeof(u32), result_indices, tri_attributes, ArrayCount(tri_attributes));
+  u32              tri_buffer = renderer.create_buffer_indices(sizeof(Triangle) * result_count, (void*)result, indices_count * sizeof(u32), result_indices, tri_attributes, ArrayCount(tri_attributes));
+  renderer.toggle_wireframe_on();
 
   // draw lines for each triangle
   // run algorithm and render triangles
@@ -566,15 +560,6 @@ int main()
 
     tri_shader.use();
     renderer.render_buffer(tri_buffer);
-
-    // String s          = {};
-    // f32    loc_min[2] = {-0.25f, 0.25f};
-    // f32    loc_max[2] = {0.25f, -0.25f};
-    // if (ui.UI_Button(s, loc_min, loc_max).left_clicked)
-    // {
-    //   printf("Clicked!\n");
-    //   break;
-    // }
 
     renderer.swap_buffers();
   }
