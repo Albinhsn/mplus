@@ -1,5 +1,7 @@
 #include "renderer.h"
+#include "collision.h"
 #include "common.h"
+#include "font.h"
 #include "platform.h"
 #include "sdl.h"
 #include "vector.h"
@@ -17,8 +19,58 @@ void Renderer::change_screen_size(u32 screen_width, u32 screen_height)
 {
 }
 
-void Renderer::render_text(const char* string, f32 font_size, f32 x, f32 y, TextAlignment alignment)
+void Renderer::render_text(const char* string, u32 string_length, f32 font_size, f32 x, f32 y, TextAlignment alignment_x, TextAlignment alignment_y)
 {
+  for (u32 i = 0; i < string_length; i++)
+  {
+    Glyph glyph    = this->font->get_glyph(string[i]);
+    u32   prev_end = 0;
+    u32   contours = glyph.end_pts_of_contours[glyph.n - 1];
+    // get the vertices of the glyph
+    Vector2* vertices = (Vector2*)sta_allocate_struct(Vector2, contours);
+    if (glyph.n == 1)
+    {
+      for (u32 j = 0; j < contours; j++)
+      {
+        Vector2* vertex  = &vertices[j];
+        u16      glyph_x = glyph.x_coordinates[j];
+        u16      glyph_y = glyph.y_coordinates[j];
+        vertex->x        = x + glyph_x * this->font->scale;
+        vertex->y        = y + 0.5f * (glyph_y * this->font->scale);
+      }
+      x += glyph.advance_width * this->font->scale;
+      // add x offset
+    }
+    else
+    {
+      assert(!"Please no :)");
+      for (u32 j = 0; j < glyph.n; j++)
+      {
+        u16 contour = glyph.end_pts_of_contours[j];
+        while (prev_end <= contour)
+        {
+
+          prev_end++;
+        }
+      }
+    }
+
+    for (u32 j = 0; j < glyph.end_pts_of_contours[glyph.n - 1]; j++)
+    {
+      printf("%f %f\n", vertices[j].x, vertices[j].y);
+    }
+    Triangle* triangles;
+    u32       triangle_count;
+
+    triangulate_simple_via_ear_clipping(&triangles, triangle_count, vertices, contours);
+    printf("--\n");
+    printf("Got %d triangles\n", triangle_count);
+
+    exit(1);
+    sta_deallocate(vertices, sizeof(Vector2) * glyph.end_pts_of_contours[glyph.n - 1]);
+  }
+
+  // create a buffer of vertices from the text and their indices
 }
 void Renderer::bind_texture(u32 texture_id, u32 texture_unit)
 {

@@ -62,7 +62,7 @@ public:
   void          render_buffer(u32 buffer_id);
   void          render_2d_quad(f32 min[2], f32 max[2], Color color);
 
-  void          render_text(const char* string, f32 font_size, f32 x, f32 y, TextAlignment alignment);
+  void          render_text(const char* string, u32 string_length, f32 font_size, f32 x, f32 y, TextAlignment alignment_x, TextAlignment alignment_y);
   void          toggle_wireframe_on();
   void          toggle_wireframe_off();
   void          change_screen_size(u32 screen_width, u32 screen_height);
