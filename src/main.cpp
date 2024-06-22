@@ -55,17 +55,15 @@ struct PointDLL
   Vector2   point;
   u32       idx;
 };
-void get_reflex_vertices(PointDLL** _reflex, u32& reflex_count, Vector2* v_points, u32 point_count)
-{
-}
-void get_convex_vertices(PointDLL** _convex, u32& convex_count, Vector2* v_points, u32 point_count)
-{
-}
 
-void get_ear_vertices(PointDLL** _ears, u32& ear_count, Vector2* v_points, u32 point_count)
+void get_vertices(PointDLL** _reflex, u32& reflex_count, PointDLL** _convex, u32& convex_count, PointDLL** _ears, u32& ear_count, Vector2* v_points, u32 point_count)
 {
-  ear_count      = 0;
-  PointDLL* ears = (PointDLL*)sta_allocate_struct(PointDLL, point_count);
+  ear_count        = 0;
+  convex_count     = 0;
+  reflex_count     = 0;
+  PointDLL* convex = (PointDLL*)sta_allocate_struct(PointDLL, point_count);
+  PointDLL* ears   = (PointDLL*)sta_allocate_struct(PointDLL, point_count);
+  PointDLL* reflex = (PointDLL*)sta_allocate_struct(PointDLL, point_count);
 
   for (i32 i = 0; i < point_count; i++)
   {
@@ -76,25 +74,34 @@ void get_ear_vertices(PointDLL** _ears, u32& ear_count, Vector2* v_points, u32 p
   // constructs a doubly linked list of the points
   for (i32 i = 0; i < point_count; i++)
   {
-    Vector2 v0   = v_points[i - 1 < 0 ? point_count - 1 : i - 1];
-    Vector2 v1   = v_points[i];
-    Vector2 v2   = v_points[(i + 1) % point_count];
-    f32     v0v1 = orient_2d(v0, v1, v2);
-    f32     v1v2 = orient_2d(v1, v2, v0);
+    i32     i_low  = i - 1 < 0 ? point_count - 1 : i - 1;
+    i32     i_high = (i + 1) % point_count;
+    Vector2 v0     = v_points[i_low];
+    Vector2 v1     = v_points[i];
+    Vector2 v2     = v_points[i_high];
+    f32     v0v1   = orient_2d(v0, v1, v2);
+    f32     v1v2   = orient_2d(v1, v2, v0);
 
     // test if any other vertex is inside the triangle from these vertices
     Triangle t = {v0, v1, v2};
 
     if (v0v1 > 0 && v1v2 > 0)
     {
+      convex[convex_count].point = v_points[i];
+      convex[convex_count].next  = &convex[(convex_count + 1) % point_count];
+      convex[convex_count].prev  = &convex[reflex_count - 1 < 0 ? 0 : reflex_count - 1];
+      convex_count++;
       bool found = false;
-      for (u32 j = 0; j < point_count; j++)
+      for (i32 j = 0; j < point_count; j++)
       {
-        if (j < i - 1 && j > i + 1 && point_in_triangle_2d(t, v_points[j]))
+        if (j != i && j != i_low && j != i_high)
         {
-          printf("Found intersection %d: %d\n", j, i);
-          found = true;
-          break;
+          if (point_in_triangle_2d(t, v_points[j]))
+          {
+            printf("Found intersection %d: %d\n", j, i);
+            found = true;
+            break;
+          }
         }
       }
 
@@ -102,7 +109,8 @@ void get_ear_vertices(PointDLL** _ears, u32& ear_count, Vector2* v_points, u32 p
       {
         ears[ear_count].point = v_points[i];
         ears[ear_count].next  = &ears[(ear_count + 1) % point_count];
-        ears[ear_count].prev  = &ears[i - 1 < 0 ? 0 : i - 1];
+        ears[ear_count].prev  = &ears[reflex_count - 1 < 0 ? 0 : reflex_count - 1];
+        ear_count++;
         printf("Ear: %d\n", i);
         printf("%f %f\n", v0v1, v1v2);
         printf("-\n");
@@ -110,14 +118,26 @@ void get_ear_vertices(PointDLL** _ears, u32& ear_count, Vector2* v_points, u32 p
         v1.debug();
         v2.debug();
         printf("----\n");
-        ear_count++;
       }
     }
+    else
+    {
+      reflex[reflex_count].point = v_points[i];
+      reflex[reflex_count].next  = &reflex[(reflex_count + 1) % point_count];
+      reflex[reflex_count].prev  = &reflex[reflex_count - 1 < 0 ? 0 : reflex_count - 1];
+      reflex_count++;
+    }
   }
-  ears[0].prev             = &ears[ear_count - 1];
-  ears[ear_count - 1].next = &ears[0];
+  // ears[0].prev                  = &ears[ear_count - 1];
+  // ears[ear_count - 1].next      = &ears[0];
+  // reflex[0].prev                = &reflex[reflex_count - 1];
+  // reflex[reflex_count - 1].next = &reflex[0];
+  // convex[0].prev                = &convex[convex_count - 1];
+  // convex[reflex_count - 1].next = &convex[0];
 
-  *_ears                   = ears;
+  *_ears   = ears;
+  *_reflex = reflex;
+  *_convex = convex;
 }
 
 // assumes that it is a simple polygon!
@@ -126,17 +146,13 @@ void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2
   // find ears
   PointDLL* ears;
   u32       ear_count;
-  get_ear_vertices(&ears, ear_count, v_points, point_count);
-
   // find convex vertices
   PointDLL* convex;
   u32       convex_count;
-  get_convex_vertices(&convex, convex_count, v_points, point_count);
-
   // find reflex vertices
   PointDLL* reflex;
   u32       reflex_count;
-  get_reflex_vertices(&reflex, reflex_count, v_points, point_count);
+  get_vertices(&reflex, reflex_count, &convex, convex_count, &ears, ear_count, v_points, point_count);
 
   // remove one ear at a time
   //
