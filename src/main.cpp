@@ -91,9 +91,6 @@ void get_vertices(PointDLL** head_ear, PointDLL** _vertices, Vector2* v_points, 
   PointDLL* curr        = 0;
   for (i32 i = 0; i < point_count; i++)
   {
-    printf("%d:\n", i);
-    printf("%ld\n%ld\n%ld\n%ld\n", (u64)curr, (u64)tail_ear, (u64)tail_convex, (u64)tail_reflex);
-    printf("--\n");
     insert_node_cyclical(vertices, v_points[i], i, point_count);
     curr         = &vertices[i];
     curr->idx    = i;
@@ -233,7 +230,6 @@ void test_vertex(PointDLL* vertex, PointDLL* vertices, u32 point_count, PointDLL
     {
       if (head_reflex != vertex->prev && head_reflex != vertex->next && point_in_triangle_2d(triangle, head_reflex->point))
       {
-        printf("Not an ear anymore! %ld\n", (u64)vertex);
         found = true;
         break;
       }
@@ -290,7 +286,6 @@ void test_vertex(PointDLL* vertex, PointDLL* vertices, u32 point_count, PointDLL
 
       bool      found  = false;
       PointDLL* reflex = get_reflex_vertex(vertices, point_count, vertex);
-      printf("Became convex!\n");
       Triangle t = {v0, v1, v2};
       while (reflex)
       {
@@ -304,7 +299,6 @@ void test_vertex(PointDLL* vertex, PointDLL* vertices, u32 point_count, PointDLL
 
       if (!found)
       {
-        printf("Found new ear %d\n", vertex->idx);
         PointDLL* ear = get_ear_vertex(vertices, point_count, current_ear);
         if (ear->next_ear)
         {
@@ -345,7 +339,6 @@ void test_vertex(PointDLL* vertex, PointDLL* vertices, u32 point_count, PointDLL
 
     if (!found)
     {
-      printf("Found new ear from vertex %d\n", vertex->idx);
       PointDLL* ear = get_ear_vertex(vertices, point_count, current_ear);
       if (ear->next_ear)
       {
@@ -404,8 +397,6 @@ void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2
   while (1)
   {
 
-    debug_points(vertices, point_count);
-    printf("Detaching %d\n", ear->idx);
     // add the removed ear to something
     Triangle* triangle         = &triangles[point_count - remaining];
     triangle->points[0]        = ear->prev->point;
@@ -415,11 +406,17 @@ void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2
     triangle->point_indices[1] = ear->idx;
     triangle->point_indices[2] = ear->next->idx;
     remaining--;
-    printf("Remaining count: %d\n", remaining);
     if (remaining <= 3)
     {
       // add last triangle
-      printf("DONE\n");
+      Triangle* triangle         = &triangles[point_count - 3];
+      ear                        = ear->next->next;
+      triangle->points[0]        = ear->prev->point;
+      triangle->points[1]        = ear->point;
+      triangle->points[2]        = ear->next->point;
+      triangle->point_indices[0] = ear->prev->idx;
+      triangle->point_indices[1] = ear->idx;
+      triangle->point_indices[2] = ear->next->idx;
       break;
     }
 
@@ -444,7 +441,6 @@ void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2
     test_vertex(prev, vertices, point_count, ear);
     test_vertex(next, vertices, point_count, ear);
 
-    printf("Next ear %ld\n", (u64)ear->next_ear);
     if (ear == ear->next_ear)
     {
       assert(!"Shouldn't happen!");
@@ -462,20 +458,6 @@ void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2
     ear->next_ear = 0;
     ear->prev_ear = 0;
     ear           = next_ear;
-
-    printf("New ears:\n");
-    u64 start = (u64)ear;
-    if (ear)
-    {
-
-      do
-      {
-
-        printf("%d\n", ear->idx);
-        ear = ear->next_ear;
-      } while ((u64)ear != start && ear != 0);
-      printf("---\n");
-    }
   }
 
   *out = triangles;
