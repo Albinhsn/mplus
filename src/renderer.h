@@ -33,8 +33,9 @@ public:
   Font*          font;
   Logger*        logger;
   GLBufferIndex  quad_buffer_2d;
-
   Shader         quad_shader;
+  Shader         text_shader;
+  GLBufferIndex  text_buffer;
   u32            screen_width;
   u32            screen_height;
   GLBufferIndex* index_buffers;
@@ -48,6 +49,7 @@ public:
     this->font          = font;
     this->logger        = logger;
     this->init_quad_buffer_2d();
+    this->init_text_shader();
   }
 
   SDL_Window*   window;
@@ -69,7 +71,7 @@ public:
 
 private:
   void init_quad_buffer_2d();
-  void init_font_buffer();
+  void init_text_shader();
 };
 
 #endif

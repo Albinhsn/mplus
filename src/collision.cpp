@@ -1,7 +1,6 @@
 #include "collision.h"
 #include <cassert>
 
-
 inline float cross_2d(Point2 u, Point2 v)
 {
   return u.y * v.x - u.x * v.y;
@@ -41,6 +40,24 @@ struct PointDLL
   Vector2   point;
   u32       idx;
 };
+int translate(PointDLL* point)
+{
+  return !point ? -1 : point->idx;
+}
+
+void debug_points(PointDLL* points, u32 point_count)
+{
+  for (u32 i = 0; i < point_count; i++)
+  {
+    printf("%d:\n", points[i].idx);
+    printf("Chain:  %d\t%d\n", translate(points[i].prev), translate(points[i].next));
+    printf("Ear:    %d\t%d\n", translate(points[i].prev_ear), translate(points[i].next_ear));
+    printf("Convex: %d\t%d\n", translate(points[i].prev_convex), translate(points[i].next_convex));
+    printf("Reflex: %d\t%d\n", translate(points[i].prev_reflex), translate(points[i].next_reflex));
+    printf("-\n");
+  }
+  printf("-----\n");
+}
 
 static inline void insert_node_cyclical(PointDLL* list, Vector2 v, u32 idx, u32 point_count)
 {
@@ -156,7 +173,8 @@ PointDLL* get_reflex_vertex(PointDLL* vertices, u32 point_count, PointDLL* curre
       return &vertices[i];
     }
   }
-  assert(!"Found no convex vertex?");
+  return 0;
+  assert(!"Found no reflex vertex?");
 }
 PointDLL* get_convex_vertex(PointDLL* vertices, u32 point_count)
 {
@@ -173,7 +191,7 @@ PointDLL* get_ear_vertex(PointDLL* vertices, u32 point_count, PointDLL* current_
 {
   for (u32 i = 0; i < point_count; i++)
   {
-    if ((vertices[i].next_ear || vertices[i].prev_ear) && vertices != current_ear)
+    if ((vertices[i].next_ear || vertices[i].prev_ear) && &vertices[i] != current_ear)
     {
       return &vertices[i];
     }
@@ -239,19 +257,27 @@ void test_vertex(PointDLL* vertex, PointDLL* vertices, u32 point_count, PointDLL
 
       // the thing is now convex
       PointDLL* convex = get_convex_vertex(vertices, point_count);
-      if (convex->next_convex)
+      if (convex)
       {
-        convex->next_convex->prev_convex = vertex;
-        vertex->next_convex              = convex->next_convex;
-        convex->next_convex              = vertex;
-        vertex->prev_convex              = convex;
+        if (convex->next_convex)
+        {
+          convex->next_convex->prev_convex = vertex;
+          vertex->next_convex              = convex->next_convex;
+          convex->next_convex              = vertex;
+          vertex->prev_convex              = convex;
+        }
+        if (convex->prev_convex)
+        {
+          convex->prev_convex->next_convex = vertex;
+          vertex->prev_convex              = convex->prev_convex;
+          convex->prev_convex              = vertex;
+          vertex->next_convex              = convex;
+        }
       }
-      if (convex->prev_convex)
+      else
       {
-        convex->prev_convex->next_convex = vertex;
-        vertex->prev_convex              = convex->prev_convex;
-        convex->prev_convex              = vertex;
-        vertex->next_convex              = convex;
+        vertex->next_convex = vertex;
+        vertex->prev_convex = vertex;
       }
 
       bool      found  = false;
@@ -328,25 +354,6 @@ void test_vertex(PointDLL* vertex, PointDLL* vertices, u32 point_count, PointDLL
   }
 }
 
-int translate(PointDLL* point)
-{
-  return !point ? -1 : point->idx;
-}
-
-void debug_points(PointDLL* points, u32 point_count)
-{
-  for (u32 i = 0; i < point_count; i++)
-  {
-    printf("%d:\n", points[i].idx);
-    printf("Chain:  %d\t%d\n", translate(points[i].prev), translate(points[i].next));
-    printf("Ear:    %d\t%d\n", translate(points[i].prev_ear), translate(points[i].next_ear));
-    printf("Convex: %d\t%d\n", translate(points[i].prev_convex), translate(points[i].next_convex));
-    printf("Reflex: %d\t%d\n", translate(points[i].prev_reflex), translate(points[i].next_reflex));
-    printf("-\n");
-  }
-  printf("-----\n");
-}
-
 // assumes that it is a simple polygon!
 void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2* v_points, u32 point_count)
 {
@@ -359,6 +366,7 @@ void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2
   PointDLL* ear;
 
   get_vertices(&ear, &vertices, v_points, point_count);
+  // debug_points(vertices, point_count);
 
   Triangle* triangles = (Triangle*)sta_allocate_struct(Triangle, point_count - 2);
   out_count           = point_count - 2;
@@ -373,6 +381,14 @@ void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2
     triangle->points[1] = ear->point;
     triangle->points[2] = ear->next->point;
     remaining--;
+    // // printf("Removed %d\n", ear->idx);
+    // u64 start = (u64)ear;
+    // do
+    // {
+    //   // printf("%d, ", ear->idx);
+    //   ear = ear->next_ear;
+    // } while ((u64)ear != start);
+    // printf("\nRemaining: %d\n", remaining);
     if (remaining <= 3)
     {
       // add last triangle

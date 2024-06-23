@@ -32,7 +32,7 @@ void Renderer::render_text(const char* string, u32 string_length, f32 font_size,
     {
       for (u32 j = 0; j < contours; j++)
       {
-        Vector2* vertex  = &vertices[j];
+        Vector2* vertex  = &vertices[contours - 1 - j];
         u16      glyph_x = glyph.x_coordinates[j];
         u16      glyph_y = glyph.y_coordinates[j];
         vertex->x        = x + glyph_x * this->font->scale;
@@ -55,22 +55,42 @@ void Renderer::render_text(const char* string, u32 string_length, f32 font_size,
       }
     }
 
-    for (u32 j = 0; j < glyph.end_pts_of_contours[glyph.n - 1]; j++)
-    {
-      printf("%f %f\n", vertices[j].x, vertices[j].y);
-    }
     Triangle* triangles;
     u32       triangle_count;
 
     triangulate_simple_via_ear_clipping(&triangles, triangle_count, vertices, contours);
-    printf("--\n");
-    printf("Got %d triangles\n", triangle_count);
+    // for (u32 j = 0; j < triangle_count; j++)
+    // {
+    //   Triangle t = triangles[j];
+    //   t.points[0].debug();
+    //   t.points[1].debug();
+    //   t.points[2].debug();
+    //   printf("-\n");
+    // }
 
-    exit(1);
+    sta_glBindVertexArray(this->text_buffer.vao);
+    sta_glBindBuffer(GL_ARRAY_BUFFER, this->text_buffer.vbo);
+    sta_glBufferData(GL_ARRAY_BUFFER, sizeof(Triangle) * triangle_count, triangles, GL_DYNAMIC_DRAW);
+
+    u32 index_count = triangle_count * 3;
+    u32 triangle_indices[index_count];
+    for (u32 j = 0; j < index_count; j++)
+    {
+      triangle_indices[j] = j;
+    }
+
+    sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->text_buffer.ebo);
+    sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * index_count, triangle_indices, GL_DYNAMIC_DRAW);
+    // exit(1);
+
+    this->text_shader.use();
+    Color white = WHITE;
+    this->text_shader.set_float4f("color", (float*)&white);
+
+    glDrawElements(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0);
+
     sta_deallocate(vertices, sizeof(Vector2) * glyph.end_pts_of_contours[glyph.n - 1]);
   }
-
-  // create a buffer of vertices from the text and their indices
 }
 void Renderer::bind_texture(u32 texture_id, u32 texture_unit)
 {
@@ -121,8 +141,24 @@ void Renderer::init_quad_buffer_2d()
 
   this->quad_shader = Shader("./shaders/quad.vert", "./shaders/quad.frag");
 }
-void Renderer::init_font_buffer()
+void Renderer::init_text_shader()
 {
+  this->text_buffer = {};
+  sta_glGenVertexArrays(1, &this->text_buffer.vao);
+  sta_glGenBuffers(1, &this->text_buffer.vbo);
+  sta_glGenBuffers(1, &this->text_buffer.ebo);
+
+  sta_glBindVertexArray(this->text_buffer.vao);
+  sta_glBindBuffer(GL_ARRAY_BUFFER, this->text_buffer.vbo);
+  sta_glBufferData(GL_ARRAY_BUFFER, 0, 0, GL_DYNAMIC_DRAW);
+
+  sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->text_buffer.ebo);
+  sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, 0, 0, GL_DYNAMIC_DRAW);
+
+  sta_glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(f32) * 2, (void*)(0));
+  sta_glEnableVertexAttribArray(0);
+
+  this->text_shader = Shader("./shaders/text.vert", "./shaders/text.frag");
 }
 void Renderer::render_2d_quad(f32 min[2], f32 max[2], Color color)
 {

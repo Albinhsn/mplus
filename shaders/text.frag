@@ -1,11 +1,12 @@
 #version 450 core
 
 
-uniform vec4 inColor;
+uniform vec4 color;
+out vec4 FragColor;
 
-out vec4 outColor;
 
-void main(){
-  
-  outColor = inColor;
+void main()
+{
+  FragColor = color;
+
 }
