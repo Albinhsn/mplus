@@ -17,31 +17,38 @@ public:
   }
   Vector2 points[3];
 };
-struct PointDLL
+struct EarClippingNode
 {
-  PointDLL* prev;
-  PointDLL* next;
-  PointDLL* next_ear;
-  PointDLL* prev_ear;
-  PointDLL* next_convex;
-  PointDLL* prev_convex;
-  PointDLL* next_reflex;
-  PointDLL* prev_reflex;
+  EarClippingNode* prev;
+  EarClippingNode* next;
+  EarClippingNode* next_ear;
+  EarClippingNode* prev_ear;
+  EarClippingNode* next_convex;
+  EarClippingNode* prev_convex;
+  EarClippingNode* next_reflex;
+  EarClippingNode* prev_reflex;
   Vector2   point;
   u32       idx;
 };
-struct Triangulation
+struct EarClippingNodes
 {
-  PointDLL* head;
-  PointDLL* ear;
-  PointDLL* convex;
-  PointDLL* reflex;
-  u32       count;
+public:
+  inline void detach_node(EarClippingNode** _prev, EarClippingNode** _next);
+  inline void detach_ear_from_convex();
+  inline void detach_ear_from_ears();
+  void        test_vertex(EarClippingNode* vertex);
+  void        attach_ear(EarClippingNode* vertex);
+  EarClippingNode*   head;
+  EarClippingNode*   ear;
+  EarClippingNode*   convex;
+  EarClippingNode*   reflex;
+  u32         count;
 };
 
-void debug_points(Triangulation * tri);
-bool remove_vertex(Triangle* triangle, Triangulation* tri, u32& remaining);
+void debug_points(EarClippingNodes* tri);
+bool remove_vertex(Triangle* triangle, EarClippingNodes* tri, u32& remaining);
 void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2* v_points, u32 point_count);
-void get_vertices(Triangulation * tri, Vector2* v_points, u32 point_count);
+void triangulation_hole_via_ear_clipping(Vector2 ** vertices, u32 &out_count, Vector2** v_points, u32* point_count, u32 polygon_count);
+void get_vertices(EarClippingNodes* tri, Vector2* v_points, u32 point_count);
 
 #endif

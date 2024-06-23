@@ -27,11 +27,11 @@ int main()
   Triangle*     triangles;
   u32           triangle_count;
 
-  Triangulation tri = {};
+  EarClippingNodes tri = {};
 
   Vector2*      v_points;
   u32           point_count;
-  renderer.get_string_vertices(&v_points, point_count, '3');
+  renderer.get_string_vertices(&v_points, point_count, '8');
 
   get_vertices(&tri, v_points, point_count);
   debug_points(&tri);
@@ -95,7 +95,7 @@ int main()
     }
     if (remaining >= 3)
     {
-      PointDLL* ear = tri.ear;
+      EarClippingNode* ear = tri.ear;
       for (u32 i = 0; i <= remaining; i++)
       {
         Vector2 p0 = ear->point;

@@ -30,22 +30,18 @@ void Renderer::draw_line(f32 x1, f32 y1, f32 x2, f32 y2)
 void Renderer::get_string_vertices(Vector2** _vertices, u32& vertex_count, const u32 code)
 {
   Glyph glyph    = this->font->get_glyph(code);
-  u32   prev_end = 0;
   u32   contours = glyph.end_pts_of_contours[glyph.n - 1] + 1;
   // get the vertices of the glyph
-  Vector2* vertices = (Vector2*)sta_allocate_struct(Vector2, contours);
-  vertex_count      = contours;
+  Vector2* vertices;
   if (glyph.n == 1)
   {
+    vertices     = (Vector2*)sta_allocate_struct(Vector2, contours);
+    vertex_count = contours;
     for (u32 j = 0; j < contours; j++)
     {
       Vector2* vertex = &vertices[j];
-      // u16      glyph_x = glyph.x_coordinates[j];
-      // u16      glyph_y = glyph.y_coordinates[j];
-      // vertex->x = x + glyph_x * this->font->scale;
-      // vertex->y = y + 0.5f * (glyph_y * this->font->scale);
-      vertex->x = glyph.x_coordinates[j];
-      vertex->y = glyph.y_coordinates[j];
+      vertex->x       = glyph.x_coordinates[j];
+      vertex->y       = glyph.y_coordinates[j];
       printf("%d: %f %f\n", j, vertex->x, vertex->y);
     }
     // x += glyph.advance_width * this->font->scale;
@@ -53,16 +49,30 @@ void Renderer::get_string_vertices(Vector2** _vertices, u32& vertex_count, const
   }
   else
   {
-    assert(!"Please no :)");
-    for (u32 j = 0; j < glyph.n; j++)
+    Vector2** verts        = (Vector2**)sta_allocate_struct(Vector2*, glyph.n);
+    u32*      point_counts = (u32*)sta_allocate_struct(u32, glyph.n);
+    u32       prev_end     = 0;
+    for (u32 i = 0; i < glyph.n; i++)
     {
-      u16 contour = glyph.end_pts_of_contours[j];
-      while (prev_end <= contour)
+      u32      end_pts            = glyph.end_pts_of_contours[i];
+      u32      number_of_vertices = end_pts - prev_end + 1;
+      Vector2* v                  = (Vector2*)sta_allocate_struct(Vector2, number_of_vertices);
+      point_counts[i]             = number_of_vertices;
+      printf("%d:\n", i);
+      for (u32 j = 0; j <= end_pts - prev_end; j++)
       {
-
-        prev_end++;
+        v[j].x = glyph.x_coordinates[j + prev_end + 1];
+        v[j].y = glyph.y_coordinates[j + prev_end + 1];
+        printf("%f %f\n", v[j].x, v[j].y);
       }
+      printf("--\n");
+      prev_end = end_pts;
+      verts[i] = v;
+
+      prev_end = end_pts;
     }
+    triangulation_hole_via_ear_clipping(&vertices, vertex_count, verts, point_counts, glyph.n);
+    exit(1);
   }
   *_vertices = vertices;
 }

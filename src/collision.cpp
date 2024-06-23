@@ -1,5 +1,7 @@
 #include "collision.h"
+#include "platform.h"
 #include <cassert>
+#include <cfloat>
 #include <cstdlib>
 
 inline float cross_2d(Point2 u, Point2 v)
@@ -7,27 +9,19 @@ inline float cross_2d(Point2 u, Point2 v)
   return u.y * v.x - u.x * v.y;
 }
 
+// checks clockwise
 inline bool point_in_triangle_2d(Triangle t, Point2 p)
 {
-  // printf("Triangle:\n");
-  // t.points[0].debug();
-  // t.points[1].debug();
-  // t.points[2].debug();
-  // printf("-\n");
-  // p.debug();
   if (cross_2d(p.sub(t.points[0]), t.points[1].sub(t.points[0])) > 0.0f)
   {
-    // printf("Failed first\n");
     return false;
   }
   if (cross_2d(p.sub(t.points[1]), t.points[2].sub(t.points[1])) > 0.0f)
   {
-    // printf("Failed second\n");
     return false;
   }
   if (cross_2d(p.sub(t.points[2]), t.points[0].sub(t.points[2])) > 0.0f)
   {
-    // printf("Failed third\n");
     return false;
   }
   return true;
@@ -37,7 +31,7 @@ inline float orient_2d(Vector2 v0, Vector2 v1, Vector2 p)
 {
   return (v0.x - p.x) * (v1.y - p.y) - (v0.y - p.y) * (v1.x - p.x);
 }
-int translate(PointDLL* point)
+int translate(EarClippingNode* point)
 {
   return !point ? -1 : point->idx;
 }
@@ -49,11 +43,11 @@ char translate(int i)
   return letters[i];
 }
 
-void debug_points(Triangulation* tri)
+void debug_points(EarClippingNodes* tri)
 {
   for (u32 i = 0; i < tri->count; i++)
   {
-    PointDLL* head = &tri->head[i];
+    EarClippingNode* head = &tri->head[i];
     if (head->prev)
     {
       printf("%c\t|%c|\t%c ---- ", translate(head->prev->idx), translate(head->idx), translate(head->next->idx));
@@ -76,40 +70,35 @@ void debug_points(Triangulation* tri)
   printf("-----\n");
 }
 
-static inline void insert_node_cyclical(PointDLL* list, Vector2 v, u32 idx, u32 point_count)
+void get_vertices(EarClippingNodes* tri, Vector2* v_points, u32 point_count)
 {
-  list[idx].point = v;
-  list[idx].next  = &list[(idx + 1) % point_count];
-  list[idx].prev  = &list[idx - 1 < 0 ? 0 : idx - 1];
-  list[idx].idx   = idx;
-}
+  tri->head             = (EarClippingNode*)sta_allocate_struct(EarClippingNode, point_count);
+  tri->count            = point_count;
 
-void get_vertices(Triangulation* tri, Vector2* v_points, u32 point_count)
-{
-  tri->head      = (PointDLL*)sta_allocate_struct(PointDLL, point_count);
-  tri->count     = point_count;
+  tri->ear              = 0;
+  tri->convex           = 0;
+  tri->reflex           = 0;
 
-  tri->ear       = 0;
-  tri->convex    = 0;
-  tri->reflex    = 0;
-
-  PointDLL* curr = 0;
+  EarClippingNode* curr = 0;
   for (i32 i = 0; i < point_count; i++)
   {
-    insert_node_cyclical(tri->head, v_points[i], i, point_count);
-    curr         = &tri->head[i];
-    curr->idx    = i;
+    tri->head[i].point = v_points[i];
+    tri->head[i].next  = &tri->head[(i + 1) % point_count];
+    tri->head[i].prev  = &tri->head[i - 1 < 0 ? 0 : i - 1];
+    tri->head[i].idx   = i;
+    curr               = &tri->head[i];
+    curr->idx          = i;
 
-    i32 i_low    = i - 1 < 0 ? point_count - 1 : i - 1;
-    i32 i_high   = (i + 1) % point_count;
-    curr->prev   = &tri->head[i_low];
-    curr->next   = &tri->head[i_high];
+    i32 i_low          = i - 1 < 0 ? point_count - 1 : i - 1;
+    i32 i_high         = (i + 1) % point_count;
+    curr->prev         = &tri->head[i_low];
+    curr->next         = &tri->head[i_high];
 
-    Vector2 v0   = v_points[i_low];
-    Vector2 v1   = v_points[i];
-    Vector2 v2   = v_points[i_high];
-    f32     v0v1 = orient_2d(v0, v1, v2);
-    f32     v1v2 = orient_2d(v1, v2, v0);
+    Vector2 v0         = v_points[i_low];
+    Vector2 v1         = v_points[i];
+    Vector2 v2         = v_points[i_high];
+    f32     v0v1       = orient_2d(v0, v1, v2);
+    f32     v1v2       = orient_2d(v1, v2, v0);
 
     // test if any other vertex is inside the triangle from these vertices
 
@@ -195,42 +184,7 @@ void get_vertices(Triangulation* tri, Vector2* v_points, u32 point_count)
   }
 }
 
-PointDLL* get_reflex_vertex(PointDLL* vertices, u32 point_count, PointDLL* current)
-{
-
-  for (u32 i = 0; i < point_count; i++)
-  {
-    if ((vertices[i].next_reflex || vertices[i].prev_reflex) && current != &vertices[i])
-    {
-      return &vertices[i];
-    }
-  }
-  return 0;
-}
-PointDLL* get_convex_vertex(PointDLL* vertices, u32 point_count)
-{
-  for (u32 i = 0; i < point_count; i++)
-  {
-    if (vertices[i].next_convex || vertices[i].prev_convex)
-    {
-      return &vertices[i];
-    }
-  }
-  assert(!"Found no convex vertex?");
-}
-PointDLL* get_ear_vertex(PointDLL* vertices, u32 point_count, PointDLL* current_ear)
-{
-  for (u32 i = 0; i < point_count; i++)
-  {
-    if ((vertices[i].next_ear || vertices[i].prev_ear) && &vertices[i] != current_ear)
-    {
-      return &vertices[i];
-    }
-  }
-  assert(!"Found no ear vertex?");
-}
-
-bool is_ear(PointDLL* reflex, PointDLL* vertex)
+static bool is_ear(EarClippingNode* reflex, EarClippingNode* vertex)
 {
   Triangle tri = {vertex->prev->point, vertex->point, vertex->next->point};
   printf("Testing if %c is in still ear\n", translate(vertex->idx));
@@ -258,7 +212,7 @@ bool is_ear(PointDLL* reflex, PointDLL* vertex)
   return true;
 }
 
-bool is_convex(PointDLL* vertex)
+static bool is_convex(EarClippingNode* vertex)
 {
 
   Vector2 v0   = vertex->prev->point;
@@ -270,14 +224,14 @@ bool is_convex(PointDLL* vertex)
   return v0v1 < 0 && v1v2 < 0;
 }
 
-void attach_ear(Triangulation* tri, PointDLL* vertex)
+void EarClippingNodes::attach_ear(EarClippingNode* vertex)
 {
-  PointDLL* head_ear = tri->ear;
+  EarClippingNode* head_ear = this->ear;
   if (head_ear == 0)
   {
     vertex->next_ear = vertex;
     vertex->prev_ear = vertex;
-    tri->ear         = vertex;
+    this->ear        = vertex;
   }
   else
   {
@@ -288,20 +242,20 @@ void attach_ear(Triangulation* tri, PointDLL* vertex)
   }
 }
 
-void test_vertex(PointDLL* vertex, Triangulation* tri)
+void EarClippingNodes::test_vertex(EarClippingNode* vertex)
 {
 
   // might not be an ear, but still always convex?
   if (vertex->next_ear || vertex->prev_ear)
   {
-    PointDLL* head_reflex = tri->reflex;
+    EarClippingNode* head_reflex = this->reflex;
 
     if (!is_ear(head_reflex, vertex))
     {
       // detach ear
-      if (vertex == tri->ear)
+      if (vertex == this->ear)
       {
-        tri->ear = tri->ear->next;
+        this->ear = this->ear->next;
       }
       vertex->prev_ear->next_ear = vertex->next_ear;
       vertex->next_ear->prev_ear = vertex->prev_ear;
@@ -316,7 +270,7 @@ void test_vertex(PointDLL* vertex, Triangulation* tri)
     {
 
       // isn't reflex anymore
-      PointDLL* next_reflex = 0;
+      EarClippingNode* next_reflex = 0;
       if (vertex->next_reflex)
       {
         vertex->next_reflex->prev_reflex = vertex->prev_reflex;
@@ -325,15 +279,15 @@ void test_vertex(PointDLL* vertex, Triangulation* tri)
         vertex->next_reflex              = 0;
         vertex->prev_reflex              = 0;
       }
-      tri->reflex = next_reflex;
+      this->reflex = next_reflex;
 
       // the thing is now convex
-      PointDLL* conv = tri->convex;
+      EarClippingNode* conv = this->convex;
       if (conv == 0)
       {
         vertex->next_convex = vertex;
         vertex->prev_convex = vertex;
-        tri->convex         = vertex;
+        this->convex        = vertex;
       }
       else
       {
@@ -344,20 +298,20 @@ void test_vertex(PointDLL* vertex, Triangulation* tri)
       }
 
       // check if it also became an ear
-      if (is_ear(tri->reflex, vertex))
+      if (is_ear(this->reflex, vertex))
       {
-        attach_ear(tri, vertex);
+        this->attach_ear(vertex);
       }
     }
   }
   // otherwise convex and can become an ear
-  else if (is_ear(tri->reflex, vertex))
+  else if (is_ear(this->reflex, vertex))
   {
-    attach_ear(tri, vertex);
+    this->attach_ear(vertex);
   }
 }
 
-static inline void add_triangle(Triangle* triangle, PointDLL* ear)
+static inline void add_triangle(Triangle* triangle, EarClippingNode* ear)
 {
 
   triangle->points[0] = ear->prev->point;
@@ -365,59 +319,59 @@ static inline void add_triangle(Triangle* triangle, PointDLL* ear)
   triangle->points[2] = ear->next->point;
 }
 
-static inline void detach_ear_from_ears(Triangulation* tri)
+inline void EarClippingNodes::detach_ear_from_ears()
 {
-  PointDLL* next_ear           = tri->ear->next_ear;
-  next_ear->prev_ear           = tri->ear->prev_ear;
-  tri->ear->prev_ear->next_ear = next_ear;
-  tri->ear->next_ear           = 0;
-  tri->ear->prev_ear           = 0;
-  tri->ear                     = next_ear;
+  EarClippingNode* next_ear     = this->ear->next_ear;
+  next_ear->prev_ear            = this->ear->prev_ear;
+  this->ear->prev_ear->next_ear = next_ear;
+  this->ear->next_ear           = 0;
+  this->ear->prev_ear           = 0;
+  this->ear                     = next_ear;
 }
 
-static inline void detach_ear_from_convex(Triangulation* tri)
+inline void EarClippingNodes::detach_ear_from_convex()
 {
-  PointDLL* next_convex = 0;
-  if (tri->ear->next_convex)
+  EarClippingNode* next_convex = 0;
+  if (this->ear->next_convex)
   {
-    if (tri->ear == tri->convex)
+    if (this->ear == this->convex)
     {
-      tri->convex = tri->convex->next;
+      this->convex = this->convex->next;
     }
-    tri->ear->next_convex->prev_convex = tri->ear->prev_convex;
-    next_convex                        = tri->ear->next_convex;
-    tri->ear->next_convex              = 0;
+    this->ear->next_convex->prev_convex = this->ear->prev_convex;
+    next_convex                         = this->ear->next_convex;
+    this->ear->next_convex              = 0;
   }
-  if (tri->ear->prev_convex)
+  if (this->ear->prev_convex)
   {
-    if (tri->ear == tri->convex)
+    if (this->ear == this->convex)
     {
-      tri->convex = tri->convex->prev;
+      this->convex = this->convex->prev;
     }
-    tri->ear->prev_convex->next_convex = next_convex;
-    tri->ear->prev_convex              = 0;
+    this->ear->prev_convex->next_convex = next_convex;
+    this->ear->prev_convex              = 0;
   }
 }
 
-static inline void detach_node(Triangulation* tri, PointDLL** _prev, PointDLL** _next)
+inline void EarClippingNodes::detach_node(EarClippingNode** _prev, EarClippingNode** _next)
 {
 
   // test both adjacent
-  PointDLL* prev = tri->ear->prev;
-  PointDLL* next = tri->ear->next;
+  EarClippingNode* prev = this->ear->prev;
+  EarClippingNode* next = this->ear->next;
 
-  prev->next     = next;
-  next->prev     = prev;
-  tri->ear->next = 0;
-  tri->ear->prev = 0;
-  detach_ear_from_convex(tri);
-  detach_ear_from_ears(tri);
+  prev->next            = next;
+  next->prev            = prev;
+  this->ear->next       = 0;
+  this->ear->prev       = 0;
+  this->detach_ear_from_convex();
+  this->detach_ear_from_ears();
 
   *_prev = prev;
   *_next = next;
 }
 
-bool remove_vertex(Triangle* triangle, Triangulation* tri, u32& remaining)
+bool remove_vertex(Triangle* triangle, EarClippingNodes* tri, u32& remaining)
 {
 
   if (remaining >= 3)
@@ -431,11 +385,11 @@ bool remove_vertex(Triangle* triangle, Triangulation* tri, u32& remaining)
     remaining = MAX(2, remaining);
     return true;
   }
-  PointDLL *prev, *next;
-  detach_node(tri, &prev, &next);
+  EarClippingNode *prev, *next;
+  tri->detach_node(&prev, &next);
 
-  test_vertex(prev, tri);
-  test_vertex(next, tri);
+  tri->test_vertex(prev);
+  tri->test_vertex(next);
 
   debug_points(tri);
   printf("Next in line: %c\n", translate(tri->ear->idx));
@@ -445,8 +399,8 @@ bool remove_vertex(Triangle* triangle, Triangulation* tri, u32& remaining)
 // assumes that it is a simple polygon!
 void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2* v_points, u32 point_count)
 {
-  PointDLL* vertices;
-  PointDLL* ear;
+  EarClippingNode* vertices;
+  EarClippingNode* ear;
 
   // get_vertices(&ear, &vertices, v_points, point_count);
   // debug_points(vertices);
@@ -465,4 +419,111 @@ void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2
   }
 
   *out = triangles;
+}
+
+struct PolygonMaxXPair
+{
+  Vector2* max_x;
+  Vector2* points;
+  u32      point_count;
+};
+
+struct VertexDLL
+{
+  VertexDLL* prev;
+  VertexDLL* next;
+  Vector2    point;
+};
+
+inline int sort_polygon_min_x_pair(const void* _a, const void* _b)
+{
+  f32 res = ((PolygonMaxXPair*)_a)->max_x->x - ((PolygonMaxXPair*)_b)->max_x->x;
+  if (res == 0)
+  {
+    return 0;
+  }
+  return res > 0 ? -1 : 1;
+}
+
+static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inner)
+{
+  // then triangulate as simple
+
+  // 1. Search the inner polygon for vertex M of maximum x-value
+  Vector2* m = inner->max_x;
+
+  // check that x > max_x
+  // check that y0 <= y <= y1
+
+  // 2. Intersect the ray M +t(1,0) with all directed edges (Vi, Vi+1) of the outer polygon for which M is to the left of the line containing the edge.
+  //    Moreover , the intersection tests need only involve directed edges for which Vi is below (or on) the ray and Vi+1 is above (or on) the ray.
+  //    This is essential when the polygon has multiple holes and one or more holes have already had bridges inserted.
+  //    Let I be the closest visible point to M on the ray. The implementation keeps track of this by monitoring the t-value in search of the smallest
+  //    positive value for those edges in the intersection tests.
+  // 3. If I is a vertex of the outer polygon, then M and I are mutually visible and the algorithm terminates.
+  // 4. Otherwise, I is an interior point of the edge (Vi, Vi+1). Select P to be the end point of maximum x-value for this edge
+  // 5. Search the reflex vertices of the outer polygon, not including P if it happens to be reflex. If all of those vertices are strictly outside triangle (M,I,P), then
+  //    M and P are mutually visible and the algorithm terminates.
+  // 6. Otherwise, at least one reflex vertex lies in (M,I,P). Search for the reflex R that minimizes the angle between (M,I) and (M,R);
+  //    then M and R are mutually visible and the algorithm terminates.
+}
+
+// requires the ordering of the outer and inner vertices to be opposite
+void triangulation_hole_via_ear_clipping(Vector2** out, u32& out_count, Vector2** v_points, u32* point_count, u32 polygon_count)
+{
+
+  // sort the polygons by their x-value
+  PolygonMaxXPair pairs[polygon_count];
+  u32             total_count = 0;
+  for (u32 i = 0; i < polygon_count; i++)
+  {
+    Vector2* points      = v_points[i];
+    u32      count       = point_count[i];
+    pairs[i].point_count = count;
+    pairs[i].points      = v_points[i];
+
+    pairs[i].max_x       = &points[0];
+    for (u32 j = 1; j < count; j++)
+    {
+      if (points[j].x > pairs[i].max_x->x)
+      {
+        pairs[i].max_x = &points[j];
+      }
+    }
+    total_count += count;
+  }
+  qsort(pairs, polygon_count, sizeof(PolygonMaxXPair), sort_polygon_min_x_pair);
+  for (u32 i = 0; i < polygon_count; i++)
+  {
+    v_points[i]    = pairs[i].points;
+    point_count[i] = pairs[i].point_count;
+  }
+
+  VertexDLL*      concatenated_polygon = (VertexDLL*)sta_allocate_struct(VertexDLL, total_count + polygon_count - 1);
+  PolygonMaxXPair first_pair           = pairs[0];
+  u32             count                = first_pair.point_count;
+  for (u32 i = 0; i < count; i++)
+  {
+    VertexDLL* v = &concatenated_polygon[i];
+    v->point     = first_pair.points[i];
+    v->next      = &concatenated_polygon[i + 1];
+    v->prev      = &concatenated_polygon[i - 1 < 0 ? count - 1 : i - 1];
+  }
+
+  for (u32 i = 1; i < polygon_count; i++)
+  {
+    find_bridge(concatenated_polygon, count, &pairs[i]);
+  }
+
+  out_count  = total_count + polygon_count - 1;
+  Vector2* v = (Vector2*)sta_allocate_struct(Vector2, out_count);
+  for (u32 i = 0; i < out_count; i++)
+  {
+    v[i].x = concatenated_polygon[i].point.x;
+    v[i].y = concatenated_polygon[i].point.y;
+  }
+
+  assert(count == out_count && "Didn't equal in size?");
+
+  sta_deallocate(concatenated_polygon, sizeof(VertexDLL) * (total_count + polygon_count - 1));
 }
