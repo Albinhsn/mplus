@@ -19,24 +19,77 @@ void Renderer::change_screen_size(u32 screen_width, u32 screen_height)
 {
 }
 
+void Renderer::draw_line(f32 x1, f32 y1, f32 x2, f32 y2)
+{
+  glColor3f(1.0, 1.0, 1.0);
+  glBegin(GL_LINES);
+  glVertex2f(x1, y1);
+  glVertex2f(x2, y2);
+  glEnd();
+}
+void Renderer::get_string_vertices(Vector2** _vertices, u32& vertex_count, const u32 code)
+{
+  Glyph glyph    = this->font->get_glyph(code);
+  u32   prev_end = 0;
+  u32   contours = glyph.end_pts_of_contours[glyph.n - 1] + 1;
+  // get the vertices of the glyph
+  Vector2* vertices = (Vector2*)sta_allocate_struct(Vector2, contours);
+  vertex_count      = contours;
+  if (glyph.n == 1)
+  {
+    for (u32 j = 0; j < contours; j++)
+    {
+      Vector2* vertex = &vertices[j];
+      // u16      glyph_x = glyph.x_coordinates[j];
+      // u16      glyph_y = glyph.y_coordinates[j];
+      // vertex->x = x + glyph_x * this->font->scale;
+      // vertex->y = y + 0.5f * (glyph_y * this->font->scale);
+      vertex->x = glyph.x_coordinates[j];
+      vertex->y = glyph.y_coordinates[j];
+      printf("%d: %f %f\n", j, vertex->x, vertex->y);
+    }
+    // x += glyph.advance_width * this->font->scale;
+    // add x offset
+  }
+  else
+  {
+    assert(!"Please no :)");
+    for (u32 j = 0; j < glyph.n; j++)
+    {
+      u16 contour = glyph.end_pts_of_contours[j];
+      while (prev_end <= contour)
+      {
+
+        prev_end++;
+      }
+    }
+  }
+  *_vertices = vertices;
+}
+
 void Renderer::render_text(const char* string, u32 string_length, f32 font_size, f32 x, f32 y, TextAlignment alignment_x, TextAlignment alignment_y)
 {
+  // after precalc is done
+  // this should just be querying for the triangles data and rendering
   for (u32 i = 0; i < string_length; i++)
   {
     Glyph glyph    = this->font->get_glyph(string[i]);
     u32   prev_end = 0;
-    u32   contours = glyph.end_pts_of_contours[glyph.n - 1];
+    u32   contours = glyph.end_pts_of_contours[glyph.n - 1] + 1;
     // get the vertices of the glyph
     Vector2* vertices = (Vector2*)sta_allocate_struct(Vector2, contours);
     if (glyph.n == 1)
     {
       for (u32 j = 0; j < contours; j++)
       {
-        Vector2* vertex  = &vertices[contours - 1 - j];
-        u16      glyph_x = glyph.x_coordinates[j];
-        u16      glyph_y = glyph.y_coordinates[j];
-        vertex->x        = x + glyph_x * this->font->scale;
-        vertex->y        = y + 0.5f * (glyph_y * this->font->scale);
+        Vector2* vertex = &vertices[j];
+        // u16      glyph_x = glyph.x_coordinates[j];
+        // u16      glyph_y = glyph.y_coordinates[j];
+        // vertex->x = x + glyph_x * this->font->scale;
+        // vertex->y = y + 0.5f * (glyph_y * this->font->scale);
+        vertex->x = glyph.x_coordinates[j];
+        vertex->y = glyph.y_coordinates[j];
+        printf("%d: %f %f\n", j, vertex->x, vertex->y);
       }
       x += glyph.advance_width * this->font->scale;
       // add x offset
@@ -59,6 +112,7 @@ void Renderer::render_text(const char* string, u32 string_length, f32 font_size,
     u32       triangle_count;
 
     triangulate_simple_via_ear_clipping(&triangles, triangle_count, vertices, contours);
+    // exit(1);
     // for (u32 j = 0; j < triangle_count; j++)
     // {
     //   Triangle t = triangles[j];

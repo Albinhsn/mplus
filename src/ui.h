@@ -6,6 +6,17 @@
 #include "renderer.h"
 #include "vector.h"
 
+// console 
+// main menu
+// settings menu 
+// debug view (fps, counters etc)
+
+// button 
+// scrollable view thingy 
+// slider 
+// dropdown
+// animations, both for scroll and hover etc
+
 enum UI_SizeType
 {
   UI_SIZE_PIXELS,

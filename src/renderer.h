@@ -63,7 +63,9 @@ public:
   void          render_arrays(u32 buffer_id, GLenum type, u32 count);
   void          render_buffer(u32 buffer_id);
   void          render_2d_quad(f32 min[2], f32 max[2], Color color);
+  void          get_string_vertices(Vector2** _vertices, u32& vertex_count, const u32 code);
 
+  void          draw_line(f32 x1, f32 y1, f32 x2, f32 y2);
   void          render_text(const char* string, u32 string_length, f32 font_size, f32 x, f32 y, TextAlignment alignment_x, TextAlignment alignment_y);
   void          toggle_wireframe_on();
   void          toggle_wireframe_off();

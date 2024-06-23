@@ -60,6 +60,7 @@ public:
   bool           check_sequence(u32 id);
   bool           should_quit();
   bool           is_left_mouse_clicked();
+  bool           is_key_released(u32 code);
 
 private:
 };

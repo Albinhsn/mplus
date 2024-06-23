@@ -4,6 +4,18 @@
 #include <SDL2/SDL_timer.h>
 #include <cassert>
 
+bool InputState::is_key_released(u32 code)
+{
+  for (u32 i = 0; i < this->event_count; i++)
+  {
+    if (this->events[i].state == EVENT_KEY_RELEASE && this->events[i].key == code)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool InputState::is_left_mouse_clicked()
 {
   for (u32 i = 0; i < this->event_count; i++)

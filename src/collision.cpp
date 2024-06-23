@@ -1,5 +1,6 @@
 #include "collision.h"
 #include <cassert>
+#include <cstdlib>
 
 inline float cross_2d(Point2 u, Point2 v)
 {
@@ -8,16 +9,25 @@ inline float cross_2d(Point2 u, Point2 v)
 
 inline bool point_in_triangle_2d(Triangle t, Point2 p)
 {
-  if (cross_2d(p.sub(t.points[0]), t.points[1].sub(t.points[0])) < 0.0f)
+  // printf("Triangle:\n");
+  // t.points[0].debug();
+  // t.points[1].debug();
+  // t.points[2].debug();
+  // printf("-\n");
+  // p.debug();
+  if (cross_2d(p.sub(t.points[0]), t.points[1].sub(t.points[0])) > 0.0f)
   {
+    // printf("Failed first\n");
     return false;
   }
-  if (cross_2d(p.sub(t.points[1]), t.points[2].sub(t.points[1])) < 0.0f)
+  if (cross_2d(p.sub(t.points[1]), t.points[2].sub(t.points[1])) > 0.0f)
   {
+    // printf("Failed second\n");
     return false;
   }
-  if (cross_2d(p.sub(t.points[2]), t.points[0].sub(t.points[2])) < 0.0f)
+  if (cross_2d(p.sub(t.points[2]), t.points[0].sub(t.points[2])) > 0.0f)
   {
+    // printf("Failed third\n");
     return false;
   }
   return true;
@@ -27,35 +37,42 @@ inline float orient_2d(Vector2 v0, Vector2 v1, Vector2 p)
 {
   return (v0.x - p.x) * (v1.y - p.y) - (v0.y - p.y) * (v1.x - p.x);
 }
-struct PointDLL
-{
-  PointDLL* prev;
-  PointDLL* next;
-  PointDLL* next_ear;
-  PointDLL* prev_ear;
-  PointDLL* next_convex;
-  PointDLL* prev_convex;
-  PointDLL* next_reflex;
-  PointDLL* prev_reflex;
-  Vector2   point;
-  u32       idx;
-};
 int translate(PointDLL* point)
 {
   return !point ? -1 : point->idx;
 }
 
-void debug_points(PointDLL* points, u32 point_count)
+char translate(int i)
 {
-  for (u32 i = 0; i < point_count; i++)
+  char letters[] = "abcdefghijklmnopqrstuvwz12345";
+  assert(i <= ArrayCount(letters));
+  return letters[i];
+}
+
+void debug_points(Triangulation* tri)
+{
+  for (u32 i = 0; i < tri->count; i++)
   {
-    printf("%d:\n", points[i].idx);
-    printf("Chain:  %d\t%d\n", translate(points[i].prev), translate(points[i].next));
-    printf("Ear:    %d\t%d\n", translate(points[i].prev_ear), translate(points[i].next_ear));
-    printf("Convex: %d\t%d\n", translate(points[i].prev_convex), translate(points[i].next_convex));
-    printf("Reflex: %d\t%d\n", translate(points[i].prev_reflex), translate(points[i].next_reflex));
-    printf("-\n");
+    PointDLL* head = &tri->head[i];
+    if (head->prev)
+    {
+      printf("%c\t|%c|\t%c ---- ", translate(head->prev->idx), translate(head->idx), translate(head->next->idx));
+      if (head->next_ear)
+      {
+        printf("EAR, ");
+      }
+      if (head->next_convex || head->prev_convex)
+      {
+        printf("CONVEX, ");
+      }
+      if (head->next_reflex || head->prev_reflex)
+      {
+        printf("REFLEX");
+      }
+      printf("-\n");
+    }
   }
+
   printf("-----\n");
 }
 
@@ -67,25 +84,26 @@ static inline void insert_node_cyclical(PointDLL* list, Vector2 v, u32 idx, u32 
   list[idx].idx   = idx;
 }
 
-void get_vertices(PointDLL** head_ear, PointDLL** _vertices, Vector2* v_points, u32 point_count)
+void get_vertices(Triangulation* tri, Vector2* v_points, u32 point_count)
 {
-  PointDLL* vertices    = (PointDLL*)sta_allocate_struct(PointDLL, point_count);
+  tri->head      = (PointDLL*)sta_allocate_struct(PointDLL, point_count);
+  tri->count     = point_count;
 
-  PointDLL* tail_ear    = 0;
-  PointDLL* tail_convex = 0;
-  PointDLL* tail_reflex = 0;
+  tri->ear       = 0;
+  tri->convex    = 0;
+  tri->reflex    = 0;
 
-  PointDLL* curr        = 0;
+  PointDLL* curr = 0;
   for (i32 i = 0; i < point_count; i++)
   {
-    insert_node_cyclical(vertices, v_points[i], i, point_count);
-    curr         = &vertices[i];
+    insert_node_cyclical(tri->head, v_points[i], i, point_count);
+    curr         = &tri->head[i];
     curr->idx    = i;
 
     i32 i_low    = i - 1 < 0 ? point_count - 1 : i - 1;
     i32 i_high   = (i + 1) % point_count;
-    curr->prev   = &vertices[i_low];
-    curr->next   = &vertices[i_high];
+    curr->prev   = &tri->head[i_low];
+    curr->next   = &tri->head[i_high];
 
     Vector2 v0   = v_points[i_low];
     Vector2 v1   = v_points[i];
@@ -97,17 +115,17 @@ void get_vertices(PointDLL** head_ear, PointDLL** _vertices, Vector2* v_points, 
 
     Triangle t(v0, v1, v2);
 
-    if (v0v1 > 0 && v1v2 > 0)
+    if (v0v1 < 0 && v1v2 < 0)
     {
-      if (tail_convex != 0)
+      if (tri->convex != 0)
       {
-        tail_convex->next_convex = curr;
-        curr->prev_convex        = tail_convex;
-        tail_convex              = curr;
+        tri->convex->next_convex = curr;
+        curr->prev_convex        = tri->convex;
+        tri->convex              = curr;
       }
       else
       {
-        tail_convex = curr;
+        tri->convex = curr;
       }
       bool found = false;
       for (i32 j = 0; j < point_count; j++)
@@ -122,45 +140,59 @@ void get_vertices(PointDLL** head_ear, PointDLL** _vertices, Vector2* v_points, 
 
       if (!found)
       {
-        if (tail_ear != 0)
+        if (tri->ear != 0)
         {
-          tail_ear->next_ear = curr;
-          curr->prev_ear     = tail_ear;
-          tail_ear           = curr;
+          tri->ear->next_ear = curr;
+          curr->prev_ear     = tri->ear;
+          tri->ear           = curr;
         }
         else
         {
-          tail_ear = curr;
+          tri->ear = curr;
         }
       }
     }
     else
     {
-      if (tail_reflex != 0)
+      if (tri->reflex != 0)
       {
-        tail_reflex->next_reflex = curr;
-        curr->prev_reflex        = tail_reflex;
-        tail_reflex              = curr;
+        tri->reflex->next_reflex = curr;
+        curr->prev_reflex        = tri->reflex;
+        tri->reflex              = curr;
       }
       else
       {
-        tail_reflex = curr;
+        tri->reflex = curr;
       }
     }
   }
 
+  bool e = false, c = false, r = false;
   for (u32 i = 0; i < point_count; i++)
   {
-    if (vertices[i].next_ear)
+    if (tri->head[i].next_ear && !e)
     {
-      *head_ear            = &vertices[i];
-      tail_ear->next_ear   = &vertices[i];
-      vertices[i].prev_ear = tail_ear;
+      tri->ear->next_ear    = &tri->head[i];
+      tri->head[i].prev_ear = tri->ear;
+      e                     = true;
+    }
+    if (tri->head[i].next_convex && !c)
+    {
+      tri->convex->next_convex = &tri->head[i];
+      tri->head[i].prev_convex = tri->convex;
+      e                        = true;
+    }
+    if (tri->head[i].next_reflex && !r)
+    {
+      tri->reflex->next_reflex = &tri->head[i];
+      tri->head[i].prev_reflex = tri->reflex;
+      r                        = true;
+    }
+    if (e && c && r)
+    {
       break;
     }
   }
-
-  *_vertices = vertices;
 }
 
 PointDLL* get_reflex_vertex(PointDLL* vertices, u32 point_count, PointDLL* current)
@@ -174,7 +206,6 @@ PointDLL* get_reflex_vertex(PointDLL* vertices, u32 point_count, PointDLL* curre
     }
   }
   return 0;
-  assert(!"Found no reflex vertex?");
 }
 PointDLL* get_convex_vertex(PointDLL* vertices, u32 point_count)
 {
@@ -199,32 +230,79 @@ PointDLL* get_ear_vertex(PointDLL* vertices, u32 point_count, PointDLL* current_
   assert(!"Found no ear vertex?");
 }
 
-void test_vertex(PointDLL* vertex, PointDLL* vertices, u32 point_count, PointDLL* current_ear)
+bool is_ear(PointDLL* reflex, PointDLL* vertex)
+{
+  Triangle tri = {vertex->prev->point, vertex->point, vertex->next->point};
+  printf("Testing if %c is in still ear\n", translate(vertex->idx));
+  u64 start = (u64)reflex;
+  if (reflex)
+  {
+    do
+    {
+      if (reflex != vertex->prev && reflex != vertex->next)
+      {
+        printf("Testing %c\n", translate(reflex->idx));
+        if (point_in_triangle_2d(tri, reflex->point))
+        {
+          printf("Found point inside!\n");
+          return false;
+        }
+      }
+      else
+      {
+        printf("Was prev or next! %c\n", translate(reflex->idx));
+      }
+      reflex = reflex->next_reflex;
+    } while ((u64)reflex != start && reflex);
+  }
+  return true;
+}
+
+bool is_convex(PointDLL* vertex)
+{
+
+  Vector2 v0   = vertex->prev->point;
+  Vector2 v1   = vertex->point;
+  Vector2 v2   = vertex->next->point;
+  f32     v0v1 = orient_2d(v0, v1, v2);
+  f32     v1v2 = orient_2d(v1, v2, v0);
+
+  return v0v1 < 0 && v1v2 < 0;
+}
+
+void attach_ear(Triangulation* tri, PointDLL* vertex)
+{
+  PointDLL* head_ear = tri->ear;
+  if (head_ear == 0)
+  {
+    vertex->next_ear = vertex;
+    vertex->prev_ear = vertex;
+    tri->ear         = vertex;
+  }
+  else
+  {
+    head_ear->next_ear->prev_ear = vertex;
+    vertex->next_ear             = head_ear->next_ear;
+    head_ear->next_ear           = vertex;
+    vertex->prev_ear             = head_ear;
+  }
+}
+
+void test_vertex(PointDLL* vertex, Triangulation* tri)
 {
 
   // might not be an ear, but still always convex?
   if (vertex->next_ear || vertex->prev_ear)
   {
-    // test against all reflex vertices
-    Vector2   v0          = vertex->prev->point;
-    Vector2   v1          = vertex->point;
-    Vector2   v2          = vertex->next->point;
-    Triangle  triangle    = {v0, v1, v2};
+    PointDLL* head_reflex = tri->reflex;
 
-    PointDLL* head_reflex = get_reflex_vertex(vertices, point_count, vertex);
-
-    bool      found       = false;
-    while (head_reflex)
+    if (!is_ear(head_reflex, vertex))
     {
-      if (head_reflex != vertex->prev && head_reflex != vertex->next && point_in_triangle_2d(triangle, head_reflex->point))
+      // detach ear
+      if (vertex == tri->ear)
       {
-        found = true;
-        break;
+        tri->ear = tri->ear->next;
       }
-      head_reflex = head_reflex->next_reflex;
-    }
-    if (found)
-    {
       vertex->prev_ear->next_ear = vertex->next_ear;
       vertex->next_ear->prev_ear = vertex->prev_ear;
       vertex->next_ear           = 0;
@@ -233,211 +311,157 @@ void test_vertex(PointDLL* vertex, PointDLL* vertices, u32 point_count, PointDLL
   }
   else if (vertex->next_reflex || vertex->prev_reflex)
   {
-    // might be convex and might be ear
-    Vector2 v0   = vertex->prev->point;
-    Vector2 v1   = vertex->point;
-    Vector2 v2   = vertex->next->point;
-    f32     v0v1 = orient_2d(v0, v1, v2);
-    f32     v1v2 = orient_2d(v1, v2, v0);
 
-    // test if any other vertex is inside the triangle from these vertices
-
-    if (v0v1 > 0 && v1v2 > 0)
+    if (is_convex(vertex))
     {
+
+      // isn't reflex anymore
+      PointDLL* next_reflex = 0;
       if (vertex->next_reflex)
       {
         vertex->next_reflex->prev_reflex = vertex->prev_reflex;
-        vertex->next_reflex              = 0;
-      }
-      if (vertex->prev_reflex)
-      {
         vertex->prev_reflex->next_reflex = vertex->next_reflex;
+        next_reflex                      = vertex->next_reflex;
+        vertex->next_reflex              = 0;
         vertex->prev_reflex              = 0;
       }
+      tri->reflex = next_reflex;
 
       // the thing is now convex
-      PointDLL* convex = get_convex_vertex(vertices, point_count);
-      if (convex)
-      {
-        if (convex->next_convex)
-        {
-          convex->next_convex->prev_convex = vertex;
-          vertex->next_convex              = convex->next_convex;
-          convex->next_convex              = vertex;
-          vertex->prev_convex              = convex;
-        }
-        if (convex->prev_convex)
-        {
-          convex->prev_convex->next_convex = vertex;
-          vertex->prev_convex              = convex->prev_convex;
-          convex->prev_convex              = vertex;
-          vertex->next_convex              = convex;
-        }
-      }
-      else
+      PointDLL* conv = tri->convex;
+      if (conv == 0)
       {
         vertex->next_convex = vertex;
         vertex->prev_convex = vertex;
+        tri->convex         = vertex;
+      }
+      else
+      {
+        conv->next_convex->prev_convex = vertex;
+        vertex->next_convex            = conv->next_convex;
+        conv->next_convex              = vertex;
+        vertex->prev_convex            = conv;
       }
 
-      bool      found  = false;
-      PointDLL* reflex = get_reflex_vertex(vertices, point_count, vertex);
-      Triangle  t      = {v0, v1, v2};
-      while (reflex)
+      // check if it also became an ear
+      if (is_ear(tri->reflex, vertex))
       {
-        if (reflex != vertex->prev && reflex != vertex->next && point_in_triangle_2d(t, reflex->point))
-        {
-          found = true;
-          break;
-        }
-        reflex = reflex->next_reflex;
-      }
-
-      if (!found)
-      {
-        PointDLL* ear = get_ear_vertex(vertices, point_count, current_ear);
-        if (ear->next_ear)
-        {
-          ear->next_ear->prev_ear = vertex;
-          vertex->next_ear        = ear->next_ear;
-          ear->next_ear           = vertex;
-          vertex->prev_ear        = ear;
-        }
-        else
-        {
-          ear->next_ear    = vertex;
-          ear->prev_ear    = vertex;
-          vertex->prev_ear = ear;
-          vertex->next_ear = ear;
-        }
+        attach_ear(tri, vertex);
       }
     }
   }
   // otherwise convex and can become an ear
-  else
+  else if (is_ear(tri->reflex, vertex))
+  {
+    attach_ear(tri, vertex);
+  }
+}
+
+static inline void add_triangle(Triangle* triangle, PointDLL* ear)
+{
+
+  triangle->points[0] = ear->prev->point;
+  triangle->points[1] = ear->point;
+  triangle->points[2] = ear->next->point;
+}
+
+static inline void detach_ear_from_ears(Triangulation* tri)
+{
+  PointDLL* next_ear           = tri->ear->next_ear;
+  next_ear->prev_ear           = tri->ear->prev_ear;
+  tri->ear->prev_ear->next_ear = next_ear;
+  tri->ear->next_ear           = 0;
+  tri->ear->prev_ear           = 0;
+  tri->ear                     = next_ear;
+}
+
+static inline void detach_ear_from_convex(Triangulation* tri)
+{
+  PointDLL* next_convex = 0;
+  if (tri->ear->next_convex)
+  {
+    if (tri->ear == tri->convex)
+    {
+      tri->convex = tri->convex->next;
+    }
+    tri->ear->next_convex->prev_convex = tri->ear->prev_convex;
+    next_convex                        = tri->ear->next_convex;
+    tri->ear->next_convex              = 0;
+  }
+  if (tri->ear->prev_convex)
+  {
+    if (tri->ear == tri->convex)
+    {
+      tri->convex = tri->convex->prev;
+    }
+    tri->ear->prev_convex->next_convex = next_convex;
+    tri->ear->prev_convex              = 0;
+  }
+}
+
+static inline void detach_node(Triangulation* tri, PointDLL** _prev, PointDLL** _next)
+{
+
+  // test both adjacent
+  PointDLL* prev = tri->ear->prev;
+  PointDLL* next = tri->ear->next;
+
+  prev->next     = next;
+  next->prev     = prev;
+  tri->ear->next = 0;
+  tri->ear->prev = 0;
+  detach_ear_from_convex(tri);
+  detach_ear_from_ears(tri);
+
+  *_prev = prev;
+  *_next = next;
+}
+
+bool remove_vertex(Triangle* triangle, Triangulation* tri, u32& remaining)
+{
+
+  if (remaining >= 3)
+  {
+    add_triangle(triangle, tri->ear);
+  }
+  remaining--;
+  if (remaining <= 2)
   {
 
-    Vector2   v0     = vertex->prev->point;
-    Vector2   v1     = vertex->point;
-    Vector2   v2     = vertex->next->point;
-    bool      found  = false;
-    PointDLL* reflex = get_reflex_vertex(vertices, point_count, vertex);
-    Triangle  t      = {v0, v1, v2};
-    while (reflex)
-    {
-      if (reflex != vertex->prev && reflex != vertex->next && point_in_triangle_2d(t, reflex->point))
-      {
-        found = true;
-        break;
-      }
-      reflex = reflex->next_reflex;
-    }
-
-    if (!found)
-    {
-      PointDLL* ear = get_ear_vertex(vertices, point_count, current_ear);
-      if (ear->next_ear)
-      {
-        ear->next_ear->prev_ear = vertex;
-        vertex->next_ear        = ear->next_ear;
-        ear->next_ear           = vertex;
-        vertex->prev_ear        = ear;
-      }
-      else
-      {
-        ear->next_ear    = vertex;
-        ear->prev_ear    = vertex;
-        vertex->prev_ear = ear;
-        vertex->next_ear = ear;
-      }
-    }
+    remaining = MAX(2, remaining);
+    return true;
   }
+  PointDLL *prev, *next;
+  detach_node(tri, &prev, &next);
+
+  test_vertex(prev, tri);
+  test_vertex(next, tri);
+
+  debug_points(tri);
+  printf("Next in line: %c\n", translate(tri->ear->idx));
+  return false;
 }
 
 // assumes that it is a simple polygon!
 void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2* v_points, u32 point_count)
 {
-  // vertices   cyclical
-  // convex     linear
-  // reflex     linear
-  // ears       cyclical
-
   PointDLL* vertices;
   PointDLL* ear;
 
-  get_vertices(&ear, &vertices, v_points, point_count);
-  // debug_points(vertices, point_count);
+  // get_vertices(&ear, &vertices, v_points, point_count);
+  // debug_points(vertices);
 
   Triangle* triangles = (Triangle*)sta_allocate_struct(Triangle, point_count - 2);
   out_count           = point_count - 2;
   u32 remaining       = point_count;
+  u32 count           = 0;
 
   while (1)
   {
-
-    // add the removed ear to something
-    Triangle* triangle  = &triangles[point_count - remaining];
-    triangle->points[0] = ear->prev->point;
-    triangle->points[1] = ear->point;
-    triangle->points[2] = ear->next->point;
-    remaining--;
-    // // printf("Removed %d\n", ear->idx);
-    // u64 start = (u64)ear;
-    // do
+    // if (remove_vertex(&triangles[count++], vertices, &ear, remaining, point_count))
     // {
-    //   // printf("%d, ", ear->idx);
-    //   ear = ear->next_ear;
-    // } while ((u64)ear != start);
-    // printf("\nRemaining: %d\n", remaining);
-    if (remaining <= 3)
-    {
-      // add last triangle
-      Triangle* triangle  = &triangles[point_count - 3];
-      ear                 = ear->next->next;
-      triangle->points[0] = ear->prev->point;
-      triangle->points[1] = ear->point;
-      triangle->points[2] = ear->next->point;
-      break;
-    }
-
-    if (ear->next_convex)
-    {
-      ear->next_convex->prev_convex = ear->prev_convex;
-      ear->next_convex              = 0;
-    }
-    if (ear->prev_convex)
-    {
-      ear->prev_convex->next_convex = ear->next_convex;
-      ear->prev_convex              = 0;
-    }
-    // test both adjacent
-    PointDLL* prev = ear->prev;
-    PointDLL* next = ear->next;
-
-    // remove the vertex from vertices
-    ear->next->prev = ear->prev;
-    ear->prev->next = ear->next;
-
-    test_vertex(prev, vertices, point_count, ear);
-    test_vertex(next, vertices, point_count, ear);
-
-    if (ear == ear->next_ear)
-    {
-      assert(!"Shouldn't happen!");
-    }
-
-    // get the next ear
-    PointDLL* next_ear = ear->next_ear;
-
-    next_ear->prev_ear = ear->prev_ear;
-    if (ear->prev_ear)
-    {
-      ear->prev_ear->next_ear = next_ear;
-    }
-
-    ear->next_ear = 0;
-    ear->prev_ear = 0;
-    ear           = next_ear;
+    // break;
+    // }
   }
 
   *out = triangles;
