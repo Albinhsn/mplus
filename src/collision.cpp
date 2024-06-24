@@ -56,9 +56,8 @@ char translate(int i)
 
 static bool is_ear(EarClippingNode* reflex, EarClippingNode* vertex)
 {
-  Triangle tri = {vertex->prev->point, vertex->point, vertex->next->point};
-  printf("Testing if %c is in still ear\n", translate(vertex->idx));
-  u64 start = (u64)reflex;
+  Triangle tri   = {vertex->prev->point, vertex->point, vertex->next->point};
+  u64      start = (u64)reflex;
   if (reflex)
   {
     do
@@ -66,16 +65,13 @@ static bool is_ear(EarClippingNode* reflex, EarClippingNode* vertex)
       bool is_point_on_line = compare_vertices(reflex->point, vertex->prev->point) || compare_vertices(reflex->point, vertex->point) || compare_vertices(reflex->point, vertex->next->point);
       if (!is_point_on_line && reflex != vertex->prev && reflex != vertex->next)
       {
-        printf("Testing %c %d\n", translate(reflex->idx), is_point_on_line);
         if (point_in_triangle_2d(tri, reflex->point))
         {
-          printf("Found point inside!\n");
           return false;
         }
       }
       else
       {
-        printf("Was prev or next! %c\n", translate(reflex->idx));
       }
       reflex = reflex->next_reflex;
     } while ((u64)reflex != start && reflex);
@@ -372,64 +368,20 @@ inline void EarClippingNodes::detach_node(EarClippingNode** _prev, EarClippingNo
   *_next = next;
 }
 
-bool remove_vertex(Triangle* triangle, EarClippingNodes* tri, u32& remaining)
+bool remove_vertex(Triangle* triangle, EarClippingNodes* tri)
 {
 
-  if (remaining >= 3)
-  {
-    add_triangle(triangle, tri->ear);
-  }
-  remaining--;
-  if (remaining <= 2)
-  {
-
-    remaining = MAX(2, remaining);
-    return true;
-  }
+  add_triangle(triangle, tri->ear);
   EarClippingNode *prev, *next;
   tri->detach_node(&prev, &next);
 
   tri->test_vertex(prev);
   tri->test_vertex(next);
 
-  debug_points(tri);
   EarClippingNode* head  = tri->ear;
   u64              start = (u64)head;
-  printf("EARS: ");
-  do
-  {
-    printf("%d -> ", head->idx);
-    head = head->next_ear;
-  } while (start != (u64)head);
-  printf("\n");
   assert(tri->ear != 0 && "Out of ears?");
-  printf("Next in line: %c\n", translate(tri->ear->idx));
   return false;
-}
-
-// assumes that it is a simple polygon!
-void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2* v_points, u32 point_count)
-{
-  EarClippingNode* vertices;
-  EarClippingNode* ear;
-
-  // get_vertices(&ear, &vertices, v_points, point_count);
-  // debug_points(vertices);
-
-  Triangle* triangles = (Triangle*)sta_allocate_struct(Triangle, point_count - 2);
-  out_count           = point_count - 2;
-  u32 remaining       = point_count;
-  u32 count           = 0;
-
-  while (1)
-  {
-    // if (remove_vertex(&triangles[count++], vertices, &ear, remaining, point_count))
-    // {
-    // break;
-    // }
-  }
-
-  *out = triangles;
 }
 
 struct PolygonMaxXPair
@@ -500,7 +452,6 @@ static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inn
       Vector2 intersection = {A.x + s.x * t, A.y + s.y * t};
       if (0 <= t && t <= 1)
       {
-        printf("Found (%f,  %f) %f\n", intersection.x, intersection.y, t);
         f32 dist = intersection.x - head->point.x;
         if (min_dist > dist)
         {
@@ -541,7 +492,6 @@ static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inn
       {
         if (point_in_triangle_2d(MIP, head->point))
         {
-          printf("Found reflex inside!\n");
           Vector2 MI = I.sub(*M);
           Vector2 MR = head->point.sub(*M);
           f32     a  = std::abs(acosf(MI.dot(MR) / (MI.len() * MR.len())));
@@ -565,7 +515,6 @@ static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inn
   // h is the vertex we insert into
   // insert h itself
   insert_vertex_prior(outer, h, outer_count, h->point);
-  printf("INTERSECTION POINT: %d\n", h->idx);
   h->prev->idx = h->idx;
 
   // insert the intersection point and walk until we reach back to it, then insert it again
@@ -611,37 +560,35 @@ void triangulation_hole_via_ear_clipping(Vector2** out, u32& out_count, Vector2*
     point_count[i] = pairs[i].point_count;
   }
 
-  VertexDLL*      concatenated_polygon = (VertexDLL*)sta_allocate_struct(VertexDLL, total_count + (polygon_count - 1) * 2);
-  PolygonMaxXPair first_pair           = pairs[0];
-  u32             count                = first_pair.point_count;
+  VertexDLL*      vertices   = (VertexDLL*)sta_allocate_struct(VertexDLL, total_count + (polygon_count - 1) * 2);
+  PolygonMaxXPair first_pair = pairs[0];
+  u32             count      = first_pair.point_count;
   for (i32 i = 0; i < count; i++)
   {
-    VertexDLL* v = &concatenated_polygon[i];
+    VertexDLL* v = &vertices[i];
     v->point     = first_pair.points[i];
-    v->next      = &concatenated_polygon[(i + 1) % count];
-    v->prev      = &concatenated_polygon[i - 1 < 0 ? count - 1 : i - 1];
+    v->next      = &vertices[(i + 1) % count];
+    v->prev      = &vertices[i - 1 < 0 ? count - 1 : i - 1];
     v->idx       = i;
   }
 
   for (u32 i = 1; i < polygon_count; i++)
   {
-    find_bridge(concatenated_polygon, count, &pairs[i]);
-    u64        start = (u64)concatenated_polygon;
-    VertexDLL* head  = concatenated_polygon;
+    find_bridge(vertices, count, &pairs[i]);
+    u64        start = (u64)vertices;
+    VertexDLL* head  = vertices;
     u32        c     = 0;
     do
     {
-      printf("%d (%c), (%f, %f)\n", head->idx, translate(c), head->point.x, head->point.y);
       head = head->next;
       c++;
     } while (start != (u64)head);
-    printf("-\n");
   }
 
   out_count        = total_count + (polygon_count - 1) * 2;
   Vector2*   v     = (Vector2*)sta_allocate_struct(Vector2, out_count);
-  u64        start = (u64)concatenated_polygon;
-  VertexDLL* head  = concatenated_polygon;
+  u64        start = (u64)vertices;
+  VertexDLL* head  = vertices;
   u64        i     = 0;
   do
   {
@@ -656,5 +603,26 @@ void triangulation_hole_via_ear_clipping(Vector2** out, u32& out_count, Vector2*
 
   *out = v;
 
-  sta_deallocate(concatenated_polygon, sizeof(VertexDLL) * (total_count + polygon_count - 1));
+  sta_deallocate(vertices, sizeof(VertexDLL) * (total_count + polygon_count - 1));
+}
+
+void triangulate(Triangle* triangles, u32& triangle_count, Vector2** v_points, u32* v_counts, u32 count)
+{
+
+  EarClippingNodes tri[count];
+
+  for (u32 i = 0; i < count; i++)
+  {
+    get_vertices(&tri[i], v_points[i], v_counts[i]);
+    triangle_count += v_counts[i] - 2;
+  }
+  u32 tot = 0;
+  for (u32 i = 0; i < count; i++)
+  {
+    for (int j = 0; j < v_counts[i] - 2; j++)
+    {
+      remove_vertex(&triangles[tot + j], &tri[i]);
+    }
+    tot += v_counts[i] - 2;
+  }
 }

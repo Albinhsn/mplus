@@ -51,4 +51,6 @@ void triangulate_simple_via_ear_clipping(Triangle** out, u32& out_count, Vector2
 void triangulation_hole_via_ear_clipping(Vector2 ** vertices, u32 &out_count, Vector2** v_points, u32* point_count, u32 polygon_count);
 void get_vertices(EarClippingNodes* tri, Vector2* v_points, u32 point_count);
 
+void triangulate(Triangle* triangles, u32 &triangle_count, Vector2** v_points, u32* v_counts, u32 count);
+
 #endif

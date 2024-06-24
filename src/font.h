@@ -83,37 +83,33 @@ struct LongHorMetric
   i16 left_side_bearing;
 };
 
+struct SimpleGlyph
+{
+  u16* end_pts_of_contours;
+  u16  n;
+  i16* x_coordinates;
+  i16* y_coordinates;
+};
+
+struct Glyph;
+
+struct CompoundGlyph
+{
+  Glyph* glyphs;
+  u32    glyph_count;
+  u32    glyph_capacity;
+};
+
 struct Glyph
 {
 public:
-  void debug()
+  union
   {
-    printf("Countours: %d:: ", n);
-    for (u32 i = 0; i < n; i++)
-    {
-      printf("%d, ", end_pts_of_contours[i]);
-    }
-    if (n > 0)
-    {
-      printf("\nPoints: %d\n", end_pts_of_contours[n - 1]);
-      for (u32 i = 0; i <= end_pts_of_contours[n - 1]; i++)
-      {
-        printf("\t%d %d\n", x_coordinates[i], y_coordinates[i]);
-      }
-    }
-    else
-    {
-      printf("\nNo points!\n");
-    }
-  }
-  u16* end_pts_of_contours;
-  u16  n;
-  u16  instruction_length;
+    SimpleGlyph   simple;
+    CompoundGlyph compound;
+  };
   u16  advance_width;
-  u8*  instructions;
-  u8*  flags;
-  i16* x_coordinates;
-  i16* y_coordinates;
+  bool s; // simple
 };
 
 struct TableMaxp

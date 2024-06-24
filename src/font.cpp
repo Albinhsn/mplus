@@ -58,10 +58,11 @@ static void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buf
   }
 }
 
-static void read_simple_glyph(Glyph* simple, Buffer* buffer, int n)
+static void read_simple_glyph(Glyph* glyph, Buffer* buffer, int n)
 {
 
-  simple->n = n;
+  SimpleGlyph* simple = &glyph->simple;
+  simple->n           = n;
   if (n > 0)
   {
     simple->end_pts_of_contours = (u16*)sta_allocate_struct(u16, n);
@@ -71,28 +72,24 @@ static void read_simple_glyph(Glyph* simple, Buffer* buffer, int n)
     }
   }
 
-  simple->instruction_length = swap_u16(*(u16*)buffer->current_address());
-  buffer->advance(sizeof(u16));
-
-  simple->instructions = (u8*)sta_allocate_struct(u8, simple->instruction_length);
-  strncpy((char*)simple->instructions, buffer->current_address(), simple->instruction_length);
-  buffer->advance(simple->instruction_length);
+  u16 instruction_length = swap_u16(*(u16*)buffer->current_address());
+  buffer->advance(sizeof(u16) + instruction_length);
 
   u16 number_of_points = n > 0 ? simple->end_pts_of_contours[simple->n - 1] + 1 : 0;
 
-  simple->flags        = (u8*)sta_allocate_struct(u8, number_of_points);
+  u8* flags            = (u8*)sta_allocate_struct(u8, number_of_points);
 
   for (u32 i = 0; i < number_of_points; i++)
   {
-    u8 flag          = buffer->advance();
-    simple->flags[i] = flag;
+    u8 flag  = buffer->advance();
+    flags[i] = flag;
 
     if (REPEAT(flag))
     {
       u32 repeat_for = buffer->advance();
       for (u32 repeat = 0; repeat < repeat_for; repeat++)
       {
-        simple->flags[++i] = flag;
+        flags[++i] = flag;
       }
       assert(i <= number_of_points && "Repeated past the end?");
     }
@@ -102,14 +99,15 @@ static void read_simple_glyph(Glyph* simple, Buffer* buffer, int n)
   {
     simple->x_coordinates = (i16*)sta_allocate_struct(i16, number_of_points);
     simple->y_coordinates = (i16*)sta_allocate_struct(i16, number_of_points);
-    read_coordinates(simple->x_coordinates, simple->flags, number_of_points, buffer, true);
-    read_coordinates(simple->y_coordinates, simple->flags, number_of_points, buffer, false);
+    read_coordinates(simple->x_coordinates, flags, number_of_points, buffer, true);
+    read_coordinates(simple->y_coordinates, flags, number_of_points, buffer, false);
   }
   else
   {
     simple->x_coordinates = 0;
     simple->y_coordinates = 0;
   }
+  sta_deallocate(flags, number_of_points);
 }
 
 static void get_all_glyph_locations(Table* tables, char* buf, u32** glyph_locations, u32& number_of_glyphs)
@@ -158,15 +156,42 @@ Glyph Font::get_glyph(u32 code)
   return this->glyphs[0];
 }
 
-static void read_compound_glyph(u32* glyph_locations, char* original_buf, Glyph* comp_glyph, Buffer* buffer, u32 this_glyph)
+static void resize_compound_glyph(Glyph* glyph, i32 offset_x, i32 offset_y, f32 a, f32 b, f32 c, f32 d)
 {
-  bool   has_more_glyphs = true;
-  u32    total_points    = 0;
-  u32    glyph_count = 0, glyph_capacity = 2;
-  Glyph* glyphs = (Glyph*)sta_allocate_struct(Glyph, glyph_capacity);
+
+  if (glyph->s)
+  {
+    SimpleGlyph* current_glyph = &glyph->simple;
+    for (u32 i = 0; i <= current_glyph->end_pts_of_contours[current_glyph->n - 1]; i++)
+    {
+      i16 x                           = current_glyph->x_coordinates[i];
+      i16 y                           = current_glyph->y_coordinates[i];
+
+      current_glyph->x_coordinates[i] = x * a + c * y + offset_x;
+      current_glyph->y_coordinates[i] = x * b + d * y + offset_y;
+    }
+  }
+  else
+  {
+    CompoundGlyph* comp = &glyph->compound;
+    for (u32 i = 0; i < comp->glyph_count; i++)
+    {
+      resize_compound_glyph(&comp->glyphs[i], offset_x, offset_y, a, b, c, d);
+    }
+  }
+}
+
+static void read_compound_glyph(u32* glyph_locations, char* original_buf, Glyph* glyph, Buffer* buffer, u32 this_glyph)
+{
+  CompoundGlyph* comp_glyph      = &glyph->compound;
+
+  bool           has_more_glyphs = true;
+  comp_glyph->glyph_count        = 0;
+  comp_glyph->glyph_capacity     = 2;
+  comp_glyph->glyphs             = (Glyph*)sta_allocate_struct(Glyph, comp_glyph->glyph_capacity);
   while (has_more_glyphs)
   {
-    RESIZE_ARRAY(glyphs, Glyph, glyph_count, glyph_capacity);
+    RESIZE_ARRAY(comp_glyph->glyphs, Glyph, comp_glyph->glyph_count, comp_glyph->glyph_capacity);
 
     u16 flags = *(u16*)buffer->current_address();
     flags     = swap_u16(flags);
@@ -237,44 +262,12 @@ static void read_compound_glyph(u32* glyph_locations, char* original_buf, Glyph*
       buffer->advance(sizeof(u16));
     }
 
-    Glyph* current_glyph = &glyphs[glyph_count++];
+    Glyph* current_glyph = &comp_glyph->glyphs[comp_glyph->glyph_count++];
 
     // parse the glyph from glyphindex
     parse_glyph(original_buf, current_glyph, glyph_locations[glyph_index], glyph_locations, glyph_index);
-
-    for (u32 i = 0; i <= current_glyph->end_pts_of_contours[current_glyph->n - 1]; i++)
-    {
-      i16 x                           = current_glyph->x_coordinates[i];
-      i16 y                           = current_glyph->y_coordinates[i];
-
-      current_glyph->x_coordinates[i] = x * a + c * y + offset_x;
-      current_glyph->y_coordinates[i] = x * b + d * y + offset_y;
-    }
-    comp_glyph->n += current_glyph->n;
-    total_points += current_glyph->end_pts_of_contours[current_glyph->n - 1];
+    resize_compound_glyph(current_glyph, offset_x, offset_y, a, b, c, d);
   }
-
-  comp_glyph->end_pts_of_contours = (u16*)sta_allocate_struct(u16, comp_glyph->n);
-  comp_glyph->x_coordinates       = (i16*)sta_allocate_struct(i16, total_points);
-  comp_glyph->y_coordinates       = (i16*)sta_allocate_struct(i16, total_points);
-  u32 n = 0, coords = 0;
-  for (u32 i = 0; i < glyph_count; i++)
-  {
-    Glyph glyph = glyphs[i];
-    for (u32 j = 0; j <= glyph.end_pts_of_contours[glyph.n - 1]; j++)
-    {
-      comp_glyph->x_coordinates[coords + j] = glyph.x_coordinates[j];
-      comp_glyph->y_coordinates[coords + j] = glyph.y_coordinates[j];
-    }
-    for (u32 j = 0; j < glyph.n; j++)
-    {
-      comp_glyph->end_pts_of_contours[n + j] = glyph.end_pts_of_contours[j] + coords;
-    }
-
-    n += glyph.n;
-    coords += glyph.end_pts_of_contours[glyph.n - 1] + 1;
-  }
-  sta_deallocate(glyphs, sizeof(Glyph) * glyph_capacity);
 }
 
 static void parse_glyph(char* buf, Glyph* glyph, u32 offset, u32* glyph_locations, u32 this_glyph)
@@ -290,10 +283,12 @@ static void parse_glyph(char* buf, Glyph* glyph, u32 offset, u32* glyph_location
   if (number_of_contours >= 0)
   {
     read_simple_glyph(glyph, &buffer, number_of_contours);
+    glyph->s = true;
   }
   else
   {
     read_compound_glyph(glyph_locations, buf, glyph, &buffer, this_glyph);
+    glyph->s = false;
   }
 }
 
@@ -579,5 +574,7 @@ void Font::parse_ttf(const char* filename)
   parse_advance_widths(this, &tables[TABLE_HHEA], &tables[TABLE_HMTX], buffer.buffer);
   parse_mapping(buffer.buffer, this, &tables[TABLE_CMAP]);
 }
+
+
 #undef REPEAT
 #undef BIT_IS_SET

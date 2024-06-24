@@ -7,6 +7,7 @@
 #include "vector.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
+
 void Renderer::toggle_wireframe_on()
 {
   glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -27,130 +28,147 @@ void Renderer::draw_line(f32 x1, f32 y1, f32 x2, f32 y2)
   glVertex2f(x2, y2);
   glEnd();
 }
-void Renderer::get_string_vertices(Vector2** _vertices, u32& vertex_count, const u32 code)
+
+// this->triangulate_compound_glyph(v_points, point_count, count, cap, x, y, &glyph);
+void Renderer::triangulate_compound_glyph(Vector2*** v_points, u32** point_count, u32& count, u32& v_cap, u32& p_cap, f32& x, f32& y, Glyph* glyph)
 {
-  Glyph glyph    = this->font->get_glyph(code);
-  u32   contours = glyph.end_pts_of_contours[glyph.n - 1] + 1;
+  f32 x_offset = x, y_offset = y;
+  for (u32 i = 0; i < glyph->compound.glyph_count; i++)
+  {
+    Glyph* g = &glyph->compound.glyphs[i];
+    if (g->s)
+    {
+      RESIZE_ARRAY((*v_points), Vector2*, count, v_cap);
+      RESIZE_ARRAY((*point_count), u32, count, p_cap);
+      this->triangulate_simple_glyph(&(*v_points)[count], (*point_count)[count], x_offset, y_offset, g);
+      count++;
+    }
+    else
+    {
+      triangulate_compound_glyph(v_points, point_count, count, v_cap, p_cap, x_offset, y_offset, g);
+    }
+    x_offset = x, y_offset = y;
+  }
+  x += glyph->advance_width;
+}
+
+void Renderer::triangulate_simple_glyph(Vector2** _vertices, u32& vertex_count, f32& x_offset, f32& y_offset, Glyph* glyph)
+{
+  SimpleGlyph* simple   = &glyph->simple;
+  u32          contours = simple->end_pts_of_contours[simple->n - 1] + 1;
   // get the vertices of the glyph
   Vector2* vertices;
-  if (glyph.n == 1)
+  if (simple->n == 1)
   {
     vertices     = (Vector2*)sta_allocate_struct(Vector2, contours);
     vertex_count = contours;
     for (u32 j = 0; j < contours; j++)
     {
       Vector2* vertex = &vertices[j];
-      vertex->x       = glyph.x_coordinates[j];
-      vertex->y       = glyph.y_coordinates[j];
-      printf("%d: %f %f\n", j, vertex->x, vertex->y);
+      vertex->x       = simple->x_coordinates[j];
+      vertex->y       = simple->y_coordinates[j];
     }
-    // x += glyph.advance_width * this->font->scale;
-    // add x offset
   }
   else
   {
-    Vector2** verts        = (Vector2**)sta_allocate_struct(Vector2*, glyph.n);
-    u32*      point_counts = (u32*)sta_allocate_struct(u32, glyph.n);
+    Vector2** verts        = (Vector2**)sta_allocate_struct(Vector2*, simple->n);
+    u32*      point_counts = (u32*)sta_allocate_struct(u32, simple->n);
     u32       prev_end     = 0;
-    for (u32 i = 0; i < glyph.n; i++)
+    for (u32 i = 0; i < simple->n; i++)
     {
-      u32      end_pts            = glyph.end_pts_of_contours[i];
+      u32      end_pts            = simple->end_pts_of_contours[i];
       u32      number_of_vertices = end_pts - prev_end;
       Vector2* v                  = (Vector2*)sta_allocate_struct(Vector2, number_of_vertices);
-      point_counts[i]             = number_of_vertices;
-      for (u32 j = 0; j < end_pts - prev_end; j++)
+      point_counts[i]             = number_of_vertices + 1;
+      for (u32 j = 0; j <= end_pts - prev_end; j++)
       {
-        v[j].x = glyph.x_coordinates[j + prev_end + 1];
-        v[j].y = glyph.y_coordinates[j + prev_end + 1];
-        printf("%d: (%f, %f)\n", j, v[j].x, v[j].y);
+        u32 idx = j + prev_end;
+        v[j].x  = simple->x_coordinates[idx];
+        v[j].y  = simple->y_coordinates[idx];
       }
-      printf("-\n");
-      prev_end = end_pts;
+      prev_end = end_pts + 1;
       verts[i] = v;
     }
-    triangulation_hole_via_ear_clipping(&vertices, vertex_count, verts, point_counts, glyph.n);
+    triangulation_hole_via_ear_clipping(&vertices, vertex_count, verts, point_counts, simple->n);
   }
+  for (u32 i = 0; i < vertex_count; i++)
+  {
+    vertices[i].x = vertices[i].x * this->font->scale + x_offset;
+    vertices[i].y = vertices[i].y * this->font->scale + y_offset;
+  }
+  // number of triangles is sum of (vertex_count - 2) for each simple glyph
+  x_offset += glyph->advance_width * this->font->scale;
   *_vertices = vertices;
 }
 
-void Renderer::render_text(const char* string, u32 string_length, f32 font_size, f32 x, f32 y, TextAlignment alignment_x, TextAlignment alignment_y)
+void Renderer::render_text(const char* string, u32 string_length, f32 x, f32 y, TextAlignment alignment_x, TextAlignment alignment_y, Color color)
 {
-  // after precalc is done
-  // this should just be querying for the triangles data and rendering
+
+  u32       count       = 0;
+  u32       v_cap       = 2;
+  u32       p_cap       = 2;
+  Vector2** v_points    = (Vector2**)sta_allocate_struct(Vector2*, v_cap);
+  u32*      point_count = (u32*)sta_allocate_struct(u32, p_cap);
+
+  // every simple glyph has a number of polygons denoted by "n".
+  // That means that every simple polygon should have an "n" number of arrays of vertices for those points
+  // That also means it should have an array of numbers depending on the number of points for each array
+
+  // each compound glyphs contains a number of glyphs which can be both compound or simple
+  // AS LONG AS those are generated with the same offset, they can be viewed as a sum of they're components
+
+  // after that it means that we can calculate the number of triangles once we've gathered the data into an array
+  // iterate over it and generate the triangles from each simpleglyphvertices
+
   for (u32 i = 0; i < string_length; i++)
   {
-    Glyph glyph    = this->font->get_glyph(string[i]);
-    u32   prev_end = 0;
-    u32   contours = glyph.end_pts_of_contours[glyph.n - 1] + 1;
-    // get the vertices of the glyph
-    Vector2* vertices = (Vector2*)sta_allocate_struct(Vector2, contours);
-    if (glyph.n == 1)
+    Glyph glyph = this->font->get_glyph(string[i]);
+    if (glyph.s)
     {
-      for (u32 j = 0; j < contours; j++)
-      {
-        Vector2* vertex = &vertices[j];
-        // u16      glyph_x = glyph.x_coordinates[j];
-        // u16      glyph_y = glyph.y_coordinates[j];
-        // vertex->x = x + glyph_x * this->font->scale;
-        // vertex->y = y + 0.5f * (glyph_y * this->font->scale);
-        vertex->x = glyph.x_coordinates[j];
-        vertex->y = glyph.y_coordinates[j];
-        printf("%d: %f %f\n", j, vertex->x, vertex->y);
-      }
-      x += glyph.advance_width * this->font->scale;
-      // add x offset
+      RESIZE_ARRAY(v_points, Vector2*, count, v_cap);
+      RESIZE_ARRAY(point_count, u32, count, p_cap);
+      this->triangulate_simple_glyph(&v_points[count], point_count[count], x, y, &glyph);
+      count++;
     }
     else
     {
-      assert(!"Please no :)");
-      for (u32 j = 0; j < glyph.n; j++)
-      {
-        u16 contour = glyph.end_pts_of_contours[j];
-        while (prev_end <= contour)
-        {
-
-          prev_end++;
-        }
-      }
+      this->triangulate_compound_glyph(&v_points, &point_count, count, v_cap, p_cap, x, y, &glyph);
     }
-
-    Triangle* triangles;
-    u32       triangle_count;
-
-    triangulate_simple_via_ear_clipping(&triangles, triangle_count, vertices, contours);
-    // exit(1);
-    // for (u32 j = 0; j < triangle_count; j++)
-    // {
-    //   Triangle t = triangles[j];
-    //   t.points[0].debug();
-    //   t.points[1].debug();
-    //   t.points[2].debug();
-    //   printf("-\n");
-    // }
-
-    sta_glBindVertexArray(this->text_buffer.vao);
-    sta_glBindBuffer(GL_ARRAY_BUFFER, this->text_buffer.vbo);
-    sta_glBufferData(GL_ARRAY_BUFFER, sizeof(Triangle) * triangle_count, triangles, GL_DYNAMIC_DRAW);
-
-    u32 index_count = triangle_count * 3;
-    u32 triangle_indices[index_count];
-    for (u32 j = 0; j < index_count; j++)
-    {
-      triangle_indices[j] = j;
-    }
-
-    sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->text_buffer.ebo);
-    sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * index_count, triangle_indices, GL_DYNAMIC_DRAW);
-    // exit(1);
-
-    this->text_shader.use();
-    Color white = WHITE;
-    this->text_shader.set_float4f("color", (float*)&white);
-
-    glDrawElements(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0);
-
-    sta_deallocate(vertices, sizeof(Vector2) * glyph.end_pts_of_contours[glyph.n - 1]);
   }
+
+  u32 number_of_triangles = 0;
+  for (u32 i = 0; i < count; i++)
+  {
+    number_of_triangles += point_count[i] - 2;
+  }
+
+  Triangle* triangles      = (Triangle*)sta_allocate_struct(Triangle, number_of_triangles);
+  u32       triangle_count = 0;
+
+  triangulate(triangles,triangle_count, v_points, point_count, count);
+
+  sta_glBindVertexArray(this->text_buffer.vao);
+  sta_glBindBuffer(GL_ARRAY_BUFFER, this->text_buffer.vbo);
+  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(Triangle) * triangle_count, triangles, GL_DYNAMIC_DRAW);
+
+  u32 index_count = triangle_count * 3;
+  u32 triangle_indices[index_count];
+  for (u32 j = 0; j < index_count; j++)
+  {
+    triangle_indices[j] = j;
+  }
+
+  sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->text_buffer.ebo);
+  sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * index_count, triangle_indices, GL_DYNAMIC_DRAW);
+  // exit(1);
+
+  this->text_shader.use();
+  this->text_shader.set_float4f("color", (float*)&color);
+
+  sta_deallocate(v_points, sizeof(Vector2**) * v_cap);
+  sta_deallocate(point_count, sizeof(u32) * p_cap);
+
+  glDrawElements(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0);
 }
 void Renderer::bind_texture(u32 texture_id, u32 texture_unit)
 {

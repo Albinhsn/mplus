@@ -1,6 +1,7 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
+#include "collision.h"
 #include "common.h"
 #include "files.h"
 #include "font.h"
@@ -63,13 +64,13 @@ public:
   void          render_arrays(u32 buffer_id, GLenum type, u32 count);
   void          render_buffer(u32 buffer_id);
   void          render_2d_quad(f32 min[2], f32 max[2], Color color);
-  void          get_string_vertices(Vector2** _vertices, u32& vertex_count, const u32 code);
-
   void          draw_line(f32 x1, f32 y1, f32 x2, f32 y2);
-  void          render_text(const char* string, u32 string_length, f32 font_size, f32 x, f32 y, TextAlignment alignment_x, TextAlignment alignment_y);
+  void          render_text(const char* string, u32 string_length, f32 x, f32 y, TextAlignment alignment_x, TextAlignment alignment_y, Color color);
   void          toggle_wireframe_on();
   void          toggle_wireframe_off();
   void          change_screen_size(u32 screen_width, u32 screen_height);
+  void          triangulate_simple_glyph(Vector2** _vertices, u32& vertex_count, f32& x_offset, f32& y_offset, Glyph* glyph);
+  void          triangulate_compound_glyph(Vector2*** v_points, u32** point_count, u32& count, u32& v_cap,u32&p_cap, f32& x, f32 &y, Glyph* glyph);
 
 private:
   void init_quad_buffer_2d();
