@@ -47,11 +47,20 @@ static bool is_convex(Vector2 v0, Vector2 v1, Vector2 v2)
 
   return v0v1 < 0 && v1v2 < 0;
 }
-char translate(int i)
+
+static bool is_ear(Vector2 v0, Vector2 v1, Vector2 v2, Vector2* v, u32 v_count, u32 low, u32 mid, u32 high)
 {
-  char letters[] = "abcdefghijklmnopqrstuvwz123456789!\"#¤%&/()=+-?<>,;.:-_´^'*¨";
-  assert(i <= ArrayCount(letters));
-  return letters[i];
+  Triangle t(v0, v1, v2);
+  for (i32 i = 0; i < v_count; i++)
+  {
+    // only need to test reflex vertices?
+    bool is_point_on_line = compare_vertices(v[i], v0) || compare_vertices(v[i], v1) || compare_vertices(v[i], v2);
+    if (i != low && i != mid && i != high && point_in_triangle_2d(t, v[i]) && !is_point_on_line)
+    {
+      return false;
+    }
+  }
+  return true;
 }
 
 static bool is_ear(EarClippingNode* reflex, EarClippingNode* vertex)
@@ -79,94 +88,7 @@ static bool is_ear(EarClippingNode* reflex, EarClippingNode* vertex)
   return true;
 }
 
-void debug_points(EarClippingNodes* tri)
-{
-  for (u32 i = 0; i < tri->count; i++)
-  {
-    EarClippingNode* head = &tri->head[i];
-    if (head->prev)
-    {
-      printf("%c\t|%c|\t%c ---- ", translate(head->prev->idx), translate(head->idx), translate(head->next->idx));
-      if (head->next_ear)
-      {
-        printf("EAR, ");
-      }
-      if (head->next_convex || head->prev_convex)
-      {
-        printf("CONVEX, ");
-      }
-      if (head->next_reflex || head->prev_reflex)
-      {
-        printf("REFLEX");
-      }
-      printf("-\n");
-    }
-  }
-  EarClippingNode* ear   = tri->ear;
-  u64              start = (u64)ear;
-  if (ear)
-  {
-    printf("Ears:\n ");
-    do
-    {
-      printf("%c -> ", translate(ear->idx));
-      ear = ear->next_ear;
-    } while (start != (u64)ear && ear);
-    ear = (EarClippingNode*)start;
-    printf("\n");
-    do
-    {
-      printf("%c <- ", translate(ear->idx));
-      ear = ear->prev_ear;
-    } while (start != (u64)ear && ear);
-    printf("\n");
-
-    ear   = tri->convex;
-    start = (u64)ear;
-    if (ear)
-    {
-      printf("Convex:\n");
-      do
-      {
-        printf("%c -> ", translate(ear->idx));
-        ear = ear->next_convex;
-      } while (start != (u64)ear && ear);
-      ear = (EarClippingNode*)start;
-      printf("\n");
-
-      do
-      {
-        printf("%c <- ", translate(ear->idx));
-        ear = ear->prev_convex;
-      } while (start != (u64)ear && ear);
-      printf("\n");
-      ear   = tri->reflex;
-      start = (u64)ear;
-      if (ear)
-      {
-        printf("Reflex:\n");
-        do
-        {
-          printf("%c -> ", translate(ear->idx));
-          ear = ear->next_reflex;
-        } while (start != (u64)ear && ear);
-        ear = (EarClippingNode*)start;
-        printf("\n");
-
-        do
-        {
-          printf("%c <- ", translate(ear->idx));
-          ear = ear->prev_reflex;
-        } while (start != (u64)ear && ear);
-        printf("\n");
-      }
-
-      printf("-----\n");
-    }
-  }
-}
-
-void get_vertices(EarClippingNodes* tri, Vector2* v_points, u32 point_count)
+static void get_earclipping_vertices(EarClippingNodes* tri, Vector2* v_points, u32 point_count)
 {
   tri->head             = (EarClippingNode*)sta_allocate_struct(EarClippingNode, point_count);
   tri->count            = point_count;
@@ -207,19 +129,7 @@ void get_vertices(EarClippingNodes* tri, Vector2* v_points, u32 point_count)
         tri->convex = curr;
       }
 
-      bool found = false;
-      for (i32 j = 0; j < point_count; j++)
-      {
-        // only need to test reflex vertices?
-        bool is_point_on_line = compare_vertices(v_points[j], v_points[i_low]) || compare_vertices(v_points[j], v_points[i]) || compare_vertices(v_points[j], v_points[i_high]);
-        if (j != i && j != i_low && j != i_high && point_in_triangle_2d(t, v_points[j]) && !is_point_on_line)
-        {
-          found = true;
-          break;
-        }
-      }
-
-      if (!found)
+      if (is_ear(v0, v1, v2, v_points, point_count, i_low, i, i_high))
       {
         if (tri->ear != 0)
         {
@@ -451,13 +361,12 @@ inline void EarClippingNodes::detach_node(EarClippingNode** _prev, EarClippingNo
   *_next = next;
 }
 
-bool remove_vertex(Triangle* triangle, EarClippingNodes* tri)
+static bool remove_vertex(Triangle* triangle, EarClippingNodes* tri)
 {
 
   add_triangle(triangle, tri->ear);
   EarClippingNode *prev, *next;
   tri->detach_node(&prev, &next);
-  // debug_points(tri);
 
   tri->test_vertex(prev);
   tri->test_vertex(next);
@@ -509,18 +418,10 @@ static inline void insert_vertex_prior(VertexDLL* head, VertexDLL* p, u32& count
 static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inner)
 {
 
-  // 1. Search the inner polygon for vertex M of maximum x-value
-  Vector2* C = inner->max_x;
+  Vector2*   C         = inner->max_x;
+  VertexDLL* head      = outer;
+  u64        start     = (u64)head;
 
-  // 2. Intersect the ray M +t(1,0) with all directed edges (Vi, Vi+1) of the outer polygon for which M is to the left of the line containing the edge.
-  //    Moreover , the intersection tests need only involve directed edges for which Vi is below (or on) the ray and Vi+1 is above (or on) the ray.
-  //    This is essential when the polygon has multiple holes and one or more holes have already had bridges inserted.
-  //    Let I be the closest visible point to M on the ray. The implementation keeps track of this by monitoring the t-value in search of the smallest
-  //    positive value for those edges in the intersection tests.
-  VertexDLL* head  = outer;
-  u64        start = (u64)head;
-
-  // printf("Searching from %f %f\n", C->x, C->y);
   bool       is_vertex = false;
   VertexDLL* h         = 0;
   Vector2    I;
@@ -530,13 +431,11 @@ static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inn
   {
     Vector2 A = head->point;
     Vector2 B = head->next->point;
-    // printf("(%f, %f), (%f, %f)\n", A.x, A.y, B.x, B.y);
     if (compare_float(A.x, B.x) && ((A.y <= C->y && B.y >= C->y) || (A.y >= C->y && B.y <= C->y)))
     {
       f32 dist = B.x - C->x;
       if (dist > 0 && min_dist > dist)
       {
-        // printf("new best: %f\n", dist);
         h    = head;
         dist = min_dist;
         I    = Vector2(B.x, C->y);
@@ -546,27 +445,17 @@ static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inn
     }
     else if ((A.y >= C->y && B.y <= C->y) || (B.y >= C->y && A.y <= C->y) && (A.x >= C->x || B.x >= C->x))
     {
-      Vector2 s = B.sub(A);
-      // t = n * (C-A)/(n * (B - A))
-      // printf("C-A: ");
-      // C->sub(A).debug();
-      // printf("B-A: ");
-      // B.sub(A).debug();
-      // printf("n * (C-A): %f\n", n.dot(C->sub(A)));
-      // printf("n * (B-A): %f\n", n.dot(B.sub(A)));
-      f32 t = n.dot(C->sub(A)) / n.dot(B.sub(A));
-      // printf("%f\n", t);
+      Vector2 s            = B.sub(A);
+      f32     t            = n.dot(C->sub(A)) / n.dot(B.sub(A));
       Vector2 intersection = {A.x + s.x * t, A.y + s.y * t};
       if (0 <= t && t <= 1)
       {
         f32 dist = intersection.x - C->x;
-        // printf("Got %f\n", dist);
         if (min_dist > dist)
         {
-          h    = head;
-          dist = min_dist;
-          I    = intersection;
-          // robust?
+          h         = head;
+          dist      = min_dist;
+          I         = intersection;
           is_vertex = t == 0 || t == 1;
         }
       }
@@ -577,18 +466,12 @@ static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inn
 
   assert(h && "Didn't find any point!");
 
-  // 3. If I is a vertex of the outer polygon, then M and I are mutually visible and the algorithm terminates.
   if (!is_vertex)
   {
-    Vector2* M = C;
-    // 4. Otherwise, I is an interior point of the edge (Vi, Vi+1). Select P to be the end point of maximum x-value for this edge
-    Vector2  P = h->point.x > h->next->point.x ? h->point : h->next->point;
-    Triangle MIP(*M, I, P);
+    Vector2*   M = C;
+    Vector2    P = h->point.x > h->next->point.x ? h->point : h->next->point;
+    Triangle   MIP(*M, I, P);
 
-    // 5. Search the reflex vertices of the outer polygon, not including P if it happens to be reflex. If all of those vertices are strictly outside triangle (M,I,P), then
-    //    M and P are mutually visible and the algorithm terminates.
-    // 6. Otherwise, at least one reflex vertex lies in (M,I,P). Search for the reflex R that minimizes the angle between (M,I) and (M,R);
-    //    then M and R are mutually visible and the algorithm terminates.
     VertexDLL* min_angle = 0;
     f32        angle     = 0;
     head                 = outer;
@@ -620,28 +503,22 @@ static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inn
     }
   }
 
-  // h is the vertex we insert into
-  // insert h itself
   insert_vertex_prior(outer, h, outer_count, h->point);
-  h->prev->idx = h->idx;
+  h->prev->idx  = h->idx;
 
-  // insert the intersection point and walk until we reach back to it, then insert it again
   i32 start_idx = inner->max_x_idx;
   do
   {
     insert_vertex_prior(outer, h, outer_count, inner->points[start_idx]);
-    // start_idx = start_idx - 1 < 0 ? inner->point_count - 1 : start_idx - 1;
     start_idx = (start_idx + 1) % inner->point_count;
-    // printf("%d -> %d %d\n", start_idx, inner->point_count, inner->max_x_idx);
   } while (start_idx != inner->max_x_idx);
   insert_vertex_prior(outer, h, outer_count, inner->points[start_idx]);
 }
 
 // requires the ordering of the outer and inner vertices to be opposite
-void triangulation_hole_via_ear_clipping(Vector2** out, u32& out_count, Vector2** v_points, u32* point_count, u32 polygon_count)
+void create_simple_polygon_from_polygon_with_holes(Vector2** out, u32& out_count, Vector2** v_points, u32* point_count, u32 polygon_count)
 {
 
-  // sort the polygons by their x-value
   PolygonMaxXPair pairs[polygon_count];
   u32             total_count = 0;
   for (u32 i = 0; i < polygon_count; i++)
@@ -703,9 +580,8 @@ void triangulation_hole_via_ear_clipping(Vector2** out, u32& out_count, Vector2*
   do
   {
     v[i++] = head->point;
-    head = head->next;
+    head   = head->next;
   } while (start != (u64)head);
-  // exit(1);
 
   assert(i == count && "Didn't fill?");
   assert(count == out_count && "Didn't equal in size?");
@@ -715,14 +591,14 @@ void triangulation_hole_via_ear_clipping(Vector2** out, u32& out_count, Vector2*
   sta_deallocate(vertices, sizeof(VertexDLL) * (total_count + polygon_count - 1));
 }
 
-void triangulate(Triangle* triangles, u32& triangle_count, Vector2** v_points, u32* v_counts, u32 count, u32 number_of_triangles)
+void triangulate_earclipping(Triangle* triangles, u32& triangle_count, Vector2** v_points, u32* v_counts, u32 count, u32 number_of_triangles)
 {
 
   EarClippingNodes tri[count];
 
   for (u32 i = 0; i < count; i++)
   {
-    get_vertices(&tri[i], v_points[i], v_counts[i]);
+    get_earclipping_vertices(&tri[i], v_points[i], v_counts[i]);
     triangle_count += v_counts[i] - 2;
   }
   u32 tot = 0;

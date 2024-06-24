@@ -29,30 +29,7 @@ void Renderer::draw_line(f32 x1, f32 y1, f32 x2, f32 y2)
   glEnd();
 }
 
-// this->triangulate_compound_glyph(v_points, point_count, count, cap, x, y, &glyph);
-void Renderer::triangulate_compound_glyph(Vector2*** v_points, u32** point_count, u32& count, u32& v_cap, u32& p_cap, f32& x, f32& y, Glyph* glyph, f32 font_size)
-{
-  f32 x_offset = x, y_offset = y;
-  for (u32 i = 0; i < glyph->compound.glyph_count; i++)
-  {
-    Glyph* g = &glyph->compound.glyphs[i];
-    if (g->s)
-    {
-      RESIZE_ARRAY((*v_points), Vector2*, count, v_cap);
-      RESIZE_ARRAY((*point_count), u32, count, p_cap);
-      this->triangulate_simple_glyph(&(*v_points)[count], (*point_count)[count], x_offset, y_offset, g, font_size);
-      count++;
-    }
-    else
-    {
-      triangulate_compound_glyph(v_points, point_count, count, v_cap, p_cap, x_offset, y_offset, g, font_size);
-    }
-    x_offset = x, y_offset = y;
-  }
-  x += glyph->advance_width * font_size * this->font->scale;
-}
-
-void Renderer::triangulate_simple_glyph(Vector2** _vertices, u32& vertex_count, f32& x_offset, f32& y_offset, Glyph* glyph, f32 font_size)
+static void triangulate_simple_glyph(Vector2** _vertices, u32& vertex_count, i16& x_offset, i16& y_offset, Glyph* glyph)
 {
   SimpleGlyph* simple   = &glyph->simple;
   u32          contours = simple->end_pts_of_contours[simple->n - 1] + 1;
@@ -65,8 +42,8 @@ void Renderer::triangulate_simple_glyph(Vector2** _vertices, u32& vertex_count, 
     for (u32 j = 0; j < contours; j++)
     {
       Vector2* vertex = &vertices[j];
-      vertex->x       = simple->x_coordinates[j];
-      vertex->y       = simple->y_coordinates[j];
+      vertex->x       = simple->x_coordinates[j] + x_offset;
+      vertex->y       = simple->y_coordinates[j] + y_offset;
     }
   }
   else
@@ -83,22 +60,38 @@ void Renderer::triangulate_simple_glyph(Vector2** _vertices, u32& vertex_count, 
       for (u32 j = 0; j <= end_pts - prev_end; j++)
       {
         u32 idx = j + prev_end;
-        v[j].x  = simple->x_coordinates[idx];
-        v[j].y  = simple->y_coordinates[idx];
+        v[j].x  = simple->x_coordinates[idx] + x_offset;
+        v[j].y  = simple->y_coordinates[idx] + y_offset;
       }
       prev_end = end_pts + 1;
       verts[i] = v;
     }
-    triangulation_hole_via_ear_clipping(&vertices, vertex_count, verts, point_counts, simple->n);
+    create_simple_polygon_from_polygon_with_holes(&vertices, vertex_count, verts, point_counts, simple->n);
   }
-  for (u32 i = 0; i < vertex_count; i++)
-  {
-    vertices[i].x = (vertices[i].x * this->font->scale) * font_size + x_offset;
-    vertices[i].y = (vertices[i].y * this->font->scale) * font_size + y_offset;
-  }
-  // number of triangles is sum of (vertex_count - 2) for each simple glyph
-  x_offset += glyph->advance_width * this->font->scale * font_size;
+  x_offset += glyph->advance_width;
   *_vertices = vertices;
+}
+
+static void triangulate_compound_glyph(Vector2*** v_points, u32** point_count, u32& count, u32& v_cap, u32& p_cap, i16& x, i16& y, Glyph* glyph)
+{
+  i16 x_offset = x, y_offset = y;
+  for (u32 i = 0; i < glyph->compound.glyph_count; i++)
+  {
+    Glyph* g = &glyph->compound.glyphs[i];
+    if (g->s)
+    {
+      RESIZE_ARRAY((*v_points), Vector2*, count, v_cap);
+      RESIZE_ARRAY((*point_count), u32, count, p_cap);
+      triangulate_simple_glyph(&(*v_points)[count], (*point_count)[count], x_offset, y_offset, g);
+      count++;
+    }
+    else
+    {
+      triangulate_compound_glyph(v_points, point_count, count, v_cap, p_cap, x_offset, y_offset, g);
+    }
+    x_offset = x, y_offset = y;
+  }
+  x += glyph->advance_width;
 }
 
 void Renderer::render_text(const char* string, u32 string_length, f32 x, f32 y, TextAlignment alignment_x, TextAlignment alignment_y, Color color, f32 font_size)
@@ -110,6 +103,7 @@ void Renderer::render_text(const char* string, u32 string_length, f32 x, f32 y, 
   Vector2** v_points    = (Vector2**)sta_allocate_struct(Vector2*, v_cap);
   u32*      point_count = (u32*)sta_allocate_struct(u32, p_cap);
 
+  i16       x_offset = 0, y_offset = 0;
   for (u32 i = 0; i < string_length; i++)
   {
     Glyph glyph = this->font->get_glyph(string[i]);
@@ -117,12 +111,13 @@ void Renderer::render_text(const char* string, u32 string_length, f32 x, f32 y, 
     {
       RESIZE_ARRAY(v_points, Vector2*, count, v_cap);
       RESIZE_ARRAY(point_count, u32, count, p_cap);
-      this->triangulate_simple_glyph(&v_points[count], point_count[count], x, y, &glyph, font_size);
+
+      triangulate_simple_glyph(&v_points[count], point_count[count], x_offset, y_offset, &glyph);
       count++;
     }
     else
     {
-      this->triangulate_compound_glyph(&v_points, &point_count, count, v_cap, p_cap, x, y, &glyph, font_size);
+      triangulate_compound_glyph(&v_points, &point_count, count, v_cap, p_cap, x_offset, y_offset, &glyph);
     }
   }
 
@@ -135,7 +130,19 @@ void Renderer::render_text(const char* string, u32 string_length, f32 x, f32 y, 
   Triangle* triangles      = (Triangle*)sta_allocate_struct(Triangle, number_of_triangles);
   u32       triangle_count = 0;
 
-  triangulate(triangles, triangle_count, v_points, point_count, count, number_of_triangles);
+  triangulate_earclipping(triangles, triangle_count, v_points, point_count, count, number_of_triangles);
+
+  f32 s = this->font->scale * font_size;
+  for (u32 i = 0; i < triangle_count; i++)
+  {
+    Triangle* tri    = &triangles[i];
+    tri->points[0].x = tri->points[0].x * s + x;
+    tri->points[0].y = tri->points[0].y * s + y;
+    tri->points[1].x = tri->points[1].x * s + x;
+    tri->points[1].y = tri->points[1].y * s + y;
+    tri->points[2].x = tri->points[2].x * s + x;
+    tri->points[2].y = tri->points[2].y * s + y;
+  }
 
   sta_glBindVertexArray(this->text_buffer.vao);
   sta_glBindBuffer(GL_ARRAY_BUFFER, this->text_buffer.vbo);
@@ -143,14 +150,13 @@ void Renderer::render_text(const char* string, u32 string_length, f32 x, f32 y, 
 
   u32 index_count = triangle_count * 3;
   u32 triangle_indices[index_count];
-  for (u32 j = 0; j < index_count; j++)
+  for (u32 i = 0; i < index_count; i++)
   {
-    triangle_indices[j] = j;
+    triangle_indices[i] = i;
   }
 
   sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->text_buffer.ebo);
   sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * index_count, triangle_indices, GL_DYNAMIC_DRAW);
-  // exit(1);
 
   this->text_shader.use();
   this->text_shader.set_float4f("color", (float*)&color);
@@ -165,7 +171,7 @@ void Renderer::bind_texture(u32 texture_id, u32 texture_unit)
   glActiveTexture(texture_unit);
   sta_glBindTexture(GL_TEXTURE_2D, texture_id);
 }
-u32 Renderer::generate_texture(u32 width, u32 height, void* data)
+u32 Renderer::create_texture(u32 width, u32 height, void* data)
 {
 
   u32 texture;

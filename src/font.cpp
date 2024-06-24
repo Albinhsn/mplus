@@ -56,8 +56,23 @@ static void read_coordinates(i16* coordinates, u8* flags, u32 count, Buffer* buf
     coordinates[i] = curr;
   }
 }
-static bool glyphs_intersect(i16 v0[][2], u16 c0, i16 v1[][2], u16 c1)
+struct Point
 {
+  i16 x;
+  i16 y;
+};
+
+static bool glyphs_intersect(Point* v0, u16 c0, Point* v1, u16 c1)
+{
+
+  // 1. initialize the simplex set Q to one or more points (up to d + 1 points, where d is the dimension) from the minkowski difference of A and B
+  // 2. Compute the point P of minimum norm in CH(Q)
+  // 3. If P is the origin itself, the origin is clearly contained in the Minkowski difference of A and B. Stop and return  A and B as intersecting
+  // 4. Reduce Q to the smallest subset Q' of Q suuch that P in CH(Q'). That is, remove any points from Q not determining the subsimplex of Q in which P lies.
+  // 5. Let V = simplex minkowski_dif(-P) = simplex A(-P) - simplex B(-P) to be a supporting point in direction -P.
+  // 6. If V is no more extremal in direction -P than P itself, stop and return A and B as not intersecting.
+  //    The length of the vector from the origin to P is the separation distance of A and B
+  // 7. Add V to Q and go to 2.
   return false;
 }
 
@@ -69,14 +84,14 @@ static bool should_be_compound(Glyph* glyph)
   {
     for (u32 i = 0; i < glyph->simple.n - 1; i++)
     {
-      u16 c0 = i == 0 ? glyph->simple.end_pts_of_contours[i] : glyph->simple.end_pts_of_contours[i - 1] - glyph->simple.end_pts_of_contours[i];
-      i16 v0[c0][2];
+      u16   c0 = i == 0 ? glyph->simple.end_pts_of_contours[i] : glyph->simple.end_pts_of_contours[i - 1] - glyph->simple.end_pts_of_contours[i];
+      Point v0[c0];
       // hoist vertices
       bool found = false;
       for (u32 j = i + 1; j < glyph->simple.n; j++)
       {
-        u16 c1 = glyph->simple.end_pts_of_contours[j - 1] - glyph->simple.end_pts_of_contours[j];
-        i16 v1[c1][2];
+        u16   c1 = glyph->simple.end_pts_of_contours[j - 1] - glyph->simple.end_pts_of_contours[j];
+        Point v1[c1];
         if (glyphs_intersect(v0, c0, v1, c1))
         {
           found = true;

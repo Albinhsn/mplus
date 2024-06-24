@@ -55,7 +55,7 @@ public:
 
   SDL_Window*   window;
   SDL_GLContext context;
-  u32           generate_texture(u32 width, u32 height, void* data);
+  u32           create_texture(u32 width, u32 height, void* data);
   void          bind_texture(u32 texture_id, u32 texture_unit);
   void          clear_framebuffer();
   void          swap_buffers();
@@ -69,8 +69,6 @@ public:
   void          toggle_wireframe_on();
   void          toggle_wireframe_off();
   void          change_screen_size(u32 screen_width, u32 screen_height);
-  void          triangulate_simple_glyph(Vector2** _vertices, u32& vertex_count, f32& x_offset, f32& y_offset, Glyph* glyph, f32 font_size);
-  void          triangulate_compound_glyph(Vector2*** v_points, u32** point_count, u32& count, u32& v_cap,u32&p_cap, f32& x, f32 &y, Glyph* glyph, f32 font_size);
 
 private:
   void init_quad_buffer_2d();
