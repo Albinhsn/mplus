@@ -38,4 +38,4 @@ clean:
 .PHONY: all clean
 
 len:
-	find . -name '*.c' | xargs wc -l
+	find . -name '*.cpp' | xargs wc -l

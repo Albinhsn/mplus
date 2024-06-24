@@ -277,6 +277,6 @@ void Logger::log(LoggingLevel level, const char* msg)
 
 bool compare_float(f32 a, f32 b)
 {
-  const float EPSILON = 0.0001f;
+  const float EPSILON = 0.00001f;
   return std::abs(a - b) < EPSILON;
 }
