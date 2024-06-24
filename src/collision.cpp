@@ -6,6 +6,11 @@
 #include <cmath>
 #include <cstdlib>
 
+static inline bool compare_vertices(Vector2 v0, Vector2 v1)
+{
+  return compare_float(v0.x, v1.x) && compare_float(v0.y, v1.y);
+}
+
 inline float cross_2d(Point2 u, Point2 v)
 {
   return u.y * v.x - u.x * v.y;
@@ -33,16 +38,49 @@ inline float orient_2d(Vector2 v0, Vector2 v1, Vector2 p)
 {
   return (v0.x - p.x) * (v1.y - p.y) - (v0.y - p.y) * (v1.x - p.x);
 }
-int translate(EarClippingNode* point)
-{
-  return !point ? -1 : point->idx;
-}
 
+static bool is_convex(Vector2 v0, Vector2 v1, Vector2 v2)
+{
+
+  f32 v0v1 = orient_2d(v0, v1, v2);
+  f32 v1v2 = orient_2d(v1, v2, v0);
+
+  return v0v1 < 0 && v1v2 < 0;
+}
 char translate(int i)
 {
   char letters[] = "abcdefghijklmnopqrstuvwz123456789!\"#¤%&/()=+-?<>,;.:-_´^'*¨";
   assert(i <= ArrayCount(letters));
   return letters[i];
+}
+
+static bool is_ear(EarClippingNode* reflex, EarClippingNode* vertex)
+{
+  Triangle tri = {vertex->prev->point, vertex->point, vertex->next->point};
+  printf("Testing if %c is in still ear\n", translate(vertex->idx));
+  u64 start = (u64)reflex;
+  if (reflex)
+  {
+    do
+    {
+      bool is_point_on_line = compare_vertices(reflex->point, vertex->prev->point) || compare_vertices(reflex->point, vertex->point) || compare_vertices(reflex->point, vertex->next->point);
+      if (!is_point_on_line && reflex != vertex->prev && reflex != vertex->next)
+      {
+        printf("Testing %c %d\n", translate(reflex->idx), is_point_on_line);
+        if (point_in_triangle_2d(tri, reflex->point))
+        {
+          printf("Found point inside!\n");
+          return false;
+        }
+      }
+      else
+      {
+        printf("Was prev or next! %c\n", translate(reflex->idx));
+      }
+      reflex = reflex->next_reflex;
+    } while ((u64)reflex != start && reflex);
+  }
+  return true;
 }
 
 void debug_points(EarClippingNodes* tri)
@@ -96,17 +134,11 @@ void get_vertices(EarClippingNodes* tri, Vector2* v_points, u32 point_count)
     curr->prev         = &tri->head[i_low];
     curr->next         = &tri->head[i_high];
 
-    Vector2 v0         = v_points[i_low];
-    Vector2 v1         = v_points[i];
-    Vector2 v2         = v_points[i_high];
-    f32     v0v1       = orient_2d(v0, v1, v2);
-    f32     v1v2       = orient_2d(v1, v2, v0);
-
-    // test if any other vertex is inside the triangle from these vertices
-
+    Vector2  v0        = v_points[i_low];
+    Vector2  v1        = v_points[i];
+    Vector2  v2        = v_points[i_high];
     Triangle t(v0, v1, v2);
-
-    if (v0v1 < 0 && v1v2 < 0)
+    if (is_convex(v0, v1, v2))
     {
       if (tri->convex != 0)
       {
@@ -118,11 +150,13 @@ void get_vertices(EarClippingNodes* tri, Vector2* v_points, u32 point_count)
       {
         tri->convex = curr;
       }
+
       bool found = false;
       for (i32 j = 0; j < point_count; j++)
       {
         // only need to test reflex vertices?
-        if (j != i && j != i_low && j != i_high && point_in_triangle_2d(t, v_points[j]))
+        bool is_point_on_line = compare_vertices(v_points[j], v_points[i_low]) || compare_vertices(v_points[j], v_points[i]) || compare_vertices(v_points[j], v_points[i_high]);
+        if (j != i && j != i_low && j != i_high && point_in_triangle_2d(t, v_points[j]) && !is_point_on_line)
         {
           found = true;
           break;
@@ -186,43 +220,6 @@ void get_vertices(EarClippingNodes* tri, Vector2* v_points, u32 point_count)
   }
 }
 
-static bool is_ear(EarClippingNode* reflex, EarClippingNode* vertex)
-{
-  Triangle tri = {vertex->prev->point, vertex->point, vertex->next->point};
-  printf("Testing if %c is in still ear\n", translate(vertex->idx));
-  u64 start = (u64)reflex;
-  if (reflex)
-  {
-    do
-    {
-      if (reflex != vertex->prev && reflex != vertex->next)
-      {
-        printf("Testing %c\n", translate(reflex->idx));
-        if (point_in_triangle_2d(tri, reflex->point))
-        {
-          printf("Found point inside!\n");
-          return false;
-        }
-      }
-      else
-      {
-        printf("Was prev or next! %c\n", translate(reflex->idx));
-      }
-      reflex = reflex->next_reflex;
-    } while ((u64)reflex != start && reflex);
-  }
-  return true;
-}
-
-static bool is_convex(Vector2 v0, Vector2 v1, Vector2 v2)
-{
-
-  f32 v0v1 = orient_2d(v0, v1, v2);
-  f32 v1v2 = orient_2d(v1, v2, v0);
-
-  return v0v1 < 0 && v1v2 < 0;
-}
-
 void EarClippingNodes::attach_ear(EarClippingNode* vertex)
 {
   EarClippingNode* head_ear = this->ear;
@@ -234,10 +231,13 @@ void EarClippingNodes::attach_ear(EarClippingNode* vertex)
   }
   else
   {
-    head_ear->next_ear->prev_ear = vertex;
-    vertex->next_ear             = head_ear->next_ear;
-    head_ear->next_ear           = vertex;
-    vertex->prev_ear             = head_ear;
+    if (head_ear->next_ear)
+    {
+      head_ear->next_ear->prev_ear = vertex;
+    }
+    vertex->next_ear   = head_ear->next_ear;
+    head_ear->next_ear = vertex;
+    vertex->prev_ear   = head_ear;
   }
 }
 
@@ -254,7 +254,7 @@ void EarClippingNodes::test_vertex(EarClippingNode* vertex)
       // detach ear
       if (vertex == this->ear)
       {
-        this->ear = this->ear->next;
+        this->ear = this->ear->next_ear;
       }
       vertex->prev_ear->next_ear = vertex->next_ear;
       vertex->next_ear->prev_ear = vertex->prev_ear;
@@ -306,6 +306,7 @@ void EarClippingNodes::test_vertex(EarClippingNode* vertex)
   // otherwise convex and can become an ear
   else if (is_ear(this->reflex, vertex))
   {
+    assert(vertex->next_convex && vertex->prev_convex && "ISN'T CONVEX?");
     this->attach_ear(vertex);
   }
 }
@@ -323,6 +324,7 @@ inline void EarClippingNodes::detach_ear_from_ears()
   EarClippingNode* next_ear     = this->ear->next_ear;
   next_ear->prev_ear            = this->ear->prev_ear;
   this->ear->prev_ear->next_ear = next_ear;
+
   this->ear->next_ear           = 0;
   this->ear->prev_ear           = 0;
   this->ear                     = next_ear;
@@ -391,6 +393,16 @@ bool remove_vertex(Triangle* triangle, EarClippingNodes* tri, u32& remaining)
   tri->test_vertex(next);
 
   debug_points(tri);
+  EarClippingNode* head  = tri->ear;
+  u64              start = (u64)head;
+  printf("EARS: ");
+  do
+  {
+    printf("%d -> ", head->idx);
+    head = head->next_ear;
+  } while (start != (u64)head);
+  printf("\n");
+  assert(tri->ear != 0 && "Out of ears?");
   printf("Next in line: %c\n", translate(tri->ear->idx));
   return false;
 }
@@ -557,10 +569,11 @@ static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inn
   h->prev->idx = h->idx;
 
   // insert the intersection point and walk until we reach back to it, then insert it again
-  u32 start_idx = inner->max_x_idx;
+  i32 start_idx = inner->max_x_idx;
   do
   {
     insert_vertex_prior(outer, h, outer_count, inner->points[start_idx]);
+    // start_idx = start_idx - 1 < 0 ? inner->point_count - 1 : start_idx - 1;
     start_idx = (start_idx + 1) % inner->point_count;
   } while (start_idx != inner->max_x_idx);
   insert_vertex_prior(outer, h, outer_count, inner->points[start_idx]);
@@ -615,10 +628,12 @@ void triangulation_hole_via_ear_clipping(Vector2** out, u32& out_count, Vector2*
     find_bridge(concatenated_polygon, count, &pairs[i]);
     u64        start = (u64)concatenated_polygon;
     VertexDLL* head  = concatenated_polygon;
+    u32        c     = 0;
     do
     {
-      printf("%d (%f, %f)\n", head->idx, head->point.x, head->point.y);
+      printf("%d (%c), (%f, %f)\n", head->idx, translate(c), head->point.x, head->point.y);
       head = head->next;
+      c++;
     } while (start != (u64)head);
     printf("-\n");
   }
@@ -634,6 +649,7 @@ void triangulation_hole_via_ear_clipping(Vector2** out, u32& out_count, Vector2*
     head = head->next;
     i++;
   } while (start != (u64)head);
+  // exit(1);
 
   assert(i == count && "Didn't fill?");
   assert(count == out_count && "Didn't equal in size?");

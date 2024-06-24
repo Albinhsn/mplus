@@ -62,7 +62,9 @@ void Renderer::get_string_vertices(Vector2** _vertices, u32& vertex_count, const
       {
         v[j].x = glyph.x_coordinates[j + prev_end + 1];
         v[j].y = glyph.y_coordinates[j + prev_end + 1];
+        printf("%d: (%f, %f)\n", j, v[j].x, v[j].y);
       }
+      printf("-\n");
       prev_end = end_pts;
       verts[i] = v;
     }
