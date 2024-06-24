@@ -1,7 +1,9 @@
 #include "collision.h"
+#include "common.h"
 #include "platform.h"
 #include <cassert>
 #include <cfloat>
+#include <cmath>
 #include <cstdlib>
 
 inline float cross_2d(Point2 u, Point2 v)
@@ -38,7 +40,7 @@ int translate(EarClippingNode* point)
 
 char translate(int i)
 {
-  char letters[] = "abcdefghijklmnopqrstuvwz12345";
+  char letters[] = "abcdefghijklmnopqrstuvwz123456789!\"#¤%&/()=+-?<>,;.:-_´^'*¨";
   assert(i <= ArrayCount(letters));
   return letters[i];
 }
@@ -212,14 +214,11 @@ static bool is_ear(EarClippingNode* reflex, EarClippingNode* vertex)
   return true;
 }
 
-static bool is_convex(EarClippingNode* vertex)
+static bool is_convex(Vector2 v0, Vector2 v1, Vector2 v2)
 {
 
-  Vector2 v0   = vertex->prev->point;
-  Vector2 v1   = vertex->point;
-  Vector2 v2   = vertex->next->point;
-  f32     v0v1 = orient_2d(v0, v1, v2);
-  f32     v1v2 = orient_2d(v1, v2, v0);
+  f32 v0v1 = orient_2d(v0, v1, v2);
+  f32 v1v2 = orient_2d(v1, v2, v0);
 
   return v0v1 < 0 && v1v2 < 0;
 }
@@ -266,7 +265,7 @@ void EarClippingNodes::test_vertex(EarClippingNode* vertex)
   else if (vertex->next_reflex || vertex->prev_reflex)
   {
 
-    if (is_convex(vertex))
+    if (is_convex(vertex->prev->point, vertex->point, vertex->next->point))
     {
 
       // isn't reflex anymore
@@ -426,6 +425,7 @@ struct PolygonMaxXPair
   Vector2* max_x;
   Vector2* points;
   u32      point_count;
+  u32      max_x_idx;
 };
 
 struct VertexDLL
@@ -433,6 +433,7 @@ struct VertexDLL
   VertexDLL* prev;
   VertexDLL* next;
   Vector2    point;
+  u32        idx;
 };
 
 inline int sort_polygon_min_x_pair(const void* _a, const void* _b)
@@ -445,27 +446,124 @@ inline int sort_polygon_min_x_pair(const void* _a, const void* _b)
   return res > 0 ? -1 : 1;
 }
 
+static inline void insert_vertex_prior(VertexDLL* head, VertexDLL* p, u32& count, Vector2 v)
+{
+  VertexDLL* new_h = &head[count];
+  new_h->prev      = p->prev;
+  new_h->next      = p;
+  new_h->idx       = count;
+  ++count;
+  p->prev->next = new_h;
+  p->prev       = new_h;
+  new_h->point  = v;
+}
+
 static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inner)
 {
-  // then triangulate as simple
 
   // 1. Search the inner polygon for vertex M of maximum x-value
-  Vector2* m = inner->max_x;
-
-  // check that x > max_x
-  // check that y0 <= y <= y1
+  Vector2* C = inner->max_x;
 
   // 2. Intersect the ray M +t(1,0) with all directed edges (Vi, Vi+1) of the outer polygon for which M is to the left of the line containing the edge.
   //    Moreover , the intersection tests need only involve directed edges for which Vi is below (or on) the ray and Vi+1 is above (or on) the ray.
   //    This is essential when the polygon has multiple holes and one or more holes have already had bridges inserted.
   //    Let I be the closest visible point to M on the ray. The implementation keeps track of this by monitoring the t-value in search of the smallest
   //    positive value for those edges in the intersection tests.
+  VertexDLL* head      = outer;
+  u64        start     = (u64)head;
+  bool       is_vertex = false;
+  VertexDLL* h         = 0;
+  Vector2    I;
+  f32        min_dist = FLT_MAX;
+  Vector2    n        = {0, 1};
+  do
+  {
+    Vector2 A = head->point;
+    Vector2 B = head->next->point;
+    if (B.y < C->y && A.y > C->y)
+    {
+      Vector2 s = B.sub(A);
+      // t = n * (C-A)/(n * (B - A))
+      f32     t            = n.dot(C->sub(A)) / n.dot(B.sub(A));
+      Vector2 intersection = {A.x + s.x * t, A.y + s.y * t};
+      if (0 <= t && t <= 1)
+      {
+        printf("Found (%f,  %f) %f\n", intersection.x, intersection.y, t);
+        f32 dist = intersection.x - head->point.x;
+        if (min_dist > dist)
+        {
+          h    = head;
+          dist = min_dist;
+          I    = intersection;
+          // robust?
+          is_vertex = t == 0 || t == 1;
+        }
+      }
+    }
+
+    head = head->next;
+  } while (start != (u64)head);
+
+  assert(h && "Didn't find any point!");
+
   // 3. If I is a vertex of the outer polygon, then M and I are mutually visible and the algorithm terminates.
-  // 4. Otherwise, I is an interior point of the edge (Vi, Vi+1). Select P to be the end point of maximum x-value for this edge
-  // 5. Search the reflex vertices of the outer polygon, not including P if it happens to be reflex. If all of those vertices are strictly outside triangle (M,I,P), then
-  //    M and P are mutually visible and the algorithm terminates.
-  // 6. Otherwise, at least one reflex vertex lies in (M,I,P). Search for the reflex R that minimizes the angle between (M,I) and (M,R);
-  //    then M and R are mutually visible and the algorithm terminates.
+  if (!is_vertex)
+  {
+    Vector2* M = C;
+    // 4. Otherwise, I is an interior point of the edge (Vi, Vi+1). Select P to be the end point of maximum x-value for this edge
+    Vector2  P = h->point.x > h->next->point.x ? h->point : h->next->point;
+    Triangle MIP(*M, I, P);
+
+    // 5. Search the reflex vertices of the outer polygon, not including P if it happens to be reflex. If all of those vertices are strictly outside triangle (M,I,P), then
+    //    M and P are mutually visible and the algorithm terminates.
+    // 6. Otherwise, at least one reflex vertex lies in (M,I,P). Search for the reflex R that minimizes the angle between (M,I) and (M,R);
+    //    then M and R are mutually visible and the algorithm terminates.
+    VertexDLL* min_angle = 0;
+    f32        angle     = 0;
+    head                 = outer;
+    start                = (u64)head;
+    do
+    {
+
+      if (!is_convex(head->prev->point, head->point, head->next->point) && head != h)
+      {
+        if (point_in_triangle_2d(MIP, head->point))
+        {
+          printf("Found reflex inside!\n");
+          Vector2 MI = I.sub(*M);
+          Vector2 MR = head->point.sub(*M);
+          f32     a  = std::abs(acosf(MI.dot(MR) / (MI.len() * MR.len())));
+          if (a < angle)
+          {
+            angle     = a;
+            min_angle = head;
+          }
+        }
+      }
+
+      head = head->next;
+    } while (start != (u64)head);
+
+    if (min_angle)
+    {
+      h = min_angle;
+    }
+  }
+
+  // h is the vertex we insert into
+  // insert h itself
+  insert_vertex_prior(outer, h, outer_count, h->point);
+  printf("INTERSECTION POINT: %d\n", h->idx);
+  h->prev->idx = h->idx;
+
+  // insert the intersection point and walk until we reach back to it, then insert it again
+  u32 start_idx = inner->max_x_idx;
+  do
+  {
+    insert_vertex_prior(outer, h, outer_count, inner->points[start_idx]);
+    start_idx = (start_idx + 1) % inner->point_count;
+  } while (start_idx != inner->max_x_idx);
+  insert_vertex_prior(outer, h, outer_count, inner->points[start_idx]);
 }
 
 // requires the ordering of the outer and inner vertices to be opposite
@@ -480,14 +578,15 @@ void triangulation_hole_via_ear_clipping(Vector2** out, u32& out_count, Vector2*
     Vector2* points      = v_points[i];
     u32      count       = point_count[i];
     pairs[i].point_count = count;
-    pairs[i].points      = v_points[i];
+    pairs[i].points      = points;
 
     pairs[i].max_x       = &points[0];
     for (u32 j = 1; j < count; j++)
     {
       if (points[j].x > pairs[i].max_x->x)
       {
-        pairs[i].max_x = &points[j];
+        pairs[i].max_x     = &points[j];
+        pairs[i].max_x_idx = j;
       }
     }
     total_count += count;
@@ -499,31 +598,47 @@ void triangulation_hole_via_ear_clipping(Vector2** out, u32& out_count, Vector2*
     point_count[i] = pairs[i].point_count;
   }
 
-  VertexDLL*      concatenated_polygon = (VertexDLL*)sta_allocate_struct(VertexDLL, total_count + polygon_count - 1);
+  VertexDLL*      concatenated_polygon = (VertexDLL*)sta_allocate_struct(VertexDLL, total_count + (polygon_count - 1) * 2);
   PolygonMaxXPair first_pair           = pairs[0];
   u32             count                = first_pair.point_count;
-  for (u32 i = 0; i < count; i++)
+  for (i32 i = 0; i < count; i++)
   {
     VertexDLL* v = &concatenated_polygon[i];
     v->point     = first_pair.points[i];
-    v->next      = &concatenated_polygon[i + 1];
+    v->next      = &concatenated_polygon[(i + 1) % count];
     v->prev      = &concatenated_polygon[i - 1 < 0 ? count - 1 : i - 1];
+    v->idx       = i;
   }
 
   for (u32 i = 1; i < polygon_count; i++)
   {
     find_bridge(concatenated_polygon, count, &pairs[i]);
+    u64        start = (u64)concatenated_polygon;
+    VertexDLL* head  = concatenated_polygon;
+    do
+    {
+      printf("%d (%f, %f)\n", head->idx, head->point.x, head->point.y);
+      head = head->next;
+    } while (start != (u64)head);
+    printf("-\n");
   }
 
-  out_count  = total_count + polygon_count - 1;
-  Vector2* v = (Vector2*)sta_allocate_struct(Vector2, out_count);
-  for (u32 i = 0; i < out_count; i++)
+  out_count        = total_count + (polygon_count - 1) * 2;
+  Vector2*   v     = (Vector2*)sta_allocate_struct(Vector2, out_count);
+  u64        start = (u64)concatenated_polygon;
+  VertexDLL* head  = concatenated_polygon;
+  u64        i     = 0;
+  do
   {
-    v[i].x = concatenated_polygon[i].point.x;
-    v[i].y = concatenated_polygon[i].point.y;
-  }
+    v[i] = head->point;
+    head = head->next;
+    i++;
+  } while (start != (u64)head);
 
+  assert(i == count && "Didn't fill?");
   assert(count == out_count && "Didn't equal in size?");
+
+  *out = v;
 
   sta_deallocate(concatenated_polygon, sizeof(VertexDLL) * (total_count + polygon_count - 1));
 }

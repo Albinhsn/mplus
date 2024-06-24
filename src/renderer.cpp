@@ -55,24 +55,18 @@ void Renderer::get_string_vertices(Vector2** _vertices, u32& vertex_count, const
     for (u32 i = 0; i < glyph.n; i++)
     {
       u32      end_pts            = glyph.end_pts_of_contours[i];
-      u32      number_of_vertices = end_pts - prev_end + 1;
+      u32      number_of_vertices = end_pts - prev_end;
       Vector2* v                  = (Vector2*)sta_allocate_struct(Vector2, number_of_vertices);
       point_counts[i]             = number_of_vertices;
-      printf("%d:\n", i);
-      for (u32 j = 0; j <= end_pts - prev_end; j++)
+      for (u32 j = 0; j < end_pts - prev_end; j++)
       {
         v[j].x = glyph.x_coordinates[j + prev_end + 1];
         v[j].y = glyph.y_coordinates[j + prev_end + 1];
-        printf("%f %f\n", v[j].x, v[j].y);
       }
-      printf("--\n");
       prev_end = end_pts;
       verts[i] = v;
-
-      prev_end = end_pts;
     }
     triangulation_hole_via_ear_clipping(&vertices, vertex_count, verts, point_counts, glyph.n);
-    exit(1);
   }
   *_vertices = vertices;
 }

@@ -273,3 +273,10 @@ void Logger::log(LoggingLevel level, const char* msg)
   this->send_log_message(msg, levels[level]);
   printf(ANSI_COLOR_RESET);
 }
+
+
+bool compare_float(f32 a, f32 b)
+{
+  const float EPSILON = 0.0001f;
+  return std::abs(a - b) < EPSILON;
+}

@@ -2,6 +2,7 @@
 #define STA_VECTOR
 
 #include "common.h"
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -79,9 +80,12 @@ public:
   {
     printf("%f %f\n", x, y);
   }
-  float          x;
-  float          y;
-  float          len();
+  float x;
+  float y;
+  float len()
+  {
+    return sqrtf(this->x * this->x + this->y * this->y);
+  }
   float          dot(Vector2 v);
   float          dot_perp(Vector2 v);
   Vector2        cross(Vector2 v);
@@ -213,7 +217,9 @@ typedef Vector3 Point3;
 struct Color
 {
 public:
-  Color(){}
+  Color()
+  {
+  }
   Color(f32 r, f32 g, f32 b, f32 a)
   {
     this->r = r;

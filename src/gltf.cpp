@@ -99,11 +99,6 @@ static inline GLTF_ChannelTargetPath get_channel_target_path(char* path)
   assert(!"Unknown channel path!");
 }
 
-static inline bool compare_float(f32 a, f32 b)
-{
-  const float EPSILON = 0.0001f;
-  return std::abs(a - b) < EPSILON;
-}
 struct LL
 {
   LL* next;

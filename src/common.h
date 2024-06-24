@@ -201,5 +201,6 @@ public:
   char* buffer;
   u32   length;
 };
+bool compare_float(f32 a, f32 b);
 
 #endif
