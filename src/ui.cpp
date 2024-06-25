@@ -88,6 +88,8 @@ UI_Comm UI::comm_from_widget(UI_Widget* widget)
 
   f32     x     = this->input->mouse_position[0];
   f32     y     = this->input->mouse_position[1];
+  comm.mouse.y  = x;
+  comm.mouse.x  = y;
 
   comm.hovering = widget->x[0] <= x && x <= widget->x[1] && widget->y[1] <= y && y <= widget->y[0];
   printf("(%f, %f), (%f, %f) vs (%f, %f)\n", widget->x[0], widget->x[1], widget->y[0], widget->y[1], x, y);
@@ -147,7 +149,7 @@ void animate_main_menu_button(UI_Comm comm, UI* ui, u64 tick)
       UI_Persistent_Data data;
       data.last_animated_tick  = tick;
       data.last_animated_index = ui->last_tick;
-      data.animation_progress  = 0;
+      data.progress            = 0;
       data.toggled             = false;
       persistent_data          = ui->persistent_data.add(btn->key, data);
     }
@@ -157,12 +159,12 @@ void animate_main_menu_button(UI_Comm comm, UI* ui, u64 tick)
       u64 tick_difference = tick - persistent_data->last_animated_tick;
       if (tick_difference != 0)
       {
-        persistent_data->animation_progress += (tick_difference / (f32)total_animation_time);
-        persistent_data->animation_progress = MIN(persistent_data->animation_progress, 1.0f);
+        persistent_data->progress += (tick_difference / (f32)total_animation_time);
+        persistent_data->progress           = MIN(persistent_data->progress, 1.0f);
         persistent_data->last_animated_tick = tick;
       }
-      f32 x = persistent_data->animation_progress * total_size_x;
-      f32 y = persistent_data->animation_progress * total_size_y;
+      f32 x = persistent_data->progress * total_size_x;
+      f32 y = persistent_data->progress * total_size_y;
       btn->x[0] -= x;
       btn->x[1] += x;
       btn->y[0] += y;
@@ -178,17 +180,17 @@ void animate_main_menu_button(UI_Comm comm, UI* ui, u64 tick)
   else
   {
     UI_Persistent_Data* persistent_data = ui->persistent_data.get(btn->key);
-    if (persistent_data && persistent_data->animation_progress != 0)
+    if (persistent_data && persistent_data->progress != 0)
     {
       u64 tick_difference = tick - persistent_data->last_animated_tick;
       if (tick_difference != 0)
       {
-        persistent_data->animation_progress -= (tick_difference / (f32)total_animation_time);
-        persistent_data->animation_progress = MAX(persistent_data->animation_progress, 0.0f);
+        persistent_data->progress -= (tick_difference / (f32)total_animation_time);
+        persistent_data->progress           = MAX(persistent_data->progress, 0.0f);
         persistent_data->last_animated_tick = tick;
       }
-      f32 x = persistent_data->animation_progress * total_size_x;
-      f32 y = persistent_data->animation_progress * total_size_y;
+      f32 x = persistent_data->progress * total_size_x;
+      f32 y = persistent_data->progress * total_size_y;
       btn->x[0] -= x;
       btn->x[1] += x;
       btn->y[0] += y;
@@ -207,7 +209,7 @@ bool widget_is_toggled(UI_Comm comm, UI* ui)
   if (!persistent_data)
   {
     UI_Persistent_Data data;
-    data.animation_progress  = 0;
+    data.progress            = 0;
     data.last_animated_tick  = 0;
     data.last_animated_index = 0;
     data.toggled             = comm.released;
@@ -224,8 +226,21 @@ UI_Comm UI::UI_Dropdown(f32 x[2], f32 y[2], const char* string, UI_Button_Data b
   return this->UI_Button(x, y, string, button_data);
 }
 
+void update_slider(UI_Comm comm)
+{
+  UI_Widget* widget = comm.widget;
+}
+
 UI_State ui_build_options_menu(UI* ui, u64 tick)
 {
+  f32     slider_x[2]        = {-0.4f, 0.4f};
+  f32     slider_y[2]        = {0.8f, 0.7f};
+  f32     slider_btn_x[2]    = {-0.05f, 0.05f};
+  f32     slider_btn_y[2]    = {-1.0f, 1.0f};
+
+  UI_Comm volume_slider_comm = ui->UI_Slider(slider_x, slider_y, slider_btn_x, slider_btn_y, "volume");
+  update_slider(volume_slider_comm);
+
   UI_Button_Data button_data = {
       WHITE, RED, 0.1f, {TextAlignment_Centered, TextAlignment_Centered}
   };
@@ -359,6 +374,28 @@ void UI_Widget::render(Renderer* renderer)
   {
     this->next->render(renderer);
   }
+}
+
+UI_Comm UI::UI_Slider(f32 x[2], f32 y[2], f32 btn_x[2], f32 btn_y[2], const char* string)
+{
+  UI_Widget* widget = sta_arena_push_struct(this->arena, UI_Widget);
+  widget->key       = generate_key(string);
+  if (!this->persistent_data.get(widget->key))
+  {
+    UI_Persistent_Data data;
+    data.toggled             = false;
+    data.last_animated_index = 0;
+    data.last_animated_tick  = 0;
+    data.progress            = 0.5f;
+    this->persistent_data.add(widget->key, data);
+  }
+
+  widget->x[0] = x[0];
+  widget->x[1] = x[1];
+  widget->y[0] = y[0];
+  widget->y[1] = y[1];
+
+  return comm_from_widget(widget);
 }
 
 void UI::render()

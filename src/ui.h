@@ -78,7 +78,7 @@ struct UI_Persistent_Data
 {
   u64  last_animated_index;
   u64  last_animated_tick;
-  f32  animation_progress;
+  f32  progress;
   bool toggled;
 };
 
@@ -107,11 +107,11 @@ struct UI_Button_Data
 struct UI
 {
 public:
-  UI(InputState* input, Arena* arena, Renderer * renderer)
+  UI(InputState* input, Arena* arena, Renderer* renderer)
   {
     this->input                               = input;
     this->arena                               = arena;
-    this->renderer = renderer;
+    this->renderer                            = renderer;
     this->last_tick                           = 0;
     this->persistent_data.widget_key_capacity = 2;
     this->persistent_data.widget_key_count    = 0;
@@ -121,6 +121,7 @@ public:
 
   UI_Comm                        comm_from_widget(UI_Widget* widget);
   UI_Comm                        UI_Button(f32 x[2], f32 y[2], const char* string, UI_Button_Data button_data);
+  UI_Comm                        UI_Slider(f32 x[2], f32 y[2], f32 btn_x[2], f32 btn_y[2], const char* string);
   UI_Comm                        UI_Dropdown(f32 x[2], f32 y[2], const char* string, UI_Button_Data button_data);
   UI_State                       build(UI_State state, u64 tick);
   void                           render();
