@@ -3,6 +3,10 @@
 
 #include "common.h"
 #include "platform.h"
+
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_timer.h>
+#include <SDL2/SDL_video.h>
 #define ASCII_ESCAPE    27
 #define ASCII_RETURN    13
 #define ASCII_SPACE     32
@@ -41,15 +45,17 @@ public:
 struct InputState
 {
 public:
-  InputState()
+  InputState(SDL_Window* window)
   {
     this->sequence_count    = 0;
     this->sequence_capacity = 1;
     this->sequences         = (InputSequence*)sta_allocate_struct(InputSequence, 1);
+    this->window            = window;
   }
   InputSequence* sequences;
-  i32            mouse_position[2];
-  i32            mouse_relative[2];
+  SDL_Window*    window;
+  f32            mouse_position[2];
+  f32            mouse_relative[2];
   u32            sequence_count;
   u32            sequence_capacity;
   InputEvent     events[25];

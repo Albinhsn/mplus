@@ -1,7 +1,5 @@
 #include "input.h"
 #include "common.h"
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_timer.h>
 #include <cassert>
 
 bool InputState::is_key_released(u32 code)
@@ -118,8 +116,10 @@ void InputState::update()
     }
     case SDL_MOUSEMOTION:
     {
-      this->mouse_position[0] = event.motion.x;
-      this->mouse_position[1] = event.motion.y;
+      i32 w, h;
+      SDL_GetWindowSize(this->window, &w, &h);
+      this->mouse_position[0] = (event.motion.x / (f32)w) * 2.0f - 1.0f;
+      this->mouse_position[1] = (event.motion.y / (f32)h) * 2.0f - 1.0f;
       this->mouse_relative[0] = event.motion.xrel;
       this->mouse_relative[1] = event.motion.yrel;
       break;

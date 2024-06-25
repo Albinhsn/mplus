@@ -202,5 +202,7 @@ public:
   u32   length;
 };
 bool compare_float(f32 a, f32 b);
+u32 sta_hash_string_fnv(String* s);
+
 
 #endif

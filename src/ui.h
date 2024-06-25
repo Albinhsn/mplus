@@ -6,93 +6,71 @@
 #include "renderer.h"
 #include "vector.h"
 
-// console 
+// console
 // main menu
-// settings menu 
+// settings menu
 // debug view (fps, counters etc)
 
-// button 
-// scrollable view thingy 
-// slider 
+// button
+// scrollable view thingy
+// slider
 // dropdown
 // animations, both for scroll and hover etc
 
-enum UI_SizeType
+enum UI_State
 {
-  UI_SIZE_PIXELS,
-  UI_SIZE_TEXTCONTENT,
-  UI_SIZE_PERCENT_OF_PARENT,
-  UI_SIZE_CHILDREN_SUM
+  UI_STATE_MAIN_MENU,
+  UI_STATE_GAME_RUNNING,
+  UI_STATE_OPTIONS_MENU,
+  UI_STATE_EXIT_GAME
 };
 
-struct UI_Size
-{
-  UI_SizeType type;
-  f32         value;
-  f32         strictness;
-};
+typedef i32 UI_Key;
 
-enum Axis2
-{
-  Axis2_X,
-  Axis2_Y,
-  Axis2_COUNT
-};
-
-struct UI_Key
-{
-};
+inline bool UI_Key_Compare(UI_Key a, UI_Key b);
+UI_Key      generate_key(String* s);
 
 typedef u32 UI_WidgetFlags;
 enum
 {
-  UI_WidgetFlag_Clickable       = (1 << 0),
-  UI_WidgetFlag_ViewScroll      = (1 << 1),
-  UI_WidgetFlag_DrawText        = (1 << 2),
-  UI_WidgetFlag_DrawBorder      = (1 << 3),
-  UI_WidgetFlag_DrawBackground  = (1 << 4),
-  UI_WidgetFlag_DrawDropShadow  = (1 << 5),
-  UI_WidgetFlag_Clip            = (1 << 6),
-  UI_WidgetFlag_HotAnimation    = (1 << 7),
-  UI_WidgetFlag_ActiveAnimation = (1 << 8),
+  UI_WidgetFlag_DrawText        = (1 << 1),
+  UI_WidgetFlag_DrawBackground  = (1 << 2),
+  UI_WidgetFlag_HotAnimation    = (1 << 3),
+  UI_WidgetFlag_ActiveAnimation = (1 << 4),
 };
 
 struct UI_Widget
 {
 public:
-  UI_Widget(f32 x[2], f32 y[2], UI_WidgetFlags flags, String string, Color color)
-  {
-    this->x[0] = x[0];
-    this->x[1] = x[1];
+  void render(Renderer* renderer);
+  UI_Widget(f32 x[2], f32 y[2], UI_WidgetFlags flags, String string, UI_Widget* parent, f32 relative[2], Color background);
 
-    this->y[0] = y[0];
-    this->y[1] = y[1];
-    this->background = color;
-  }
-  UI_Widget*     first;
-  UI_Widget*     last;
-  UI_Widget*     next;
-  UI_Widget*     prev;
-  UI_Widget*     parent;
+  UI_Widget* parent;
+  UI_Widget* next;
+  UI_Widget* prev;
+  UI_Widget* first;
+  UI_Widget* last;
 
-  UI_Widget*     hash_next;
-  UI_Widget*     hash_prev;
+  UI_Key     key;
+  u64        last_frame_touched_index;
 
-  UI_Key         key;
-  u64            last_frame_touched_index;
-
+  // build info
   UI_WidgetFlags flags;
-  UI_Size        semantic_size[Axis2_COUNT];
-  String         string;
-
+  String         text;
+  Color          text_color;
+  TextAlignment  text_alignment[2];
+  f32            font_size;
   Color          background;
-  f32            computed_relative_position[Axis2_COUNT];
-  f32            computed_size[Axis2_COUNT];
-  f32            x[2];
-  f32            y[2];
 
-  f32            hot_t;
-  f32            active_t;
+  //  the relative position from the bounding box that any item is placed
+  f32 relative_position[2];
+
+  //  bounding box of the widget/layout
+  f32 x[2];
+  f32 y[2];
+
+  f32 hot_t;    // about to be interacted with
+  f32 active_t; // interacted with
 };
 
 struct UI_Comm
@@ -109,44 +87,52 @@ struct UI_Comm
   bool       hovering;
 };
 
-struct UI_Layout
+struct UI_Persistent_Data
 {
-public:
-  UI_Layout(f32 min[2], f32 max[2])
-  {
-    this->min[0] = min[0];
-    this->min[1] = min[1];
+  f32 hot_t;
+  f32 active_t;
+};
 
-    this->max[0] = max[0];
-    this->max[1] = max[1];
-  }
-  f32 min[2];
-  f32 max[2];
+struct UI_Widget_Persitent_Data_Table
+{
+  UI_Persistent_Data* persistent_data;
+  UI_Key*             widget_keys;
+  u32                 widget_key_count;
+  u32                 widget_key_capacity;
+
+public:
+  UI_Persistent_Data* get(UI_Key key);
+  void                remove(UI_Key key);
+  void                add(UI_Key key, UI_Persistent_Data data);
 };
 
 struct UI
 {
 public:
-  UI(Renderer* renderer, InputState* input)
+  UI(InputState* input, Arena * arena)
   {
-    this->renderer     = renderer;
-    this->input        = input;
-    this->layouts      = (UI_Layout*)sta_allocate_struct(UI_Layout, 1);
-    this->layout_count = 0;
-    this->layout_cap   = 1;
+    this->input = input;
+    this->arena = arena;
   }
-  UI_Layout* layouts;
-  u32        layout_count;
-  u32        layout_cap;
 
-  UI_Layout current_layout();
-  void       add_layout(f32 min[2], f32 max[2]);
   UI_Comm    comm_from_widget(UI_Widget* widget);
-  UI_Comm    UI_Button(String string, f32 min[2], f32 max[2]);
+  UI_Comm    UI_Button(const char* string);
+  void       get_persistent_data(UI_Widget* widget);
+  UI_Widget* widget_make(f32 x[2], f32 y[2], UI_WidgetFlags flags, f32 relative[2], String string, UI_Widget* parent, UI_Widget* prev, Color background);
+  UI_State   build(UI_State state);
+  void       render(Renderer* renderer);
+  void       push_layout(f32 x[2], f32 y[2], UI_WidgetFlags flags, f32 relative[2]);
+  void       push_layout(f32 x[2], f32 y[2]);
+  void push_layout(f32 x[2], f32 y[2], UI_WidgetFlags flags, f32 relative[2], Color background, Color text_color, TextAlignment text_alignment[2], f32 font_size);
+  void       pop_layout();
+  UI_Widget* current_layout;
 
 private:
-  Renderer*   renderer;
-  InputState* input;
+  InputState*                    input;
+  UI_Widget_Persitent_Data_Table persistent_data;
+  Arena*                         arena;
 };
+
+UI_State ui_build_main_menu(UI* ui);
 
 #endif

@@ -26,13 +26,14 @@ static int align_offset(u64 offset, u64 alignment)
 
 u64 sta_arena_push(Arena* arena, u64 size, u64 alignment)
 {
-  int offset = align_offset(size, alignment);
-  if (arena->ptr + offset > arena->maxSize)
+  size += align_offset(size, alignment);
+  if (arena->ptr + size > arena->maxSize)
   {
     return 0;
   }
   u64 out = arena->memory + arena->ptr;
-  arena->ptr += offset;
+  memset((void*)out, 0, size);
+  arena->ptr += size;
   return out;
 }
 void sta_arena_pop(Arena* arena, u64 size)
@@ -274,9 +275,20 @@ void Logger::log(LoggingLevel level, const char* msg)
   printf(ANSI_COLOR_RESET);
 }
 
-
 bool compare_float(f32 a, f32 b)
 {
   const float EPSILON = 0.00001f;
   return std::abs(a - b) < EPSILON;
+}
+
+u32 sta_hash_string_fnv(String* s)
+{
+  uint32_t hash = 2166136261u;
+  for (u64 i = 0; i < s->length; i++)
+  {
+    hash ^= (u8)s->buffer[i];
+    hash *= 16777619;
+  }
+
+  return hash;
 }
