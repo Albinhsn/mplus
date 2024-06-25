@@ -32,7 +32,7 @@ int main()
   while (true)
   {
     input_state.update();
-    if (input_state.should_quit())
+    if (input_state.should_quit() || ui_state == UI_STATE_EXIT_GAME)
     {
       break;
     }
@@ -42,9 +42,8 @@ int main()
       ticks = SDL_GetTicks() + 16;
     }
     renderer.clear_framebuffer();
-    ui.build(ui_state);
+    ui_state = ui.build(ui_state, ticks);
     ui.render(&renderer);
-
 
     // // font size, wrap
     // const char* s = "abcdefghklmnopqrstuvxyz";

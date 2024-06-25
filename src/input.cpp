@@ -14,7 +14,18 @@ bool InputState::is_key_released(u32 code)
   return false;
 }
 
-bool InputState::is_left_mouse_clicked()
+bool InputState::is_left_mouse_pressed()
+{
+  for (u32 i = 0; i < this->event_count; i++)
+  {
+    if (this->events[i].state == EVENT_MOUSE_DOWN && this->events[i].key == MOUSE_BUTTON_LEFT)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+bool InputState::is_left_mouse_released()
 {
   for (u32 i = 0; i < this->event_count; i++)
   {
@@ -55,11 +66,48 @@ void InputSequence::update(InputEvent* new_events, u32 new_event_count)
     new_event_idx++;
   }
 }
+static inline bool is_symmetric_event_release(InputEvent e0, InputEvent e1)
+{
+  if (e0.state == EVENT_MOUSE_DOWN && e1.state == EVENT_MOUSE_RELEASE && e0.key == e1.key)
+  {
+    return true;
+  }
+  return e0.state == EVENT_KEY_DOWN && e1.state == EVENT_KEY_RELEASE && e0.key == e1.key;
+}
+
+static inline bool is_persistent(InputEvent event, InputEvent* events, u32 event_count)
+{
+  if (!(event.state == EVENT_MOUSE_DOWN || event.state == EVENT_KEY_DOWN))
+  {
+    return false;
+  }
+  for (u32 i = 0; i < event_count; i++)
+  {
+    if (is_symmetric_event_release(event, events[i]))
+    {
+      return false;
+    }
+  }
+  return true;
+}
 
 static inline void clear_input(InputState* input)
 {
+  InputEvent persistent_events[input->event_count];
+  u32        count = 0;
+  for (u32 i = 0; i < input->event_count; i++)
+  {
+    if (is_persistent(input->events[i], input->events, input->event_count))
+    {
+      persistent_events[count++] = input->events[i];
+    }
+  }
   memset(input->events, 0, sizeof(InputEvent) * input->event_count);
-  input->event_count       = 0;
+  for (u32 i = 0; i < count; i++)
+  {
+    input->events[i] = persistent_events[i];
+  }
+  input->event_count       = count;
   input->mouse_relative[0] = 0;
   input->mouse_relative[1] = 0;
 }
@@ -119,7 +167,7 @@ void InputState::update()
       i32 w, h;
       SDL_GetWindowSize(this->window, &w, &h);
       this->mouse_position[0] = (event.motion.x / (f32)w) * 2.0f - 1.0f;
-      this->mouse_position[1] = (event.motion.y / (f32)h) * 2.0f - 1.0f;
+      this->mouse_position[1] = -((event.motion.y / (f32)h) * 2.0f - 1.0f);
       this->mouse_relative[0] = event.motion.xrel;
       this->mouse_relative[1] = event.motion.yrel;
       break;

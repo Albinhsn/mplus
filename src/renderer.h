@@ -59,6 +59,8 @@ public:
   void          bind_texture(u32 texture_id, u32 texture_unit);
   void          clear_framebuffer();
   void          swap_buffers();
+  void          enable_2d_rendering();
+  void          disable_2d_rendering();
   u32           create_buffer_indices(u64 buffer_size, void* buffer_data, u64 index_count, u32* indices, BufferAttributes* attributes, u32 attribute_count);
   u32           create_buffer(u64 buffer_size, void* buffer_data, BufferAttributes* attributes, u64 attribute_count);
   void          render_arrays(u32 buffer_id, GLenum type, u32 count);

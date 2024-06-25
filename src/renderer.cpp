@@ -7,6 +7,16 @@
 #include "vector.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
+#include <cfloat>
+void Renderer::enable_2d_rendering()
+{
+  glDisable(GL_DEPTH_TEST);
+}
+void Renderer::disable_2d_rendering()
+{
+
+  glEnable(GL_DEPTH_TEST);
+}
 
 void Renderer::toggle_wireframe_on()
 {
@@ -94,6 +104,126 @@ static void triangulate_compound_glyph(Vector2*** v_points, u32** point_count, u
   x += glyph->advance_width;
 }
 
+static void align_text(Triangle* triangles, u32 triangle_count, TextAlignment alignment_x, TextAlignment alignment_y, f32 s, f32 x, f32 y)
+{
+  switch (alignment_x)
+  {
+  case TextAlignment_End_At:
+  {
+    f32 max = -FLT_MAX;
+    for (u32 i = 0; i < triangle_count; i++)
+    {
+      Triangle* tri = &triangles[i];
+      max           = MAX(max, tri->points[0].x);
+      max           = MAX(max, tri->points[1].x);
+      max           = MAX(max, tri->points[2].x);
+    }
+    for (u32 i = 0; i < triangle_count; i++)
+    {
+      Triangle* tri    = &triangles[i];
+      tri->points[0].x = (tri->points[0].x - max) * s + x;
+      tri->points[1].x = (tri->points[1].x - max) * s + x;
+      tri->points[2].x = (tri->points[2].x - max) * s + x;
+    }
+    break;
+  }
+  case TextAlignment_Centered:
+  {
+    f32 min = FLT_MAX, max = -FLT_MAX;
+    for (u32 i = 0; i < triangle_count; i++)
+    {
+      Triangle* tri = &triangles[i];
+      min           = MIN(min, tri->points[0].x);
+      min           = MIN(min, tri->points[1].x);
+      min           = MIN(min, tri->points[2].x);
+
+      max           = MAX(max, tri->points[0].x);
+      max           = MAX(max, tri->points[1].x);
+      max           = MAX(max, tri->points[2].x);
+    }
+    f32 half = (max - min) / 2.0f;
+    for (u32 i = 0; i < triangle_count; i++)
+    {
+      Triangle* tri    = &triangles[i];
+      tri->points[0].x = (tri->points[0].x - half) * s + x;
+      tri->points[1].x = (tri->points[1].x - half) * s + x;
+      tri->points[2].x = (tri->points[2].x - half) * s + x;
+    }
+    break;
+  }
+  case TextAlignment_Start_At:
+  {
+    for (u32 i = 0; i < triangle_count; i++)
+    {
+      Triangle* tri    = &triangles[i];
+      tri->points[0].x = tri->points[0].x * s + x;
+      tri->points[1].x = tri->points[1].x * s + x;
+      tri->points[2].x = tri->points[2].x * s + x;
+    }
+    break;
+  }
+  }
+
+  switch (alignment_y)
+  {
+  case TextAlignment_End_At:
+  {
+    f32 max = -FLT_MAX;
+    for (u32 i = 0; i < triangle_count; i++)
+    {
+      Triangle* tri = &triangles[i];
+
+      max           = MAX(max, tri->points[0].y);
+      max           = MAX(max, tri->points[1].y);
+      max           = MAX(max, tri->points[2].y);
+    }
+    for (u32 i = 0; i < triangle_count; i++)
+    {
+      Triangle* tri    = &triangles[i];
+      tri->points[0].y = (tri->points[0].y - max) * s + y;
+      tri->points[1].y = (tri->points[1].y - max) * s + y;
+      tri->points[2].y = (tri->points[2].y - max) * s + y;
+    }
+    break;
+  }
+  case TextAlignment_Centered:
+  {
+    f32 min = FLT_MAX, max = -FLT_MAX;
+    for (u32 i = 0; i < triangle_count; i++)
+    {
+      Triangle* tri = &triangles[i];
+      min           = MIN(min, tri->points[0].y);
+      min           = MIN(min, tri->points[1].y);
+      min           = MIN(min, tri->points[2].y);
+
+      max           = MAX(max, tri->points[0].y);
+      max           = MAX(max, tri->points[1].y);
+      max           = MAX(max, tri->points[2].y);
+    }
+    f32 half = (max - min) / 2.0f;
+    for (u32 i = 0; i < triangle_count; i++)
+    {
+      Triangle* tri    = &triangles[i];
+      tri->points[0].y = (tri->points[0].y - half) * s + y;
+      tri->points[1].y = (tri->points[1].y - half) * s + y;
+      tri->points[2].y = (tri->points[2].y - half) * s + y;
+    }
+    break;
+  }
+  case TextAlignment_Start_At:
+  {
+    for (u32 i = 0; i < triangle_count; i++)
+    {
+      Triangle* tri    = &triangles[i];
+      tri->points[0].y = tri->points[0].y * s + y;
+      tri->points[1].y = tri->points[1].y * s + y;
+      tri->points[2].y = tri->points[2].y * s + y;
+    }
+    break;
+  }
+  }
+}
+
 void Renderer::render_text(const char* string, u32 string_length, f32 x, f32 y, TextAlignment alignment_x, TextAlignment alignment_y, Color color, f32 font_size)
 {
 
@@ -132,17 +262,7 @@ void Renderer::render_text(const char* string, u32 string_length, f32 x, f32 y, 
 
   triangulate_earclipping(triangles, triangle_count, v_points, point_count, count, number_of_triangles);
 
-  f32 s = this->font->scale * font_size;
-  for (u32 i = 0; i < triangle_count; i++)
-  {
-    Triangle* tri    = &triangles[i];
-    tri->points[0].x = tri->points[0].x * s + x;
-    tri->points[0].y = tri->points[0].y * s + y;
-    tri->points[1].x = tri->points[1].x * s + x;
-    tri->points[1].y = tri->points[1].y * s + y;
-    tri->points[2].x = tri->points[2].x * s + x;
-    tri->points[2].y = tri->points[2].y * s + y;
-  }
+  align_text(triangles, triangle_count, alignment_x, alignment_y, font_size * this->font->scale, x, y);
 
   sta_glBindVertexArray(this->text_buffer.vao);
   sta_glBindBuffer(GL_ARRAY_BUFFER, this->text_buffer.vbo);
@@ -247,7 +367,6 @@ void Renderer::render_2d_quad(f32 min[2], f32 max[2], Color color)
   sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * 8, tot, GL_DYNAMIC_DRAW);
   this->quad_shader.use();
 
-  color = WHITE;
   this->quad_shader.set_float4f("color", (float*)&color);
 
   sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->quad_buffer_2d.ebo);

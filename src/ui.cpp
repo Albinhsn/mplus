@@ -2,6 +2,12 @@
 #include "common.h"
 #include "renderer.h"
 
+static inline f32 normalize(f32 x, f32 low, f32 high)
+{
+  x = (x + 1.0f) / 2.0f;
+  return low + (high - low) * x;
+}
+
 UI_Key UI_Key_Null()
 {
   return -1;
@@ -10,7 +16,7 @@ inline bool UI_Key_Compare(UI_Key a, UI_Key b)
 {
   return a == b;
 }
-void UI_Widget_Persitent_Data_Table::add(UI_Key key, UI_Persistent_Data data)
+UI_Persistent_Data* UI_Widget_Persitent_Data_Table::add(UI_Key key, UI_Persistent_Data data)
 {
   UI_Key null_key = UI_Key_Null();
   u32    i        = 0;
@@ -20,7 +26,7 @@ void UI_Widget_Persitent_Data_Table::add(UI_Key key, UI_Persistent_Data data)
     {
       this->persistent_data[i] = data;
       this->widget_keys[i]     = key;
-      return;
+      return &this->persistent_data[i];
     }
   }
 
@@ -28,6 +34,7 @@ void UI_Widget_Persitent_Data_Table::add(UI_Key key, UI_Persistent_Data data)
   this->persistent_data[i] = data;
   this->widget_keys[i]     = key;
   this->widget_key_count++;
+  return &this->persistent_data[i];
 }
 UI_Persistent_Data* UI_Widget_Persitent_Data_Table::get(UI_Key key)
 {
@@ -53,6 +60,11 @@ void UI_Widget_Persitent_Data_Table::remove(UI_Key key)
   }
   assert(!"Key didn't exist?");
 }
+UI_Key generate_key(const char* string)
+{
+  String s((char*)string, strlen(string));
+  return sta_hash_string_fnv(&s);
+}
 
 UI_Key generate_key(String* s)
 {
@@ -72,220 +84,172 @@ static inline i32 find_double_hash_in_string(String* s)
 
 UI_Comm UI::comm_from_widget(UI_Widget* widget)
 {
-  UI_Comm comm      = {};
+  UI_Comm comm  = {};
 
-  f32     x         = this->input->mouse_position[0];
-  f32     y         = this->input->mouse_position[1];
+  f32     x     = this->input->mouse_position[0];
+  f32     y     = this->input->mouse_position[1];
 
-  comm.hovering     = widget->x[0] <= x && x <= widget->x[1] && widget->y[1] <= y && y <= widget->y[0];
+  comm.hovering = widget->x[0] <= x && x <= widget->x[1] && widget->y[1] <= y && y <= widget->y[0];
 
-  comm.left_clicked = comm.hovering && this->input->is_left_mouse_clicked();
-  comm.widget       = widget;
+  comm.pressed  = comm.hovering && this->input->is_left_mouse_pressed();
+  comm.released = comm.hovering && this->input->is_left_mouse_released();
+  comm.widget   = widget;
 
   return comm;
 }
 
-UI_Comm UI::UI_Button(const char* string)
+UI_Comm UI::UI_Button(f32 x[2], f32 y[2], const char* string, UI_Button_Data button_data)
 {
-  UI_Widget* current_layout = this->current_layout;
-  UI_Widget* last           = current_layout->last;
-  // compute the position of the button and update the current layout
-  f32 x[2];
-  f32 y[2];
-  if (last)
+  UI_Widget* widget         = sta_arena_push_struct(this->arena, UI_Widget);
+  widget->x[0]              = x[0];
+  widget->x[1]              = x[1];
+  widget->y[0]              = y[0];
+  widget->y[1]              = y[1];
+  widget->key               = generate_key(string);
+
+  widget->background        = button_data.background;
+  widget->text_color        = button_data.text_color;
+  widget->font_size         = button_data.font_size;
+  widget->text_alignment[0] = button_data.alignment[0];
+  widget->text_alignment[1] = button_data.alignment[1];
+
+  widget->flags             = UI_WidgetFlag_DrawText | UI_WidgetFlag_DrawBackground;
+  widget->text.buffer       = (char*)string;
+  widget->text.length       = strlen(string);
+
+  if (!this->current)
   {
-    x[0] = last->x[0];
-    x[1] = last->x[1];
-
-    y[0] = last->y[0];
-    y[1] = last->y[1];
-  }
-  UI_WidgetFlags flags = UI_WidgetFlag_DrawText | UI_WidgetFlag_DrawBackground;
-  String         s;
-  s.length          = strlen(string);
-  s.buffer          = (char*)string;
-  UI_Widget* parent = current_layout;
-
-  f32        relative[2];
-  Color      c              = {};
-  UI_Widget* widget         = this->widget_make(x, y, flags, relative, s, parent, last, c);
-  widget->prev              = last;
-  widget->font_size         = current_layout->font_size;
-  widget->text_color        = current_layout->text_color;
-  widget->background        = current_layout->background;
-  widget->text_alignment[0] = current_layout->text_alignment[0];
-  widget->text_alignment[1] = current_layout->text_alignment[1];
-
-  if (last)
-  {
-    last->next = widget;
+    this->root    = widget;
+    this->current = widget;
   }
   else
   {
-    current_layout->last  = widget;
-    current_layout->first = widget;
+    this->current->next = widget;
+    this->current       = widget;
   }
-  current_layout->last = widget;
 
   return this->comm_from_widget(widget);
 }
 
-UI_Widget::UI_Widget(f32 x[2], f32 y[2], UI_WidgetFlags flags, String string, UI_Widget* parent, f32 relative[2], Color background)
+void animate_main_menu_button(UI_Comm comm, UI* ui, u64 tick)
 {
-  this->x[0]       = x[0];
-  this->x[1]       = x[1];
 
-  this->y[0]       = y[0];
-  this->y[1]       = y[1];
-
-  this->flags      = flags;
-  this->text       = string;
-  this->background = background;
-}
-
-UI_Widget* UI::widget_make(f32 x[2], f32 y[2], UI_WidgetFlags flags, f32 relative[2], String string, UI_Widget* parent, UI_Widget* prev, Color background)
-{
-  UI_Widget* widget  = sta_arena_push_struct(this->arena, UI_Widget);
-  widget->parent     = parent;
-  widget->flags      = flags;
-  widget->x[0]       = x[0];
-  widget->x[1]       = x[1];
-
-  widget->y[0]       = y[0];
-  widget->y[1]       = y[1];
-  widget->background = background;
-
-  if (prev)
+  UI_Widget* btn                  = comm.widget;
+  u64        total_animation_time = 1000;
+  f32        total_size_x         = 0.1f;
+  f32        total_size_y         = 0.05f;
+  if (comm.hovering)
   {
-    // add relative to x,y
-    widget->x[0] += prev->relative_position[0];
-    widget->x[1] += prev->relative_position[0];
-    widget->y[0] += prev->relative_position[1];
-    widget->y[1] += prev->relative_position[1];
-  }
-
-  widget->relative_position[0] = relative[0];
-  widget->relative_position[1] = relative[1];
-
-  widget->text                 = string;
-  widget->prev                 = prev;
-  if (prev)
-  {
-    prev->next = widget;
-  }
-
-  return widget;
-}
-
-static inline f32 normalize(f32 x, f32 low, f32 high)
-{
-  return ((x - low) / (high - low)) * 2.0f - 1.0f;
-}
-
-void UI::push_layout(f32 x[2], f32 y[2], UI_WidgetFlags flags, f32 relative[2], Color background, Color text_color, TextAlignment text_alignment[2], f32 font_size)
-{
-  this->push_layout(x, y, flags, relative);
-  UI_Widget* layout         = this->current_layout;
-  layout->background        = background;
-  layout->text_color        = text_color;
-  layout->text_alignment[0] = text_alignment[0];
-  layout->text_alignment[1] = text_alignment[1];
-  layout->font_size         = font_size;
-}
-
-void UI::push_layout(f32 x[2], f32 y[2])
-{
-  f32 relative[2] = {0, 0};
-  this->push_layout(x, y, 0, relative);
-}
-void UI::push_layout(f32 x[2], f32 y[2], UI_WidgetFlags flags, f32 relative[2])
-{
-  UI_Widget* layout     = this->current_layout;
-  UI_Widget* new_layout = sta_arena_push_struct(this->arena, UI_Widget);
-  printf("Layout: %ld\n", (u64)new_layout);
-  if (layout)
-  {
-    x[0] = normalize(x[0], layout->x[0], layout->x[1]);
-    x[1] = normalize(x[0], layout->x[0], layout->x[1]);
-    y[0] = normalize(y[0], layout->y[0], layout->y[1]);
-    y[1] = normalize(y[1], layout->y[0], layout->y[1]);
-  }
-
-  new_layout->relative_position[0] = relative[0];
-  new_layout->relative_position[1] = relative[1];
-  new_layout->x[0]                 = x[0];
-  new_layout->x[1]                 = x[1];
-  new_layout->y[0]                 = y[0];
-  new_layout->y[1]                 = y[1];
-
-  if (layout)
-  {
-    new_layout->parent = layout;
-    if (layout->last)
+    UI_Persistent_Data* persistent_data = ui->persistent_data.get(btn->key);
+    if (!persistent_data)
     {
-      layout->last->next = new_layout;
+      UI_Persistent_Data data;
+      data.last_animated_tick  = tick;
+      data.last_animated_index = ui->last_tick;
+      data.animation_progress  = 0;
+      data.toggled             = false;
+      persistent_data          = ui->persistent_data.add(btn->key, data);
+    }
+    // Did animate last frame so should continue
+    if (persistent_data->last_animated_index == ui->last_tick - 1)
+    {
+      u64 tick_difference = tick - persistent_data->last_animated_tick;
+      if (tick_difference != 0)
+      {
+        persistent_data->animation_progress += (tick_difference / (f32)total_animation_time);
+        persistent_data->animation_progress = MIN(persistent_data->animation_progress, 1.0f);
+        persistent_data->last_animated_tick = tick;
+      }
+      f32 x = persistent_data->animation_progress * total_size_x;
+      f32 y = persistent_data->animation_progress * total_size_y;
+      btn->x[0] -= x;
+      btn->x[1] += x;
+      btn->y[0] += y;
+      btn->y[1] -= y;
     }
     else
     {
-      layout->first = new_layout;
+      persistent_data->last_animated_tick = tick;
     }
-    new_layout->prev = layout->last;
-    layout->last     = new_layout;
+
+    persistent_data->last_animated_index = ui->last_tick;
   }
-  new_layout->flags    = flags;
-  this->current_layout = new_layout;
-}
-void UI::pop_layout()
-{
-  this->current_layout = this->current_layout->parent;
-}
-
-UI_State ui_build_main_menu(UI* ui)
-{
-
-  f32 layout_x[2]        = {-0.3f, 0.3f};
-  f32 layout_y[2]        = {-0.8f, 0.8f};
-  f32 layout_relative[2] = {0, 0};
-  f32 button_relative[2] = {0.0f, -0.25f};
-  f32 button_x[2]        = {-1.0f, 1.0f};
-  f32 button_y[2]        = {-1.0f, 1.0f};
-
-  ui->push_layout(layout_x, layout_y, 0, layout_relative);
-  Color         background   = RED;
-  Color         text_color   = WHITE;
-  f32           font_size    = 0.1f;
-  TextAlignment alignment[2] = {TextAlignment_Centered, TextAlignment_Centered};
-  ui->push_layout(button_x, button_y, 0, button_relative, background, text_color, alignment, font_size);
-
-  if (ui->UI_Button("START").left_clicked)
+  else
   {
+    UI_Persistent_Data* persistent_data = ui->persistent_data.get(btn->key);
+    if (persistent_data && persistent_data->animation_progress != 0)
+    {
+      u64 tick_difference = tick - persistent_data->last_animated_tick;
+      if (tick_difference != 0)
+      {
+        persistent_data->animation_progress -= (tick_difference / (f32)total_animation_time);
+        persistent_data->animation_progress = MAX(persistent_data->animation_progress, 0.0f);
+        persistent_data->last_animated_tick = tick;
+      }
+      f32 x = persistent_data->animation_progress * total_size_x;
+      f32 y = persistent_data->animation_progress * total_size_y;
+      btn->x[0] -= x;
+      btn->x[1] += x;
+      btn->y[0] += y;
+      btn->y[1] -= y;
+    }
+  }
+  if (comm.pressed)
+  {
+    btn->background = Color(0.8f, 0.8f, 0.8f, 1.0f);
+  }
+}
+
+UI_State ui_build_main_menu(UI* ui, u64 tick)
+{
+
+  f32            button_x[2] = {-0.3f, 0.3f};
+  f32            button_y[2] = {0.4f, 0.2f};
+  f32            relative_y  = -0.3f;
+
+  UI_Button_Data button_data = {
+      WHITE, RED, 0.1f, {TextAlignment_Centered, TextAlignment_Centered}
+  };
+
+  UI_Comm start_comm = ui->UI_Button(button_x, button_y, "START", button_data);
+  animate_main_menu_button(start_comm, ui, tick);
+  if (start_comm.released)
+  {
+    printf("Start!\n");
     return UI_STATE_GAME_RUNNING;
   }
 
-  if (ui->UI_Button("OPTIONS").left_clicked)
+  button_y[0] += relative_y;
+  button_y[1] += relative_y;
+
+  UI_Comm options_comm = ui->UI_Button(button_x, button_y, "OPTIONS", button_data);
+  animate_main_menu_button(options_comm, ui, tick);
+  if (options_comm.released)
   {
+    printf("Options!\n");
     return UI_STATE_OPTIONS_MENU;
   }
+  button_y[0] += relative_y;
+  button_y[1] += relative_y;
 
-  if (ui->UI_Button("EXIT").left_clicked)
+  UI_Comm exit_comm = ui->UI_Button(button_x, button_y, "EXIT", button_data);
+  animate_main_menu_button(exit_comm, ui, tick);
+  if (exit_comm.released)
   {
+    printf("Exiting!\n");
     return UI_STATE_EXIT_GAME;
   }
-  ui->pop_layout();
-  ui->pop_layout();
 
   return UI_STATE_MAIN_MENU;
 }
-UI_State UI::build(UI_State state)
+UI_State UI::build(UI_State state, u64 tick)
 {
-  f32 x[2] = {-1.0f, 1.0f};
-  f32 y[2] = {-1.0f, 1.0f};
-  this->push_layout(x, y);
+  this->last_tick++;
   switch (state)
   {
   case UI_STATE_MAIN_MENU:
   {
-    return ui_build_main_menu(this);
+    return ui_build_main_menu(this, tick);
   }
   case UI_STATE_OPTIONS_MENU:
   case UI_STATE_GAME_RUNNING:
@@ -294,7 +258,6 @@ UI_State UI::build(UI_State state)
     return state;
   }
   }
-  this->pop_layout();
   return state;
 }
 
@@ -303,7 +266,6 @@ UI_State UI::build(UI_State state)
 
 void UI_Widget::render(Renderer* renderer)
 {
-  printf("(%f %f), (%f, %f)\n", this->x[0], this->x[1], this->y[0], this->y[1]);
   if (DrawBackground(this->flags))
   {
     f32 min[2] = {this->x[0], this->y[0]};
@@ -312,27 +274,28 @@ void UI_Widget::render(Renderer* renderer)
   }
   if (DrawText(this->flags))
   {
-    f32 x = this->x[1] - this->x[0], y = this->y[0] - this->y[1];
-    renderer->render_text(this->text.buffer, this->text.length, x, y, this->text_alignment[0], this->text_alignment[1], this->background, this->font_size);
+    f32 x = this->x[0] + (this->x[1] - this->x[0]) / 2, y = this->y[0] - (this->y[0] - this->y[1]) / 2;
+    renderer->render_text(this->text.buffer, this->text.length, x, y, this->text_alignment[0], this->text_alignment[1], this->text_color, this->font_size);
   }
 
   if (this->next)
   {
     this->next->render(renderer);
   }
-  if (this->first)
-  {
-    this->first->render(renderer);
-  }
 }
 
 void UI::render(Renderer* renderer)
 {
 
-  assert(this->current_layout->parent == 0);
-  this->current_layout->render(renderer);
-  exit(1);
+  if (this->root)
+  {
+    renderer->enable_2d_rendering();
+    this->root->render(renderer);
+    renderer->disable_2d_rendering();
+  }
+  // exit(1);
 
-  this->arena->ptr     = 0;
-  this->current_layout = 0;
+  this->arena->ptr = 0;
+  this->root       = 0;
+  this->current    = 0;
 }

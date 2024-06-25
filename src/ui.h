@@ -42,17 +42,10 @@ enum
 struct UI_Widget
 {
 public:
-  void render(Renderer* renderer);
-  UI_Widget(f32 x[2], f32 y[2], UI_WidgetFlags flags, String string, UI_Widget* parent, f32 relative[2], Color background);
+  void       render(Renderer* renderer);
 
-  UI_Widget* parent;
   UI_Widget* next;
-  UI_Widget* prev;
-  UI_Widget* first;
-  UI_Widget* last;
-
   UI_Key     key;
-  u64        last_frame_touched_index;
 
   // build info
   UI_WidgetFlags flags;
@@ -62,15 +55,9 @@ public:
   f32            font_size;
   Color          background;
 
-  //  the relative position from the bounding box that any item is placed
-  f32 relative_position[2];
-
   //  bounding box of the widget/layout
   f32 x[2];
   f32 y[2];
-
-  f32 hot_t;    // about to be interacted with
-  f32 active_t; // interacted with
 };
 
 struct UI_Comm
@@ -79,8 +66,6 @@ struct UI_Comm
   Vector2    mouse;
   Vector2    drag_delta;
   bool       left_clicked;
-  bool       double_clicked;
-  bool       right_clicked;
   bool       pressed;
   bool       released;
   bool       dragging;
@@ -89,8 +74,10 @@ struct UI_Comm
 
 struct UI_Persistent_Data
 {
-  f32 hot_t;
-  f32 active_t;
+  u64  last_animated_index;
+  u64  last_animated_tick;
+  f32  animation_progress;
+  bool toggled;
 };
 
 struct UI_Widget_Persitent_Data_Table
@@ -103,34 +90,45 @@ struct UI_Widget_Persitent_Data_Table
 public:
   UI_Persistent_Data* get(UI_Key key);
   void                remove(UI_Key key);
-  void                add(UI_Key key, UI_Persistent_Data data);
+  UI_Persistent_Data * add(UI_Key key, UI_Persistent_Data data);
+};
+
+struct UI_Button_Data
+{
+  Color         background;
+  Color         text_color;
+  f32           font_size;
+  TextAlignment alignment[2];
+  void (*animation_func)(UI_Widget* widget);
 };
 
 struct UI
 {
 public:
-  UI(InputState* input, Arena * arena)
+  UI(InputState* input, Arena* arena)
   {
-    this->input = input;
-    this->arena = arena;
+    this->input                               = input;
+    this->arena                               = arena;
+    this->last_tick                           = 0;
+    this->persistent_data.widget_key_capacity = 2;
+    this->persistent_data.widget_key_count    = 0;
+    this->persistent_data.widget_keys         = (UI_Key*)sta_allocate_struct(UI_Key, this->persistent_data.widget_key_capacity);
+    this->persistent_data.persistent_data     = (UI_Persistent_Data*)sta_allocate_struct(UI_Persistent_Data, this->persistent_data.widget_key_capacity);
   }
 
-  UI_Comm    comm_from_widget(UI_Widget* widget);
-  UI_Comm    UI_Button(const char* string);
-  void       get_persistent_data(UI_Widget* widget);
-  UI_Widget* widget_make(f32 x[2], f32 y[2], UI_WidgetFlags flags, f32 relative[2], String string, UI_Widget* parent, UI_Widget* prev, Color background);
-  UI_State   build(UI_State state);
-  void       render(Renderer* renderer);
-  void       push_layout(f32 x[2], f32 y[2], UI_WidgetFlags flags, f32 relative[2]);
-  void       push_layout(f32 x[2], f32 y[2]);
-  void push_layout(f32 x[2], f32 y[2], UI_WidgetFlags flags, f32 relative[2], Color background, Color text_color, TextAlignment text_alignment[2], f32 font_size);
-  void       pop_layout();
-  UI_Widget* current_layout;
+  UI_Comm                        comm_from_widget(UI_Widget* widget);
+  UI_Comm                        UI_Button(f32 x[2], f32 y[2], const char* string, UI_Button_Data button_data);
+  UI_State                       build(UI_State state, u64 tick);
+  void                           render(Renderer* renderer);
+  UI_Widget_Persitent_Data_Table persistent_data;
+  u64                            last_tick;
+
+  UI_Widget*                     current;
+  UI_Widget*                     root;
 
 private:
-  InputState*                    input;
-  UI_Widget_Persitent_Data_Table persistent_data;
-  Arena*                         arena;
+  InputState* input;
+  Arena*      arena;
 };
 
 UI_State ui_build_main_menu(UI* ui);
