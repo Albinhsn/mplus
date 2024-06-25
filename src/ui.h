@@ -21,7 +21,9 @@ enum UI_State
 {
   UI_STATE_MAIN_MENU,
   UI_STATE_GAME_RUNNING,
+  UI_STATE_CONSOLE,
   UI_STATE_OPTIONS_MENU,
+  UI_STATE_RETURN,
   UI_STATE_EXIT_GAME
 };
 
@@ -90,7 +92,7 @@ struct UI_Widget_Persitent_Data_Table
 public:
   UI_Persistent_Data* get(UI_Key key);
   void                remove(UI_Key key);
-  UI_Persistent_Data * add(UI_Key key, UI_Persistent_Data data);
+  UI_Persistent_Data* add(UI_Key key, UI_Persistent_Data data);
 };
 
 struct UI_Button_Data
@@ -105,10 +107,11 @@ struct UI_Button_Data
 struct UI
 {
 public:
-  UI(InputState* input, Arena* arena)
+  UI(InputState* input, Arena* arena, Renderer * renderer)
   {
     this->input                               = input;
     this->arena                               = arena;
+    this->renderer = renderer;
     this->last_tick                           = 0;
     this->persistent_data.widget_key_capacity = 2;
     this->persistent_data.widget_key_count    = 0;
@@ -118,13 +121,15 @@ public:
 
   UI_Comm                        comm_from_widget(UI_Widget* widget);
   UI_Comm                        UI_Button(f32 x[2], f32 y[2], const char* string, UI_Button_Data button_data);
+  UI_Comm                        UI_Dropdown(f32 x[2], f32 y[2], const char* string, UI_Button_Data button_data);
   UI_State                       build(UI_State state, u64 tick);
-  void                           render(Renderer* renderer);
+  void                           render();
   UI_Widget_Persitent_Data_Table persistent_data;
   u64                            last_tick;
 
   UI_Widget*                     current;
   UI_Widget*                     root;
+  Renderer*                      renderer;
 
 private:
   InputState* input;

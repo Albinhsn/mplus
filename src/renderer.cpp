@@ -7,6 +7,7 @@
 #include "vector.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
+#include <SDL2/SDL_video.h>
 #include <cfloat>
 void Renderer::enable_2d_rendering()
 {
@@ -28,6 +29,8 @@ void Renderer::toggle_wireframe_off()
 }
 void Renderer::change_screen_size(u32 screen_width, u32 screen_height)
 {
+  SDL_SetWindowSize(this->window, screen_width, screen_height);
+  glViewport(0, 0, screen_width, screen_height);
 }
 
 void Renderer::draw_line(f32 x1, f32 y1, f32 x2, f32 y2)

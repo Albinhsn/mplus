@@ -90,6 +90,7 @@ UI_Comm UI::comm_from_widget(UI_Widget* widget)
   f32     y     = this->input->mouse_position[1];
 
   comm.hovering = widget->x[0] <= x && x <= widget->x[1] && widget->y[1] <= y && y <= widget->y[0];
+  printf("(%f, %f), (%f, %f) vs (%f, %f)\n", widget->x[0], widget->x[1], widget->y[0], widget->y[1], x, y);
 
   comm.pressed  = comm.hovering && this->input->is_left_mouse_pressed();
   comm.released = comm.hovering && this->input->is_left_mouse_released();
@@ -200,6 +201,76 @@ void animate_main_menu_button(UI_Comm comm, UI* ui, u64 tick)
   }
 }
 
+bool widget_is_toggled(UI_Comm comm, UI* ui)
+{
+  UI_Persistent_Data* persistent_data = ui->persistent_data.get(comm.widget->key);
+  if (!persistent_data)
+  {
+    UI_Persistent_Data data;
+    data.animation_progress  = 0;
+    data.last_animated_tick  = 0;
+    data.last_animated_index = 0;
+    data.toggled             = comm.released;
+    ui->persistent_data.add(comm.widget->key, data);
+
+    return data.toggled;
+  }
+  persistent_data->toggled ^= comm.released;
+  return persistent_data->toggled;
+}
+
+UI_Comm UI::UI_Dropdown(f32 x[2], f32 y[2], const char* string, UI_Button_Data button_data)
+{
+  return this->UI_Button(x, y, string, button_data);
+}
+
+UI_State ui_build_options_menu(UI* ui, u64 tick)
+{
+  UI_Button_Data button_data = {
+      WHITE, RED, 0.1f, {TextAlignment_Centered, TextAlignment_Centered}
+  };
+
+  f32 dropdown_x[2]       = {-0.2f, 0.2f};
+  f32 dropdown_y[2]       = {0.6f, 0.5f};
+
+  f32 dropdown_relative_y = -0.1f;
+
+  // ToDo format string?
+  const char* dropdown_item_strings[]    = {"1920x1080", "1600x900", "1280x720"};
+  u64         dropdown_item_values[3][2] = {
+      {1920, 1080},
+      {1600,  900},
+      {1280,  720},
+  };
+
+  UI_Comm resolution_comm = ui->UI_Dropdown(dropdown_x, dropdown_y, "Resoluton", button_data);
+
+  if (widget_is_toggled(resolution_comm, ui))
+  {
+    for (u32 i = 0; i < ArrayCount(dropdown_item_strings); i++)
+    {
+      dropdown_y[0] += dropdown_relative_y;
+      dropdown_y[1] += dropdown_relative_y;
+      UI_Comm comm = ui->UI_Button(dropdown_x, dropdown_y, dropdown_item_strings[i], button_data);
+      if (comm.released)
+      {
+        ui->renderer->change_screen_size(dropdown_item_values[i][0], dropdown_item_values[i][1]);
+      }
+    }
+  }
+
+  f32     button_x[2] = {-0.3f, 0.3f};
+  f32     button_y[2] = {-0.3f, -0.5f};
+
+  UI_Comm return_comm = ui->UI_Button(button_x, button_y, "RETURN", button_data);
+  animate_main_menu_button(return_comm, ui, tick);
+  if (return_comm.released)
+  {
+    return UI_STATE_RETURN;
+  }
+
+  return UI_STATE_OPTIONS_MENU;
+}
 UI_State ui_build_main_menu(UI* ui, u64 tick)
 {
 
@@ -252,7 +323,13 @@ UI_State UI::build(UI_State state, u64 tick)
     return ui_build_main_menu(this, tick);
   }
   case UI_STATE_OPTIONS_MENU:
+  {
+    return ui_build_options_menu(this, tick);
+  }
   case UI_STATE_GAME_RUNNING:
+  case UI_STATE_RETURN:
+  case UI_STATE_CONSOLE:
+
   case UI_STATE_EXIT_GAME:
   {
     return state;
@@ -284,16 +361,15 @@ void UI_Widget::render(Renderer* renderer)
   }
 }
 
-void UI::render(Renderer* renderer)
+void UI::render()
 {
 
   if (this->root)
   {
-    renderer->enable_2d_rendering();
+    this->renderer->enable_2d_rendering();
     this->root->render(renderer);
-    renderer->disable_2d_rendering();
+    this->renderer->disable_2d_rendering();
   }
-  // exit(1);
 
   this->arena->ptr = 0;
   this->root       = 0;

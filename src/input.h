@@ -51,6 +51,8 @@ public:
     this->sequence_capacity = 1;
     this->sequences         = (InputSequence*)sta_allocate_struct(InputSequence, 1);
     this->window            = window;
+    this->mouse_position[0] = FLT_MAX;
+    this->mouse_position[1] = FLT_MAX;
   }
   InputSequence* sequences;
   SDL_Window*    window;

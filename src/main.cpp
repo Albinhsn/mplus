@@ -22,7 +22,7 @@ int main()
   InputState input_state(renderer.window);
   u32        ticks = 0;
   Arena      arena(1024 * 1024);
-  UI         ui(&input_state, &arena);
+  UI         ui(&input_state, &arena, &renderer);
 
   // run_debug(font, renderer, ticks, input_state);
   // return 0;
@@ -43,7 +43,7 @@ int main()
     }
     renderer.clear_framebuffer();
     ui_state = ui.build(ui_state, ticks);
-    ui.render(&renderer);
+    ui.render();
 
     // // font size, wrap
     // const char* s = "abcdefghklmnopqrstuvxyz";
