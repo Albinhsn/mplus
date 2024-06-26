@@ -62,16 +62,6 @@ int main()
     update_ui_state(ui.build(ui_state, ticks), ui_state, prev_ui_state);
     ui.render();
 
-    // // font size, wrap
-    // const char* s = "abcdefghklmnopqrstuvxyz";
-    // renderer.render_text(s, strlen(s), -0.85f, 0.0f, (TextAlignment)0, (TextAlignment)0, WHITE, 0.1f);
-
-    // const char* s2 = "ABCDEFGHIJKLMNOPQRSTUVXYZ";
-    // renderer.render_text(s2, strlen(s2), -0.85f, 0.15f, (TextAlignment)0, (TextAlignment)0, WHITE, 0.1f);
-
-    // const char* s3 = "0123456789";
-    // renderer.render_text(s3, strlen(s3), -0.85f, -0.15f, (TextAlignment)0, (TextAlignment)0, WHITE, 0.1f);
-
     renderer.swap_buffers();
   }
 }

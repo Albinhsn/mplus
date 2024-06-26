@@ -4,33 +4,29 @@ LDFLAGS := -lm -lGL -lSDL2
 TARGET = main
 
 
-LIB_SRCS = $(wildcard src/*.cpp)
-LIB_OBJS = $(patsubst src/%.cpp,obj/%.o,$(LIB_SRCS))
+SRCS = $(wildcard src/*.cpp)
+OBJS = $(patsubst src/%.cpp,obj/%.o,$(SRCS))
+LIB_SRCS = $(wildcard libs/imgui/*.cpp)
+LIB_OBJS = $(patsubst libs/imgui/%.cpp,obj/%.o,$(LIB_SRCS))
+LIB_SRCS2 = $(wildcard ./libs/imgui/backends/imgui_impl_sdl2*.cpp)
+LIB_OBJS2 = $(patsubst libs/imgui/backends/%.cpp,obj/%.o,$(LIB_SRCS2))
 
 
 g: $(TARGET)
-$(TARGET): $(LIB_OBJS)
+$(TARGET): $(OBJS) $(LIB_OBJS) $(LIB_OBJS2)
 	$(CC)  -o $@ $^ $(LDFLAGS)
 
 obj/%.o: src/%.cpp
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-obj/common.o: src/common.cpp
-	$(CC) $(CFLAGS) -c src/common.cpp -o obj/common.o
+obj/%.o: libs/imgui/%.cpp
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -c $< -o $@
 
-obj/files.o: src/files.cpp
-	$(CC) $(CFLAGS) -c src/files.cpp -o obj/files.o
-
-obj/random.o: src/random.cpp
-	$(CC) $(CFLAGS) -c src/random.cpp -o obj/random.o
-
-compile lib_sta.a: obj/common.o obj/random.o obj/files.o
-	ar rcs lib/lib_sta.a obj/common.o obj/files.o obj/random.o
-
-render:
-	$(CC) $(CFLAGS)  ./src/font.cpp ./src/files.cpp ./src/noise.cpp src/random.cpp src/common.cpp src/vector.cpp src/sdl.cpp src/sta_renderer.cpp main.cpp $(LDFLAGS) -o main && ./main
-
+obj/%.o: libs/imgui/backends/%.cpp
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -rf obj/ $(TARGET)
