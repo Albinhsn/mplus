@@ -6,7 +6,23 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_video.h>
+#include <iterator>
 
+void update_ui_state(UI_State new_ui_state, UI_State& ui_state, UI_State& prev_ui_state)
+{
+  if (new_ui_state != ui_state)
+  {
+    if (new_ui_state == UI_STATE_RETURN && ui_state == UI_STATE_OPTIONS_MENU)
+    {
+      ui_state = prev_ui_state;
+    }
+    else
+    {
+      prev_ui_state = ui_state;
+      ui_state      = new_ui_state;
+    }
+  }
+}
 int main()
 {
 
@@ -28,6 +44,7 @@ int main()
   // return 0;
 
   enum UI_State ui_state = UI_STATE_MAIN_MENU;
+  enum UI_State prev_ui_state;
 
   while (true)
   {
@@ -42,7 +59,7 @@ int main()
       ticks = SDL_GetTicks() + 16;
     }
     renderer.clear_framebuffer();
-    ui_state = ui.build(ui_state, ticks);
+    update_ui_state(ui.build(ui_state, ticks), ui_state, prev_ui_state);
     ui.render();
 
     // // font size, wrap
