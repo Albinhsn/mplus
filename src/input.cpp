@@ -155,6 +155,7 @@ void InputState::update()
   SDL_Event event;
   while (SDL_PollEvent(&event))
   {
+    ImGui_ImplSDL2_ProcessEvent(&event);
     switch (event.type)
     {
     case SDL_QUIT:

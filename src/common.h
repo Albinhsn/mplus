@@ -1,11 +1,15 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include "../libs/imgui/backends/imgui_impl_opengl3.h"
+#include "../libs/imgui/backends/imgui_impl_sdl2.h"
+#include "../libs/imgui/imgui.h"
 #include "platform.h"
 #include <cstring>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+
 #define ArrayCount(Array)     (sizeof(Array) / sizeof((Array)[0]))
 
 #define MAX(a, b)             ((a) < (b) ? (b) : (a))
@@ -202,7 +206,6 @@ public:
   u32   length;
 };
 bool compare_float(f32 a, f32 b);
-u32 sta_hash_string_fnv(String* s);
-
+u32  sta_hash_string_fnv(String* s);
 
 #endif

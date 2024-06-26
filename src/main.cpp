@@ -6,23 +6,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_video.h>
-#include <iterator>
 
-void update_ui_state(UI_State new_ui_state, UI_State& ui_state, UI_State& prev_ui_state)
-{
-  if (new_ui_state != ui_state)
-  {
-    if (new_ui_state == UI_STATE_RETURN && ui_state == UI_STATE_OPTIONS_MENU)
-    {
-      ui_state = prev_ui_state;
-    }
-    else
-    {
-      prev_ui_state = ui_state;
-      ui_state      = new_ui_state;
-    }
-  }
-}
 int main()
 {
 
@@ -38,18 +22,13 @@ int main()
   InputState input_state(renderer.window);
   u32        ticks = 0;
   Arena      arena(1024 * 1024);
-  UI         ui(&input_state, &arena, &renderer);
 
-  // run_debug(font, renderer, ticks, input_state);
-  // return 0;
-
-  enum UI_State ui_state = UI_STATE_MAIN_MENU;
-  enum UI_State prev_ui_state;
+  init_imgui(renderer.window, renderer.context);
 
   while (true)
   {
     input_state.update();
-    if (input_state.should_quit() || ui_state == UI_STATE_EXIT_GAME)
+    if (input_state.should_quit())
     {
       break;
     }
@@ -58,9 +37,15 @@ int main()
     {
       ticks = SDL_GetTicks() + 16;
     }
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame();
+    ImGui::NewFrame();
+    ImGui::ShowDemoWindow();
+
     renderer.clear_framebuffer();
-    update_ui_state(ui.build(ui_state, ticks), ui_state, prev_ui_state);
-    ui.render();
+
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
     renderer.swap_buffers();
   }
