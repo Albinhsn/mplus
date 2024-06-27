@@ -2,7 +2,8 @@
 # Actual ToDo 
 * Get a plane up as a map
 * Get your dude in and be able to walk around
-* 
+* Write a work queue
+* Write debug window of time it takes for each system
 
 # Modelling
 ## Heroes/Champs
@@ -69,5 +70,6 @@
 
 ## Shape editor
 * Create a convex shape editor so you can create maps from it
+* Question is if we can just do blender for this?
 
 
