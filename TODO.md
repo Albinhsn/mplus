@@ -1,6 +1,7 @@
 
 # Actual ToDo 
 * Get a plane up as a map
+* Fix some camera things?
 * Get your dude in and be able to walk around
 * Write a work queue
 * Write debug window of time it takes for each system

@@ -176,6 +176,12 @@ Quaternion Quaternion::interpolate_linear(Quaternion q0, Quaternion q1, f32 t0)
   return Quaternion(x, y, z, w);
 }
 
+void Vector3::scale(f32 s){
+  this->x *= s;
+  this->y *= s;
+  this->z *= s;
+}
+
 Vector3 interpolate_translation(Vector3 v0, Vector3 v1, f32 t)
 {
   float x = v0.x + (v1.x - v0.x) * t;

@@ -42,6 +42,41 @@ void Renderer::draw_line(f32 x1, f32 y1, f32 x2, f32 y2)
   glEnd();
 }
 
+void Renderer::look_at(Vector3 c, Vector3 l, Vector3 u_prime, Vector3 t)
+{
+  Vector3 v     = c.sub(l);
+  f32     v_len = v.len();
+  if (v_len != 0)
+  {
+    v.scale(1.0f / v_len);
+  }
+
+  Vector3 r = v.cross(u_prime);
+  if (r.len() != 0)
+  {
+    r.scale(-1.0f / r.len());
+  }
+
+  Vector3 u          = v.cross(r);
+
+  this->camera.m[0]  = r.x;
+  this->camera.m[1]  = u.x;
+  this->camera.m[2]  = v.x;
+  this->camera.m[3]  = 0;
+  this->camera.m[4]  = r.y;
+  this->camera.m[5]  = u.y;
+  this->camera.m[6]  = v.y;
+  this->camera.m[7]  = 0;
+  this->camera.m[8]  = r.z;
+  this->camera.m[9]  = u.z;
+  this->camera.m[10] = v.z;
+  this->camera.m[11] = 0;
+  this->camera.m[12] = -t.dot(r);
+  this->camera.m[13] = -t.dot(u);
+  this->camera.m[14] = -t.dot(v);
+  this->camera.m[15] = 1.0f;
+}
+
 static void triangulate_simple_glyph(Vector2** _vertices, u32& vertex_count, i16& x_offset, i16& y_offset, Glyph* glyph)
 {
   SimpleGlyph* simple   = &glyph->simple;

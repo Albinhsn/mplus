@@ -42,6 +42,8 @@ public:
   GLBufferIndex* index_buffers;
   u32            index_buffers_count;
   u32            index_buffers_cap;
+  Mat44          camera;
+  Mat44          projection;
   Renderer(u32 screen_width, u32 screen_height, Font* font, Logger* logger)
   {
     sta_init_sdl_gl(&window, &context, screen_width, screen_height);
@@ -55,6 +57,7 @@ public:
 
   SDL_Window*   window;
   SDL_GLContext context;
+  void look_at(Vector3 c, Vector3 l, Vector3 u_prime, Vector3 t);
   u32           create_texture(u32 width, u32 height, void* data);
   void          bind_texture(u32 texture_id, u32 texture_unit);
   void          clear_framebuffer();
