@@ -206,6 +206,7 @@ Mat44 interpolate_transforms(Mat44 first, Mat44 second, f32 time)
   Mat44      res               = {};
   res.identity();
   res = res.translate(final_translation);
+  res.transpose();
   res = res.rotate(final_q);
 
   return res;

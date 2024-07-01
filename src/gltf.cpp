@@ -99,26 +99,7 @@ static inline GLTF_ChannelTargetPath get_channel_target_path(char* path)
   assert(!"Unknown channel path!");
 }
 
-struct LL
-{
-  LL* next;
-  LL* prev;
-  f32 time;
-};
-struct AnimationData
-{
-  Vector3*    T;
-  f32*        T_steps;
-  u32         T_count;
-  Quaternion* R;
-  f32*        R_steps;
-  u32         R_count;
-  Vector3*    S;
-  f32*        S_steps;
-  u32         S_count;
-};
-
-static f32 calculate_steps(AnimationData* data, LL* steps, u32& step_count)
+static f32 calculate_steps(GLTF_AnimationData* data, LL* steps, u32& step_count)
 {
 
   step_count       = data->T_count;
@@ -299,18 +280,18 @@ static void parse_mesh(AnimationModel* model, GLTF_Accessor* accessors, JsonValu
 
 static void parse_animations(AnimationModel* model, Skeleton* skeleton, JsonValue* animations, GLTF_Accessor* accessors, GLTF_BufferView* buffer_views, u32* node_index_to_joint_index)
 {
-  JsonArray* animations_array   = animations->arr;
-  model->clip_count             = animations_array->arraySize;
-  JsonObject* animation_obj     = animations_array->values[0].obj;
-  JsonArray*  channels          = animation_obj->lookup_value("channels")->arr;
-  JsonArray*  samplers          = animation_obj->lookup_value("samplers")->arr;
+  JsonArray* animations_array        = animations->arr;
+  model->clip_count                  = animations_array->arraySize;
+  JsonObject* animation_obj          = animations_array->values[0].obj;
+  JsonArray*  channels               = animation_obj->lookup_value("channels")->arr;
+  JsonArray*  samplers               = animation_obj->lookup_value("samplers")->arr;
 
-  Animation*  animation         = &model->animations;
-  animation->duration           = -1;
-  animation->joint_count        = skeleton->joint_count;
-  animation->poses              = (JointPose*)sta_allocate_struct(JointPose, skeleton->joint_count);
+  Animation*  animation              = &model->animations;
+  animation->duration                = -1;
+  animation->joint_count             = skeleton->joint_count;
+  animation->poses                   = (JointPose*)sta_allocate_struct(JointPose, skeleton->joint_count);
 
-  AnimationData* animation_data = (AnimationData*)sta_allocate_struct(AnimationData, animation->joint_count);
+  GLTF_AnimationData* animation_data = (GLTF_AnimationData*)sta_allocate_struct(GLTF_AnimationData, animation->joint_count);
 
   for (u32 i = 0; i < channels->arraySize; i++)
   {
@@ -333,7 +314,7 @@ static void parse_animations(AnimationModel* model, Skeleton* skeleton, JsonValu
     GLTF_ChannelTargetPath path        = get_channel_target_path(target->lookup_value("path")->string);
 
     // Store this just as T,R,S instead :)
-    AnimationData* data = &animation_data[joint_index];
+    GLTF_AnimationData* data = &animation_data[joint_index];
     if (path == CHANNEL_TARGET_PATH_TRANSLATION)
     {
       data->T_count = input->count;
@@ -396,14 +377,14 @@ static void parse_animations(AnimationModel* model, Skeleton* skeleton, JsonValu
 
     LL* steps = (LL*)sta_allocate_struct(LL, animation_data[i].T_count + animation_data[i].S_count + animation_data[i].R_count + 1);
     memset(steps, 0, sizeof(LL) * (animation_data->T_count + animation_data->S_count + animation_data->R_count));
-    pose->step_count      = 0;
-    AnimationData* data   = &animation_data[i];
+    pose->step_count         = 0;
+    GLTF_AnimationData* data = &animation_data[i];
 
-    animation->duration   = MAX(calculate_steps(data, steps, pose->step_count), animation->duration);
+    animation->duration      = MAX(calculate_steps(data, steps, pose->step_count), animation->duration);
 
-    pose->steps           = (f32*)sta_allocate_struct(f32, pose->step_count);
-    pose->local_transform = (Mat44*)sta_allocate_struct(Mat44, pose->step_count);
-    LL* head              = &steps[0];
+    pose->steps              = (f32*)sta_allocate_struct(f32, pose->step_count);
+    pose->local_transform    = (Mat44*)sta_allocate_struct(Mat44, pose->step_count);
+    LL* head                 = &steps[0];
     if (head->prev)
     {
       head = head->prev;
@@ -507,6 +488,7 @@ bool gltf_parse(AnimationModel* model, const char* filename)
     printf("Failed to deserialize json!\n");
     return false;
   }
+  // sta_json_serialize_to_file(&json_data, "full.json");
 
   JsonObject* head       = &json_data.obj;
   JsonValue*  json_nodes = head->lookup_value("nodes");

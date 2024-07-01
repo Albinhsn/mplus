@@ -57,6 +57,11 @@ void Shader::set_mat4(const char* name, Mat44 m)
 {
   this->set_mat4(name, &m.m[0], 1);
 }
+void Shader::set_mat4(const char* name, Mat44* v, int count)
+{
+  this->set_mat4(name, (float*)&v[0].m[0], count);
+}
+
 void Shader::set_mat4(const char* name, float* v, int count)
 {
 

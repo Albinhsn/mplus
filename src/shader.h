@@ -18,6 +18,7 @@ public:
   void set_float4f(const char* name, float value[4]);
   void set_mat4(const char * name, Mat44);
   void set_mat4(const char * name, float * v, int count);
+  void set_mat4(const char * name, Mat44* v, int count);
 };
 
 #endif

@@ -26,6 +26,7 @@
 
 #include "files.cpp"
 #include "font.cpp"
+#include "animation.cpp"
 #include "input.cpp"
 #include "renderer.cpp"
 #include "ui.cpp"
@@ -34,12 +35,17 @@
 struct Camera
 {
   Vector3 translation;
-  Vector3 rotation;
 };
 
-Mat44 handle_movement(Vector2& v, InputState* input)
+struct Character
 {
-  // rotation be based on mouse position
+  AnimationModel* model;
+  Vector2         position;
+  i32             animation_tick_start;
+};
+
+void handle_movement(Character* character, Shader* char_shader, InputState* input, u32 tick)
+{
   Vector2 velocity = {};
   f32     MS       = 0.01f;
   if (input->is_key_pressed('w'))
@@ -58,14 +64,40 @@ Mat44 handle_movement(Vector2& v, InputState* input)
   {
     velocity.x += MS;
   }
-  v               = Vector2(velocity.x + v.x, velocity.y + v.y);
+  Vector2 v         = character->position;
 
-  f32*  mouse_pos = input->mouse_position;
-  f32   angle     = atan2f(mouse_pos[1] - v.y, mouse_pos[0] - v.x);
+  f32*    mouse_pos = input->mouse_position;
+  f32     angle     = atan2f(mouse_pos[1] - v.y, mouse_pos[0] - v.x) - DEGREES_TO_RADIANS(90);
+  // the velocity should be based on the direction as well
 
-  Mat44 a         = {};
+  character->position.x = cosf(angle) * velocity.x - sinf(angle) * velocity.y + v.x;
+  character->position.y = cosf(angle) * velocity.y + sinf(angle) * velocity.x + v.y;
+
+  Mat44 a               = {};
   a.identity();
-  return a.scale(0.05f).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(angle) - 90.0f).translate(Vector3(v.x, v.y, 0.0));
+  a = a.scale(0.05f).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(angle)).translate(Vector3(character->position.x, character->position.y, 0.0));
+  char_shader->use();
+  char_shader->set_mat4("view", a);
+
+  if (velocity.x != 0 || velocity.y != 0)
+  {
+    if (character->animation_tick_start == -1)
+    {
+      character->animation_tick_start = tick;
+    }
+    tick -= character->animation_tick_start;
+    update_animation(*character->model, *char_shader, tick);
+  }
+  else
+  {
+    Mat44 joint_transforms[character->model->skeleton.joint_count];
+    for (int i = 0; i < character->model->skeleton.joint_count; i++)
+    {
+      joint_transforms[i].identity();
+    }
+    char_shader->set_mat4("jointTransforms", joint_transforms, character->model->skeleton.joint_count);
+    character->animation_tick_start = -1;
+  }
 }
 
 int main()
@@ -122,7 +154,11 @@ int main()
   {
     char_matrices[i].identity();
   }
-  Vector2 char_pos(0.5, 0.5);
+  Vector2   char_pos(0.5, 0.5);
+  Character character            = {};
+  character.model                = &model;
+  character.position             = char_pos;
+  character.animation_tick_start = 0;
 
   while (true)
   {
@@ -134,10 +170,8 @@ int main()
 
     if (ticks + 16 < SDL_GetTicks())
     {
-      ticks   = SDL_GetTicks() + 16;
-      Mat44 a = handle_movement(char_pos, &input_state);
-      char_shader.use();
-      char_shader.set_mat4("view", a);
+      ticks = SDL_GetTicks() + 16;
+      handle_movement(&character, &char_shader, &input_state, ticks);
     }
     // ImGui_ImplOpenGL3_NewFrame();
     // ImGui_ImplSDL2_NewFrame();

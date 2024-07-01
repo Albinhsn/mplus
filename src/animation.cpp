@@ -11,22 +11,9 @@
 #include <cstdlib>
 #include <cstring>
 
-void SkinnedVertex::debug()
-{
-  this->position.debug();
-  this->normal.debug();
-  this->uv.debug();
-  printf("%d %d %d %d\n", this->joint_index[0], this->joint_index[1], this->joint_index[2], this->joint_index[3]);
-  printf("%f %f %f %f\n", this->joint_weight[0], this->joint_weight[1], this->joint_weight[2], this->joint_weight[3]);
-}
 void AnimationModel::debug()
 {
   printf("Vertices: %ld\n", this->vertex_count);
-  for (u32 i = 0; i < this->vertex_count; i++)
-  {
-    this->vertices[i].debug();
-    printf("-\n");
-  }
 }
 
 void calculate_new_pose(AnimationModel anim, Mat44* poses, u32 count, Animation animation, u32 ticks)
@@ -123,78 +110,6 @@ static u8 get_joint_index_from_id(Skeleton* skeleton, char* name, u64 length)
   assert(0 && "Couldn't find joint by this name?");
 }
 
-struct JointData
-{
-  int        index;
-  char*      name;
-  u32        name_length;
-  Mat44      local_bind_transform;
-  Mat44      inverse_bind_transform;
-  JointData* children;
-  u32        children_cap;
-  u32        children_count;
-};
-
-struct SkeletonData
-{
-  int        joint_count;
-  JointData* head_joint;
-};
-
-struct JointWeight
-{
-  u32 joint_id;
-  f32 weight;
-};
-
-struct VertexSkinData
-{
-  JointWeight* data;
-  u32          count;
-};
-
-struct SkinningData
-{
-  char**          joint_order;
-  u32             joint_order_count;
-  VertexSkinData* vertex_skin_data;
-  u32             vertex_skin_data_count;
-};
-
-struct MeshData
-{
-  SkinnedVertex* vertices;
-  u32*           indices;
-  u32            vertex_count;
-};
-
-struct JointTransformData
-{
-  char* name;
-  u32   length;
-  Mat44 local_transform;
-};
-struct KeyFrameData
-{
-  float               time;
-  JointTransformData* transforms;
-};
-
-struct AnimationData
-{
-  KeyFrameData* key_frames;
-  float*        timesteps;
-  float         duration;
-  u32           count;
-};
-
-struct ColladaModelData
-{
-  SkeletonData  skeleton_data;
-  MeshData      mesh_data;
-  SkinningData  skinning_data;
-  AnimationData animation_data;
-};
 
 static int cmp_vertex_skin_data(const void* _a, const void* _b)
 {

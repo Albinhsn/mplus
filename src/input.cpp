@@ -125,7 +125,13 @@ static inline void clear_input(InputState* input)
 
 static inline void add_event(InputState* input, InputEventType type, u32 key)
 {
-  assert(input->event_count < ArrayCount(input->events) && "Overflow for input events!");
+  if (input->event_count > ArrayCount(input->events))
+  {
+    for(u32 i = 0; i < ArrayCount(input->events); i++){
+      input->events[i].debug();
+    }
+    assert(input->event_count < ArrayCount(input->events) && "Overflow for input events!");
+  }
 
   input->events[input->event_count].state = type;
   input->events[input->event_count].key   = key;

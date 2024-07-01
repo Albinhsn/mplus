@@ -8,6 +8,25 @@
 #define GLTF_CHUNK_TYPE_JSON 0x4E4F534A
 #define GLTF_CHUNK_TYPE_BIN  0x004E4942
 
+struct LL
+{
+  LL* next;
+  LL* prev;
+  f32 time;
+};
+struct GLTF_AnimationData
+{
+  Vector3*    T;
+  f32*        T_steps;
+  u32         T_count;
+  Quaternion* R;
+  f32*        R_steps;
+  u32         R_count;
+  Vector3*    S;
+  f32*        S_steps;
+  u32         S_count;
+};
+
 enum GLTF_ChannelTargetPath
 {
   CHANNEL_TARGET_PATH_TRANSLATION,

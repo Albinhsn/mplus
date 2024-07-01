@@ -30,6 +30,10 @@ enum InputEventType
 
 struct InputEvent
 {
+public:
+  void debug(){
+    printf("%d: %d\n", state, key);
+  }
   InputEventType state;
   u32            key;
 };
@@ -41,6 +45,7 @@ public:
   u32         event_count;
   u32         matched;
 };
+
 
 struct InputState
 {
@@ -61,7 +66,7 @@ public:
   f32            mouse_relative[2];
   u32            sequence_count;
   u32            sequence_capacity;
-  InputEvent     events[25];
+  InputEvent     events[50];
   u32            event_count;
 
   void           update();
