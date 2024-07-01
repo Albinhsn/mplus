@@ -487,7 +487,7 @@ static void parse_animations(AnimationModel* model, Skeleton* skeleton, JsonValu
   }
 }
 
-bool parse_gltf(AnimationModel* model, const char* filename)
+bool gltf_parse(AnimationModel* model, const char* filename)
 {
 
   Buffer buffer = {};
@@ -507,7 +507,6 @@ bool parse_gltf(AnimationModel* model, const char* filename)
     printf("Failed to deserialize json!\n");
     return false;
   }
-  sta_json_serialize_to_file(&json_data, "full.json");
 
   JsonObject* head       = &json_data.obj;
   JsonValue*  json_nodes = head->lookup_value("nodes");

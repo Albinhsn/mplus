@@ -1465,6 +1465,7 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
 
       model->vertices[index].vertex = cast_vec4_to_vec3(obj.vertices[data.vertex_idx - 1]);
       model->vertices[index].uv     = cast_vec3_to_vec2(obj.texture_coordinates[data.texture_idx - 1]);
+      model->vertices[index].uv.y  = -model->vertices[index].uv.y;
 
       model->vertices[index].normal = obj.normals[data.normal_idx - 1];
     }

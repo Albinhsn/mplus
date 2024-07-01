@@ -62,6 +62,6 @@ struct GLTF_Accessor
   GLTF_AccessorType  type;
 };
 
-bool parse_gltf(AnimationModel * model, const char * filename);
+bool gltf_parse(AnimationModel * model, const char * filename);
 
 #endif

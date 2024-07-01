@@ -335,8 +335,6 @@ Mat44 Mat44::rotate_x(f32 degrees)
   m.rc[1][2] = sinf(r);
   m.rc[2][1] = -sinf(r);
   m.rc[2][2] = cosf(r);
-  m.debug();
-  printf("-\n");
   return this->mul(m);
 }
 

@@ -1,3 +1,6 @@
+#include "common.h"
+#include "files.h"
+#include "renderer.h"
 #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
 #define IMGUI_DEFINE_MATH_OPERATORS
 
@@ -24,6 +27,7 @@
 #include "input.cpp"
 #include "renderer.cpp"
 #include "ui.cpp"
+#include "gltf.cpp"
 
 struct Camera
 {
@@ -48,6 +52,27 @@ int main()
   // create a the first map on the xz plane
   //   render some random texture for debug purposes
   // be able to move around the camera with wasd and zoom
+  ModelData map = {};
+  sta_parse_wavefront_object_from_file(&map, "./data/map_with_hole.obj");
+  Shader model_shader("./shaders/model.vert", "./shaders/model.frag");
+  Mat44  ident = {};
+  ident.identity();
+  model_shader.use();
+  model_shader.set_mat4("view", ident);
+  model_shader.set_mat4("projection", ident);
+  BufferAttributes map_attributes[3] = {
+      {3, GL_FLOAT},
+      {2, GL_FLOAT},
+      {3, GL_FLOAT}
+  };
+  TargaImage image     = {};
+
+  sta_targa_read_from_file_rgba(&image, "./data/blizzard.tga");
+  u32 map_buffer = renderer.create_buffer_indices(sizeof(VertexData) * map.vertex_count, map.vertices, map.vertex_count, map.indices, map_attributes, ArrayCount(map_attributes));
+  u32 texture    = renderer.create_texture(image.width, image.height, image.data);
+  renderer.bind_texture(texture, 0);
+  // AnimationModel model = {};
+  // gltf_parse(&model, "./data/first_sphere.glb");
 
   while (true)
   {
@@ -66,6 +91,7 @@ int main()
     // ImGui::NewFrame();
 
     renderer.clear_framebuffer();
+    renderer.render_buffer(map_buffer);
 
     // ImGui::Render();
     // ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

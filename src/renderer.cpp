@@ -371,7 +371,7 @@ void Renderer::init_quad_buffer_2d()
   sta_glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(f32) * 2, (void*)(0));
   sta_glEnableVertexAttribArray(0);
 
-  this->quad_shader = Shader("./shaders/quad.vert", "./shaders/quad.frag");
+  // this->quad_shader = Shader("./shaders/quad.vert", "./shaders/quad.frag");
 }
 void Renderer::init_text_shader()
 {
@@ -390,7 +390,7 @@ void Renderer::init_text_shader()
   sta_glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(f32) * 2, (void*)(0));
   sta_glEnableVertexAttribArray(0);
 
-  this->text_shader = Shader("./shaders/text.vert", "./shaders/text.frag");
+  // this->text_shader = Shader("./shaders/text.vert", "./shaders/text.frag");
 }
 void Renderer::render_2d_quad(f32 min[2], f32 max[2], Color color)
 {
