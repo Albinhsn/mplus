@@ -53,6 +53,7 @@ public:
     this->window            = window;
     this->mouse_position[0] = FLT_MAX;
     this->mouse_position[1] = FLT_MAX;
+    this->event_count       = 0;
   }
   InputSequence* sequences;
   SDL_Window*    window;

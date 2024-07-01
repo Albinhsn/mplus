@@ -23,24 +23,24 @@ int main()
   u32        ticks = 0;
   Arena      arena(1024 * 1024);
 
-  init_imgui(renderer.window, renderer.context);
+  // init_imgui(renderer.window, renderer.context);
   // create a big quad on the xz plane
   //   render some random texture for debug purposes
   // create a camera position which looks at it
   //  be able to move around it with wasd and zoom
 
-  f32 plane[12] = {
-      -0.8, 0, 0.8,  //
-      -0.8, 0, -0.8, //
-      0.8,  0, -0.8, //
-      0.8,  0, 0.8,  //
+  f32 plane2[12] = {
+      -0.8, 0.8, 0.8,  //
+      -0.8, 0.8, -0.8, //
+      0.8,  0.8, -0.8, //
+      0.8,  0.8, 0.8,  //
   };
-  // f32 plane[12] = {
-  //     -0.8, 0.8,  0, //
-  //     -0.8, -0.8, 0, //
-  //     0.8,  -0.8, 0, //
-  //     0.8,  0.8,  0, //
-  // };
+  f32 plane[12] = {
+      -0.8, 0.8,  0, //
+      -0.8, -0.8, 0, //
+      0.8,  -0.8, 0, //
+      0.8,  0.8,  0, //
+  };
   u32 plane_indices[6] = {
       0, 1, 2, 0, 2, 3 //
   };
@@ -50,16 +50,21 @@ int main()
   };
 
   shader.use();
-  u32   buffer = renderer.create_buffer_indices(sizeof(f32) * ArrayCount(plane), plane, ArrayCount(plane_indices), plane_indices, attributes, ArrayCount(attributes));
-  Color white  = WHITE;
+  u32   buffer  = renderer.create_buffer_indices(sizeof(f32) * ArrayCount(plane), plane, ArrayCount(plane_indices), plane_indices, attributes, ArrayCount(attributes));
+  u32   buffer2 = renderer.create_buffer_indices(sizeof(f32) * ArrayCount(plane2), plane2, ArrayCount(plane_indices), plane_indices, attributes, ArrayCount(attributes));
+  Color white   = WHITE;
   shader.set_float4f("color", (float*)&white);
   renderer.camera.identity();
-  renderer.look_at(Vector3(0, -1.5, 0), Vector3(0, 1, 0), Vector3(0, 1, 0), Vector3(0, -1.5, 0));
+  renderer.look_at(Vector3(0, 0.75, 0), Vector3(0, 0.5, -1), Vector3(0, 1, 0), Vector3(0, 0.75, 0));
   // renderer.camera = renderer.camera.rotate_x(90.0f);
   renderer.camera.debug();
 
   shader.set_mat4("camera", renderer.camera);
 
+  Vector3 position(0, 0, 0);
+  Vector3 up(0, 1, 0);
+  Vector3 l(0, 0, -1);
+  Vector3 t(0, 0, 0);
   while (true)
   {
     input_state.update();
@@ -70,19 +75,28 @@ int main()
 
     if (ticks + 16 < SDL_GetTicks())
     {
-      ticks           = SDL_GetTicks() + 16;
+      ticks = SDL_GetTicks() + 16;
+      position.y += 0.01f;
+      renderer.look_at(position, l, up, t);
+      t = position;
+
       // renderer.camera = renderer.camera.rotate_x(1.0f);
-      // shader.set_mat4("camera", renderer.camera);
+      shader.set_mat4("camera", renderer.camera);
     }
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplSDL2_NewFrame();
-    ImGui::NewFrame();
+    // ImGui_ImplOpenGL3_NewFrame();
+    // ImGui_ImplSDL2_NewFrame();
+    // ImGui::NewFrame();
 
     renderer.clear_framebuffer();
+    Color white = WHITE;
+    Color red   = RED;
+    shader.set_float4f("color", (float*)&white);
     renderer.render_buffer(buffer);
+    shader.set_float4f("color", (float*)&red);
+    renderer.render_buffer(buffer2);
 
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    // ImGui::Render();
+    // ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
     renderer.swap_buffers();
   }

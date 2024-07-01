@@ -53,6 +53,8 @@ public:
     this->logger        = logger;
     this->init_quad_buffer_2d();
     this->init_text_shader();
+    this->index_buffers_cap = 0;
+    this->index_buffers_count = 0;
   }
 
   SDL_Window*   window;
