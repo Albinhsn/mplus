@@ -44,7 +44,7 @@ struct Character
   i32             animation_tick_start;
 };
 
-void handle_movement(Character* character, Shader* char_shader, InputState* input, u32 tick)
+void handle_movement(Camera& camera, Character* character, Shader* char_shader, InputState* input, u32 tick)
 {
   Vector2 velocity = {};
   f32     MS       = 0.01f;
@@ -70,12 +70,13 @@ void handle_movement(Character* character, Shader* char_shader, InputState* inpu
   f32     angle     = atan2f(mouse_pos[1] - v.y, mouse_pos[0] - v.x) - DEGREES_TO_RADIANS(90);
   // the velocity should be based on the direction as well
 
-  character->position.x = cosf(angle) * velocity.x - sinf(angle) * velocity.y + v.x;
-  character->position.y = cosf(angle) * velocity.y + sinf(angle) * velocity.x + v.y;
+  character->position.x = velocity.x + v.x;
+  character->position.y = velocity.y + v.y;
 
   Mat44 a               = {};
   a.identity();
-  a = a.scale(0.05f).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(angle)).translate(Vector3(character->position.x, character->position.y, 0.0));
+  a                  = a.scale(0.05f).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(angle));
+  camera.translation = Vector3(-character->position.x, -character->position.y, 0.0);
   char_shader->use();
   char_shader->set_mat4("view", a);
 
@@ -160,6 +161,8 @@ int main()
   character.position             = char_pos;
   character.animation_tick_start = 0;
 
+  Camera camera                  = {};
+
   while (true)
   {
     input_state.update();
@@ -171,7 +174,12 @@ int main()
     if (ticks + 16 < SDL_GetTicks())
     {
       ticks = SDL_GetTicks() + 16;
-      handle_movement(&character, &char_shader, &input_state, ticks);
+      handle_movement(camera, &character, &char_shader, &input_state, ticks);
+      map_shader.use();
+      Mat44 m = {};
+      m.identity();
+      m = m.translate(camera.translation);
+      map_shader.set_mat4("view", m);
     }
     // ImGui_ImplOpenGL3_NewFrame();
     // ImGui_ImplSDL2_NewFrame();
