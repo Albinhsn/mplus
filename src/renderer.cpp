@@ -35,7 +35,6 @@ void Renderer::change_screen_size(u32 screen_width, u32 screen_height)
 
 void Renderer::draw_line(f32 x1, f32 y1, f32 x2, f32 y2)
 {
-  glColor3f(1.0, 1.0, 1.0);
   glBegin(GL_LINES);
   glVertex2f(x1, y1);
   glVertex2f(x2, y2);

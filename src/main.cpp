@@ -1,4 +1,5 @@
 #include "animation.h"
+#include "collision.h"
 #include "common.h"
 #include "files.h"
 #include "renderer.h"
@@ -11,7 +12,6 @@
 #include <SDL2/SDL_video.h>
 
 #include "common.cpp"
-#include "platform.h"
 #include "sdl.cpp"
 #include "vector.cpp"
 #include "shader.cpp"
@@ -41,28 +41,29 @@ struct Character
 {
   AnimationModel* model;
   Vector2         position;
+  Vector2         velocity;
   i32             animation_tick_start;
 };
 
-void handle_movement(Camera& camera, Character* character, Shader* char_shader, InputState* input, u32 tick)
+f32 handle_movement(Camera& camera, Character* character, Shader* char_shader, InputState* input, u32 tick)
 {
-  Vector2 velocity = {};
-  f32     MS       = 0.01f;
+  character->velocity = {};
+  f32 MS              = 0.01f;
   if (input->is_key_pressed('w'))
   {
-    velocity.y += MS;
+    character->velocity.y += MS;
   }
   if (input->is_key_pressed('a'))
   {
-    velocity.x -= MS;
+    character->velocity.x -= MS;
   }
   if (input->is_key_pressed('s'))
   {
-    velocity.y -= MS;
+    character->velocity.y -= MS;
   }
   if (input->is_key_pressed('d'))
   {
-    velocity.x += MS;
+    character->velocity.x += MS;
   }
   Vector2 v         = character->position;
 
@@ -70,17 +71,10 @@ void handle_movement(Camera& camera, Character* character, Shader* char_shader, 
   f32     angle     = atan2f(mouse_pos[1] - v.y, mouse_pos[0] - v.x) - DEGREES_TO_RADIANS(90);
   // the velocity should be based on the direction as well
 
-  character->position.x = velocity.x + v.x;
-  character->position.y = velocity.y + v.y;
+  character->position.x = character->velocity.x + v.x;
+  character->position.y = character->velocity.y + v.y;
 
-  Mat44 a               = {};
-  a.identity();
-  a                  = a.scale(0.05f).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(angle));
-  camera.translation = Vector3(-character->position.x, -character->position.y, 0.0);
-  char_shader->use();
-  char_shader->set_mat4("view", a);
-
-  if (velocity.x != 0 || velocity.y != 0)
+  if (character->velocity.x != 0 || character->velocity.y != 0)
   {
     if (character->animation_tick_start == -1)
     {
@@ -99,6 +93,46 @@ void handle_movement(Camera& camera, Character* character, Shader* char_shader, 
     char_shader->set_mat4("jointTransforms", joint_transforms, character->model->skeleton.joint_count);
     character->animation_tick_start = -1;
   }
+  return angle;
+}
+
+bool out_of_map(Vector2* closest_point, ModelData* map, Vector2 position)
+{
+  VertexData* vertices = map->vertices;
+  u32*        indices  = map->indices;
+  f32         distance = FLT_MAX;
+  for (u32 i = 0; i < map->vertex_count - 2; i += 3)
+  {
+    Triangle t;
+    t.points[0].x = vertices[indices[i]].vertex.x;
+    t.points[0].y = vertices[indices[i]].vertex.y;
+    t.points[1].x = vertices[indices[i + 1]].vertex.x;
+    t.points[1].y = vertices[indices[i + 1]].vertex.y;
+    t.points[2].x = vertices[indices[i + 2]].vertex.x;
+    t.points[2].y = vertices[indices[i + 2]].vertex.y;
+    if (point_in_triangle_2d(t, position))
+    {
+      return false;
+    }
+    // calculate distance to triangle
+    // if less update closest_point
+  }
+  return true;
+}
+
+void detect_collision(Renderer* renderer, ModelData* map, Character* player)
+{
+  Vector2 closest_point = {};
+  if (out_of_map(&closest_point, map, player->position))
+  {
+    // if we're to the left/right of the map, we can still move in y
+    // if we're to the up/down of the map, we can still move in x
+    // if we're both we can't move
+    player->position.x -= player->velocity.x;
+    player->position.y -= player->velocity.y;
+    player->velocity.x = 0;
+    player->velocity.y = 0;
+  }
 }
 
 int main()
@@ -115,9 +149,7 @@ int main()
   Arena      arena(1024 * 1024);
 
   init_imgui(renderer.window, renderer.context);
-  // create a the first map on the xz plane
-  //   render some random texture for debug purposes
-  // be able to move around the camera with wasd and zoom
+
   ModelData map = {};
   sta_parse_wavefront_object_from_file(&map, "./data/map_with_hole.obj");
   Shader map_shader("./shaders/model.vert", "./shaders/model.frag");
@@ -148,13 +180,7 @@ int main()
   };
   u32 character_buffer =
       renderer.create_buffer_indices(sizeof(SkinnedVertex) * model.vertex_count, model.vertices, model.index_count, model.indices, animated_attributes, ArrayCount(animated_attributes));
-  Shader char_shader("./shaders/animation.vert", "./shaders/animation.frag");
-  char_shader.use();
-  Mat44 char_matrices[50];
-  for (u32 i = 0; i < ArrayCount(char_matrices); i++)
-  {
-    char_matrices[i].identity();
-  }
+  Shader    char_shader("./shaders/animation.vert", "./shaders/animation.frag");
   Vector2   char_pos(0.5, 0.5);
   Character character            = {};
   character.model                = &model;
@@ -171,25 +197,33 @@ int main()
       break;
     }
 
+    renderer.clear_framebuffer();
     if (ticks + 16 < SDL_GetTicks())
     {
-      ticks = SDL_GetTicks() + 16;
-      handle_movement(camera, &character, &char_shader, &input_state, ticks);
+      ticks     = SDL_GetTicks() + 16;
+      f32 angle = handle_movement(camera, &character, &char_shader, &input_state, ticks);
       map_shader.use();
-      Mat44 m = {};
-      m.identity();
-      m = m.translate(camera.translation);
-      map_shader.set_mat4("view", m);
-    }
-    // ImGui_ImplOpenGL3_NewFrame();
-    // ImGui_ImplSDL2_NewFrame();
-    // ImGui::NewFrame();
+      detect_collision(&renderer, &map, &character);
 
-    renderer.clear_framebuffer();
+      Mat44 a = {};
+      a.identity();
+      a                  = a.scale(0.05f).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(angle));
+      camera.translation = Vector3(-character.position.x, -character.position.y, 0.0);
+      char_shader.use();
+      char_shader.set_mat4("view", a);
+    }
+
+    Mat44 m = {};
+    m.identity();
+    m = m.translate(camera.translation);
+    map_shader.use();
+    map_shader.set_mat4("view", m);
+
     // render map
     renderer.bind_texture(texture, 0);
-    map_shader.use();
+    renderer.toggle_wireframe_on();
     renderer.render_buffer(map_buffer);
+    renderer.toggle_wireframe_off();
     // render character
 
     char_shader.use();
@@ -198,5 +232,8 @@ int main()
     // ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
     renderer.swap_buffers();
+    // ImGui_ImplOpenGL3_NewFrame();
+    // ImGui_ImplSDL2_NewFrame();
+    // ImGui::NewFrame();
   }
 }
