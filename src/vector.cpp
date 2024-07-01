@@ -176,7 +176,8 @@ Quaternion Quaternion::interpolate_linear(Quaternion q0, Quaternion q1, f32 t0)
   return Quaternion(x, y, z, w);
 }
 
-void Vector3::scale(f32 s){
+void Vector3::scale(f32 s)
+{
   this->x *= s;
   this->y *= s;
   this->z *= s;
@@ -331,9 +332,11 @@ Mat44 Mat44::rotate_x(f32 degrees)
   Mat44 m = {};
   m.identity();
   m.rc[1][1] = cosf(r);
-  m.rc[1][2] = -sinf(r);
-  m.rc[2][1] = sinf(r);
+  m.rc[1][2] = sinf(r);
+  m.rc[2][1] = -sinf(r);
   m.rc[2][2] = cosf(r);
+  m.debug();
+  printf("-\n");
   return this->mul(m);
 }
 

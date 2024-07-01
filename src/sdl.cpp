@@ -64,9 +64,21 @@ PFNGLVERTEXARRAYVERTEXBUFFERPROC  glVertexArrayVertexBuffer  = NULL;
 PFNGLENABLEVERTEXARRAYATTRIBPROC  glEnableVertexArrayAttrib  = NULL;
 PFNGLVERTEXARRAYATTRIBFORMATPROC  glVertexArrayAttribFormat  = NULL;
 PFNGLVERTEXARRAYATTRIBBINDINGPROC glVertexArrayAttribBinding = NULL;
+PFNGLGETSTRINGIPROC               glGetStringi               = NULL;
+PFNGLBINDSAMPLERPROC              glBindSampler              = NULL;
+PFNGLBLENDEQUATIONSEPARATEPROC    glBlendEquationSeparate    = NULL;
+PFNGLGETATTRIBLOCATIONPROC        glGetAttribLocation        = NULL;
+PFNGLISPROGRAMPROC                glIsProgram                = NULL;
+PFNGLDRAWELEMENTSBASEVERTEXPROC   glDrawElementsBaseVertex   = NULL;
 
 void                              loadExtensions()
 {
+  glDrawElementsBaseVertex   = (PFNGLDRAWELEMENTSBASEVERTEXPROC)SDL_GL_GetProcAddress("glDrawElementsBaseVertex");
+  glIsProgram                = (PFNGLISPROGRAMPROC)SDL_GL_GetProcAddress("glIsProgram");
+  glGetAttribLocation        = (PFNGLGETATTRIBLOCATIONPROC)SDL_GL_GetProcAddress("glGetAttribLocation");
+  glBlendEquationSeparate    = (PFNGLBLENDEQUATIONSEPARATEPROC)SDL_GL_GetProcAddress("glBlendEquationSeparate");
+  glBindSampler              = (PFNGLBINDSAMPLERPROC)SDL_GL_GetProcAddress("glBindSampler");
+  glGetStringi               = (PFNGLGETSTRINGIPROC)SDL_GL_GetProcAddress("glGetStringi");
   glBufferSubData            = (PFNGLBUFFERSUBDATAPROC)SDL_GL_GetProcAddress("glBufferSubData");
   glNamedBufferSubData       = (PFNGLNAMEDBUFFERSUBDATAPROC)SDL_GL_GetProcAddress("glNamedBufferSubData");
   glCreateShader             = (PFNGLCREATESHADERPROC)SDL_GL_GetProcAddress("glCreateShader");

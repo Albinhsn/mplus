@@ -31,7 +31,7 @@ struct GLBufferIndex
 struct Renderer
 {
 public:
-  Font*          font;
+  AFont*          font;
   Logger*        logger;
   GLBufferIndex  quad_buffer_2d;
   Shader         quad_shader;
@@ -44,7 +44,7 @@ public:
   u32            index_buffers_cap;
   Mat44          camera;
   Mat44          projection;
-  Renderer(u32 screen_width, u32 screen_height, Font* font, Logger* logger)
+  Renderer(u32 screen_width, u32 screen_height, AFont* font, Logger* logger)
   {
     sta_init_sdl_gl(&window, &context, screen_width, screen_height);
     this->screen_width  = screen_width;

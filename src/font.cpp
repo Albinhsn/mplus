@@ -1,7 +1,4 @@
 #include "font.h"
-#include "common.h"
-#include "files.h"
-#include "platform.h"
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -187,7 +184,7 @@ static void get_all_glyph_locations(Table* tables, char* buf, u32** glyph_locati
   *glyph_locations = locations;
 }
 
-Glyph Font::get_glyph(u32 code)
+Glyph AFont::get_glyph(u32 code)
 {
   for (u32 i = 0; i < this->glyph_count; i++)
   {
@@ -332,7 +329,7 @@ static void parse_all_glyphs(char* buf, Glyph** glyphs, u32* glyph_locations, u3
   *glyphs = g;
 }
 
-void parse_mapping(char* buf, Font* font, Table* cmap_table)
+void parse_mapping(char* buf, AFont* font, Table* cmap_table)
 {
   Buffer buffer(buf + cmap_table->offset);
   cmap_table->cmap                      = (TableCmap*)buffer.current_address();
@@ -491,7 +488,7 @@ static void read_table_hhea(Table* table, u32 offset, char* buf)
   hhea->num_of_long_hor_metrics = read_u16(&buffer);
 }
 
-static void parse_advance_widths(Font* font, Table* hhea, Table* hmtx, char* buf)
+static void parse_advance_widths(AFont* font, Table* hhea, Table* hmtx, char* buf)
 {
   u32           number_of_metrics = hhea->hhea->num_of_long_hor_metrics;
   Buffer        buffer(buf + hmtx->offset);
@@ -512,7 +509,7 @@ TableDirectory TableDirectory::read(Buffer* buffer)
   return directory;
 }
 
-void Font::parse_ttf(const char* filename)
+void AFont::parse_ttf(const char* filename)
 {
 
   Table  tables[DUMMY_TABLE_TYPE];

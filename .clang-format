@@ -10,3 +10,4 @@ AlignEscapedNewlines: Right
 AlignOperands:   Align
 AllowShortFunctionsOnASingleLine: None
 PointerAlignment: Left
+SortIncludes: false

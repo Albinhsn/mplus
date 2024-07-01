@@ -245,7 +245,7 @@ struct Table
   u32 offset;
 };
 
-struct Font
+struct AFont
 {
 public:
   void   parse_ttf(const char* filename);
