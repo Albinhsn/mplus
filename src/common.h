@@ -22,6 +22,7 @@
 #define ANSI_COLOR_RESET      "\x1b[0m"
 
 #define DEGREES_TO_RADIANS(x) (x * PI / 180.0f)
+#define RADIANS_TO_DEGREES(x) (x * 180.0f / PI)
 #define CLAMP(a, min, max)    MAX(MIN(max, a), min)
 
 typedef uint8_t  u8;

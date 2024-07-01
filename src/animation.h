@@ -39,8 +39,6 @@ struct Animation
 
 struct SkinnedVertex
 {
-public:
-  void    debug();
   Vector3 position;
   Vector2 uv;
   Vector3 normal;

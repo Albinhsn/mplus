@@ -173,7 +173,7 @@ class Mat44
 public:
   Mat44()
   {
-    this->identity();
+    memset(&m[0], 0, sizeof(float) * 16);
   }
   union
   {

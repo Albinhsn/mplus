@@ -1,6 +1,17 @@
 #include "input.h"
 #include "common.h"
 #include <cassert>
+bool InputState::is_key_pressed(u32 code)
+{
+  for (u32 i = 0; i < this->event_count; i++)
+  {
+    if (this->events[i].state == EVENT_KEY_DOWN && this->events[i].key == code)
+    {
+      return true;
+    }
+  }
+  return false;
+}
 
 bool InputState::is_key_released(u32 code)
 {
