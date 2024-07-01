@@ -1,12 +1,4 @@
 #include "gltf.h"
-#include "animation.h"
-#include "common.h"
-#include "files.h"
-#include "platform.h"
-#include "vector.h"
-#include <cassert>
-#include <cstdlib>
-#include <cstring>
 
 static inline void read_chunk(Buffer* buffer, GLTF_Chunk* chunk)
 {
@@ -473,7 +465,7 @@ bool gltf_parse(AnimationModel* model, const char* filename)
 
   Buffer buffer = {};
   sta_read_file(&buffer, filename);
-  GLTF_Header header = *(GLTF_Header*)buffer.read(sizeof(GLTF_Header));
+  (void)buffer.read(sizeof(GLTF_Header));
 
   GLTF_Chunk  chunk0 = {};
   GLTF_Chunk  chunk1 = {};
@@ -494,7 +486,7 @@ bool gltf_parse(AnimationModel* model, const char* filename)
   JsonValue*  json_nodes = head->lookup_value("nodes");
   assert(json_nodes->type == JSON_ARRAY && "Nodes should be an array?");
 
-  JsonValue*       scenes          = head->lookup_value("scenes");
+  // JsonValue*       scenes          = head->lookup_value("scenes");
   JsonValue*       animations      = head->lookup_value("animations");
   JsonValue*       meshes          = head->lookup_value("meshes");
   JsonValue*       skins           = head->lookup_value("skins");

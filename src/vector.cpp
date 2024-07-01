@@ -1,7 +1,4 @@
 #include "vector.h"
-#include "common.h"
-#include <cmath>
-#include <cstring>
 
 Quaternion Quaternion::from_mat(Mat44 m)
 {
@@ -571,6 +568,11 @@ Vector3 Vector3::cross(Vector3 v0, Vector3 v1)
       v0.x * v1.y - v0.y * v1.x     //
   };
   return out;
+}
+
+void Vector2::scale(float s){
+  this->x *= s;
+  this->y *= s;
 }
 
 Vector2 Vector2::sub(Vector2 v)

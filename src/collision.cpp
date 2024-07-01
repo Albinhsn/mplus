@@ -1,10 +1,4 @@
 #include "collision.h"
-#include "common.h"
-#include "platform.h"
-#include <cassert>
-#include <cfloat>
-#include <cmath>
-#include <cstdlib>
 
 static inline bool compare_vertices(Vector2 v0, Vector2 v1)
 {
@@ -51,7 +45,7 @@ static bool is_convex(Vector2 v0, Vector2 v1, Vector2 v2)
 static bool is_ear(Vector2 v0, Vector2 v1, Vector2 v2, Vector2* v, u32 v_count, u32 low, u32 mid, u32 high)
 {
   Triangle t(v0, v1, v2);
-  for (i32 i = 0; i < v_count; i++)
+  for (u32 i = 0; i < v_count; i++)
   {
     // only need to test reflex vertices?
     bool is_point_on_line = compare_vertices(v[i], v0) || compare_vertices(v[i], v1) || compare_vertices(v[i], v2);
@@ -98,7 +92,7 @@ static void get_earclipping_vertices(EarClippingNodes* tri, Vector2* v_points, u
   tri->reflex           = 0;
 
   EarClippingNode* curr = 0;
-  for (i32 i = 0; i < point_count; i++)
+  for (i32 i = 0; i < (i32)point_count; i++)
   {
     tri->head[i].point = v_points[i];
     tri->head[i].next  = &tri->head[(i + 1) % point_count];
@@ -371,8 +365,6 @@ static bool remove_vertex(Triangle* triangle, EarClippingNodes* tri)
   tri->test_vertex(prev);
   tri->test_vertex(next);
 
-  EarClippingNode* head  = tri->ear;
-  u64              start = (u64)head;
   assert(tri->ear != 0 && "Out of ears?");
   return false;
 }
@@ -443,7 +435,7 @@ static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inn
         is_vertex = compare_float(A.y, C->y) || compare_float(B.y, C->y);
       }
     }
-    else if ((A.y >= C->y && B.y <= C->y) || (B.y >= C->y && A.y <= C->y) && (A.x >= C->x || B.x >= C->x))
+    else if (((A.y >= C->y && B.y <= C->y) || (B.y >= C->y && A.y <= C->y)) && (A.x >= C->x || B.x >= C->x))
     {
       Vector2 s            = B.sub(A);
       f32     t            = n.dot(C->sub(A)) / n.dot(B.sub(A));
@@ -506,7 +498,7 @@ static void find_bridge(VertexDLL* outer, u32& outer_count, PolygonMaxXPair* inn
   insert_vertex_prior(outer, h, outer_count, h->point);
   h->prev->idx  = h->idx;
 
-  i32 start_idx = inner->max_x_idx;
+  u32 start_idx = inner->max_x_idx;
   do
   {
     insert_vertex_prior(outer, h, outer_count, inner->points[start_idx]);
@@ -549,7 +541,7 @@ void create_simple_polygon_from_polygon_with_holes(Vector2** out, u32& out_count
 
   VertexDLL*      vertices   = (VertexDLL*)sta_allocate_struct(VertexDLL, total_count + (polygon_count - 1) * 2);
   PolygonMaxXPair first_pair = pairs[0];
-  u32             count      = first_pair.point_count;
+  i32             count      = first_pair.point_count;
   for (i32 i = 0; i < count; i++)
   {
     VertexDLL* v = &vertices[i];
@@ -561,7 +553,7 @@ void create_simple_polygon_from_polygon_with_holes(Vector2** out, u32& out_count
 
   for (u32 i = 1; i < polygon_count; i++)
   {
-    find_bridge(vertices, count, &pairs[i]);
+    find_bridge(vertices, (u32&)count, &pairs[i]);
     u64        start = (u64)vertices;
     VertexDLL* head  = vertices;
     u32        c     = 0;
@@ -583,8 +575,8 @@ void create_simple_polygon_from_polygon_with_holes(Vector2** out, u32& out_count
     head   = head->next;
   } while (start != (u64)head);
 
-  assert(i == count && "Didn't fill?");
-  assert(count == out_count && "Didn't equal in size?");
+  assert((i32)i == count && "Didn't fill?");
+  assert(count == (i32)out_count && "Didn't equal in size?");
 
   *out = v;
 
@@ -604,7 +596,7 @@ void triangulate_earclipping(Triangle* triangles, u32& triangle_count, Vector2**
   u32 tot = 0;
   for (u32 i = 0; i < count; i++)
   {
-    for (int j = 0; j < v_counts[i] - 2; j++)
+    for (u32 j = 0; j < v_counts[i] - 2; j++)
     {
       assert(tot + j < number_of_triangles && "OVERFLOW?");
       remove_vertex(&triangles[tot + j], &tri[i]);

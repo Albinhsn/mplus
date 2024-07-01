@@ -1,9 +1,4 @@
 #include "sdl.h"
-#include "common.h"
-#include <GL/gl.h>
-#include <GL/glext.h>
-#include <SDL2/SDL_render.h>
-#include <SDL2/SDL_surface.h>
 
 PFNGLCREATESHADERPROC             glCreateShader             = NULL;
 PFNGLCOMPILESHADERPROC            glCompileShader            = NULL;

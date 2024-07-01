@@ -53,7 +53,7 @@ void update_animation(AnimationModel animation, Shader shader, u32 ticks)
   calculate_new_pose(animation, current_poses, skeleton->joint_count, animation.animations, ticks);
 
   Mat44 parent_transforms[skeleton->joint_count];
-  for (int i = 0; i < skeleton->joint_count; i++)
+  for (u32 i = 0; i < skeleton->joint_count; i++)
   {
     parent_transforms[i].identity();
   }
@@ -124,13 +124,13 @@ static void get_skin_data(VertexSkinData* vertex_skin_data, u32 vertex_skin_coun
   Buffer    buff(v->content.buffer, v->content.length);
   Buffer*   buffer = &buff;
 
-  for (u32 i = 0; i < vcount_count; i++)
+  for (i32 i = 0; i < vcount_count; i++)
   {
     VertexSkinData* skin_data = &vertex_skin_data[i];
     i32             vc        = vcount[i];
     skin_data->count          = MIN(vc, 4);
     skin_data->data           = (JointWeight*)sta_allocate_struct(JointWeight, skin_data->count);
-    for (u32 j = 0; j < vc; j++)
+    for (i32 j = 0; j < vc; j++)
     {
       buffer->skip_whitespace();
       i32 joint_id = parse_int_from_string(buffer);
@@ -279,7 +279,7 @@ static void read_positions(XML_Node* mesh_node, Vector3** positions, u32& count,
 
   buffer.parse_vector3_array(pos, count);
 
-  for (int i = 0; i < count; i++)
+  for (u32 i = 0; i < count; i++)
   {
     Vector3* v  = &pos[i];
 
@@ -368,7 +368,7 @@ static void extract_model_data(MeshData* model, XML_Node* geometry, VertexSkinDa
     buffer.skip_whitespace();
     u32 uv_index = buffer.parse_int();
 
-    for (u32 j = 0; j < type_count - 3; j++)
+    for (i32 j = 0; j < type_count - 3; j++)
     {
       skip_whitespace(&buffer);
       (void)parse_int_from_string(&buffer);
@@ -573,7 +573,7 @@ bool sta_collada_parse_from_file(AnimationModel* model, const char* filename)
 
   for (u32 i = 0; i < model->skeleton.joint_count; i++)
   {
-    Joint* joint = &model->skeleton.joints[i];
+    // Joint* joint = &model->skeleton.joints[i];
   }
 
   load_animation_data(&model->skeleton, &animation_model, &xml.head);

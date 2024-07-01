@@ -1,14 +1,4 @@
 #include "renderer.h"
-#include "collision.h"
-#include "common.h"
-#include "font.h"
-#include "platform.h"
-#include "sdl.h"
-#include "vector.h"
-#include <GL/gl.h>
-#include <GL/glext.h>
-#include <SDL2/SDL_video.h>
-#include <cfloat>
 void Renderer::enable_2d_rendering()
 {
   glDisable(GL_DEPTH_TEST);

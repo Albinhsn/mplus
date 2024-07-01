@@ -1,8 +1,4 @@
 #include "font.h"
-#include <cassert>
-#include <cstdint>
-#include <cstdlib>
-#include <cstring>
 
 #define BIT_IS_SET(flag, c) ((((flag) >> c) & 1) == 1)
 #define REPEAT(flag)        (BIT_IS_SET(flag, 3))
@@ -79,7 +75,7 @@ static bool should_be_compound(Glyph* glyph)
 
   if (glyph->simple.n > 1)
   {
-    for (u32 i = 0; i < glyph->simple.n - 1; i++)
+    for (i32 i = 0; i < glyph->simple.n - 1; i++)
     {
       u16   c0 = i == 0 ? glyph->simple.end_pts_of_contours[i] : glyph->simple.end_pts_of_contours[i - 1] - glyph->simple.end_pts_of_contours[i];
       Point v0[c0];

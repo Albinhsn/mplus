@@ -1,6 +1,4 @@
 #include "ui.h"
-#include "common.h"
-#include "renderer.h"
 
 void init_imgui(SDL_Window* window, SDL_GLContext context)
 {
@@ -241,7 +239,7 @@ UI_Comm UI::UI_Dropdown(f32 x[2], f32 y[2], const char* string, UI_Button_Data b
 
 void update_slider(UI_Comm comm)
 {
-  UI_Widget* widget = comm.widget;
+  // UI_Widget* widget = comm.widget;
 }
 
 UI_State ui_build_options_menu(UI* ui, u64 tick)

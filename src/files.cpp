@@ -1,12 +1,4 @@
 #include "files.h"
-#include "common.h"
-#include "platform.h"
-#include <assert.h>
-#include <cfloat>
-#include <cmath>
-#include <ctype.h>
-#include <stdlib.h>
-#include <string.h>
 
 static inline Vector2 cast_vec3_to_vec2(Vector3 v)
 {

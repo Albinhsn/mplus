@@ -1,11 +1,4 @@
 #include "common.h"
-#include <cassert>
-#include <cstring>
-#include <stdio.h>
-#include <sys/time.h>
-#include <x86intrin.h>
-
-#include <sys/mman.h>
 /*
  =========================================
  =========================================
@@ -53,7 +46,7 @@ void* sta_pool_alloc(PoolAllocator* pool)
   PoolFreeNode* node = pool->head;
   if (node == 0)
   {
-    assert(0 && "Pool allocator has no memory");
+    assert(!"Pool allocator has no memory");
     return 0;
   }
 
@@ -99,6 +92,7 @@ void sta_pool_init(PoolAllocator* pool, void* buffer, u64 chunk_size, u64 count)
   pool->memory     = (u64)buffer;
   pool->chunk_size = align_offset(chunk_size, DEFAULT_ALIGNMENT);
   pool->head       = 0;
+  pool->size       = chunk_size * count;
 
   sta_pool_free_all(pool);
 }

@@ -1,6 +1,4 @@
 #include "input.h"
-#include "common.h"
-#include <cassert>
 bool InputState::is_key_pressed(u32 code)
 {
   for (u32 i = 0; i < this->event_count; i++)

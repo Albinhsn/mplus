@@ -1,6 +1,4 @@
 #include "shader.h"
-#include "files.h"
-#include "sdl.h"
 
 static bool test_shader_compilation(unsigned int id)
 {
@@ -93,23 +91,23 @@ static GLuint compile_shader(const char* path, GLint shader_type)
 Shader::Shader(const char* vertex_path, const char* tessellation_control_path, const char* tessellation_evaluation_path, const char* fragment_path)
 {
   GLuint vertex = compile_shader(vertex_path, GL_VERTEX_SHADER);
-  if (vertex == -1)
+  if ((i32)vertex == -1)
   {
     return;
   }
 
   GLuint fragment = compile_shader(fragment_path, GL_FRAGMENT_SHADER);
-  if (fragment == -1)
+  if ((i32)fragment == -1)
   {
     return;
   }
   GLuint tessellation_control = compile_shader(tessellation_control_path, GL_TESS_CONTROL_SHADER);
-  if (fragment == -1)
+  if ((i32)fragment == -1)
   {
     return;
   }
   GLuint tessellation_evaluation = compile_shader(tessellation_evaluation_path, GL_TESS_EVALUATION_SHADER);
-  if (fragment == -1)
+  if ((i32)fragment == -1)
   {
     return;
   }
@@ -128,13 +126,13 @@ Shader::Shader(const char* vertex_path, const char* fragment_path)
 {
 
   GLuint vertex = compile_shader(vertex_path, GL_VERTEX_SHADER);
-  if (vertex == -1)
+  if ((i32)vertex == -1)
   {
     return;
   }
 
   GLuint fragment = compile_shader(fragment_path, GL_FRAGMENT_SHADER);
-  if (fragment == -1)
+  if ((i32)fragment == -1)
   {
     return;
   }
