@@ -86,6 +86,7 @@ public:
   {
     return sqrtf(this->x * this->x + this->y * this->y);
   }
+  void normalize();
   float          dot(Vector2 v);
   float          dot_perp(Vector2 v);
   Vector2        cross(Vector2 v);

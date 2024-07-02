@@ -1,3 +1,4 @@
+#include "common.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <stdio.h>
@@ -77,6 +78,7 @@ struct Entity
 };
 
 const static u32 tile_count = 64;
+const static f32 tile_size  = 1.0f / tile_count;
 struct Map
 {
 public:
@@ -87,7 +89,6 @@ public:
   void init_map()
   {
     assert(model && "Can't init map without model");
-    f32         tile_size    = 1 / (f32)tile_count;
     u32         vertex_count = model->vertex_count;
     VertexData* vertices     = model->vertices;
     u32*        indices      = model->indices;
@@ -122,7 +123,6 @@ public:
   bool       tiles[tile_count][tile_count];
   void       get_tile_position(u8& tile_x, u8& tile_y, Vector2 position)
   {
-    f32 tile_size = 1.0f / (f32)tile_count;
     for (u32 y = 0; y < tile_count; y++)
     {
       f32 min_y = -1.0f + tile_size * y * 2.0f;
@@ -669,14 +669,12 @@ bool out_of_map(Vector2* closest_point, Map* map, Vector2 position)
   return true;
 }
 
-void detect_collision(Renderer* renderer, Map* map, Entity* player)
+void detect_collision(Map* map, Vector2& position)
 {
   Vector2 closest_point = {};
-  if (out_of_map(&closest_point, map, player->position))
+  if (out_of_map(&closest_point, map, position))
   {
-    player->position   = closest_point;
-    player->velocity.x = 0;
-    player->velocity.y = 0;
+    position = closest_point;
   }
 }
 
@@ -718,17 +716,63 @@ void read_abilities(Ability* abilities)
   abilities[0].cooldown       = 0;
   abilities[0].use_ability    = use_ability_fireball;
 }
+f32 tile_position_to_game_centered(u8 x)
+{
+  return (tile_size * (f32)x) * 2.0f - 1.0f;
+}
+
 void update_enemies(Map* map, Enemies* enemies, Vector2 target_position)
 {
-  EnemyNode*       node        = enemies->head;
-  const static f32 ms          = 0.01f;
-  const static f32 tiles_moved = ms / (1.0f / (f32)tile_count);
+  EnemyNode*       node = enemies->head;
+  const static f32 ms   = 0.005f;
+
   while (node)
   {
     node->enemy.path.find(map, target_position, node->enemy.entity.position);
     Path path = node->enemy.path;
+    if (path.path_count == 1)
+    {
+      node = node->next;
+      continue;
+    }
 
-    node      = node->next;
+    u32     path_idx           = 2;
+    Vector2 curr               = node->enemy.entity.position;
+    f32     movement_remaining = ms;
+    while (true)
+    {
+      f32 x = tile_position_to_game_centered(path.path[path_idx][0]);
+      f32 y = tile_position_to_game_centered(path.path[path_idx][1]);
+      path_idx++;
+      if (compare_float(x, curr.x) && compare_float(y, curr.y))
+      {
+        continue;
+      }
+      Vector2 point(x, y);
+
+      // distance from curr to point
+      f32 moved = (ABS(point.x - curr.x) + ABS(point.y - curr.y)) / tile_size;
+      if (moved > movement_remaining)
+      {
+        Vector2 velocity(point.x - curr.x, point.y - curr.y);
+        velocity.normalize();
+        velocity.scale(movement_remaining);
+        curr.x                      = curr.x + velocity.x;
+        curr.y                      = curr.y + velocity.y;
+        node->enemy.entity.position = curr;
+        break;
+      }
+      // convert current position to curr
+      movement_remaining -= moved;
+      curr = point;
+      if (path_idx >= path.path_count)
+      {
+        break;
+      }
+      // apply collision from walls
+    }
+
+    node = node->next;
   }
 }
 
@@ -746,15 +790,14 @@ void render_enemies(Renderer* renderer, Enemies* enemies, Camera camera)
     entity->shader.set_mat4("view", pos);
     renderer->render_buffer(node->enemy.entity.buffer_id);
 
-    Path path      = node->enemy.path;
-    f32  tile_size = 1.0f / (f32)tile_count;
+    Path path = node->enemy.path;
     for (u32 i = 0; i < path.path_count - 1; i++)
     {
 
-      f32 x0 = tile_size * path.path[i][0] * 2.0f - 1.0f + camera.translation.x + tile_size / 2.0f;
-      f32 y0 = tile_size * path.path[i][1] * 2.0f - 1.0f + camera.translation.y + tile_size / 2.0f;
-      f32 x1 = tile_size * path.path[i + 1][0] * 2.0f - 1.0f + camera.translation.x + tile_size / 2.0f;
-      f32 y1 = tile_size * path.path[i + 1][1] * 2.0f - 1.0f + camera.translation.y + tile_size / 2.0f;
+      f32 x0 = tile_position_to_game_centered(path.path[i][0]) + camera.translation.x;
+      f32 y0 = tile_position_to_game_centered(path.path[i][1]) + camera.translation.y;
+      f32 x1 = tile_position_to_game_centered(path.path[i + 1][0]) + camera.translation.x;
+      f32 y1 = tile_position_to_game_centered(path.path[i + 1][1]) + camera.translation.y;
       renderer->draw_line(x0, y0, x1, y1, 4, RED);
     }
 
@@ -959,7 +1002,7 @@ int main()
       spawn_enemies(&wave, &map, &enemies, ticks);
       update_enemies(&map, &enemies, entity.position);
       handle_movement(camera, &entity, &char_shader, &input_state, ticks);
-      detect_collision(&renderer, &map, &entity);
+      detect_collision(&map, entity.position);
     }
 
     Mat44 m = {};

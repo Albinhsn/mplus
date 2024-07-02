@@ -570,7 +570,15 @@ Vector3 Vector3::cross(Vector3 v0, Vector3 v1)
   return out;
 }
 
-void Vector2::scale(float s){
+void Vector2::normalize()
+{
+  f32 sum = this->len();
+  this->x /= sum;
+  this->y /= sum;
+}
+
+void Vector2::scale(float s)
+{
   this->x *= s;
   this->y *= s;
 }
