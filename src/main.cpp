@@ -1,4 +1,3 @@
-#include "common.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <stdio.h>
@@ -9,20 +8,14 @@
 #include <cfloat>
 #include <stdlib.h>
 #include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_timer.h>
-#include <SDL2/SDL_video.h>
-#include <SDL2/SDL_render.h>
-#include <SDL2/SDL_surface.h>
 
 #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
 #define IMGUI_DEFINE_MATH_OPERATORS
 
 #include "platform.h"
-#include <cassert>
-#include <cstdlib>
-#include <cstring>
 #include "common.cpp"
 #include "sdl.cpp"
 #include "vector.cpp"
@@ -44,8 +37,7 @@
 #include "ui.cpp"
 #include "gltf.cpp"
 
-u64 find_path_timer;
-u64 progress_movement_timer;
+u32 score;
 
 struct Camera
 {
@@ -888,13 +880,13 @@ bool handle_entity_collision(Entity* entity, Enemies* enemies)
   while (enemy)
   {
 
-    printf("Handling entity collision!\n");
     Sphere enemy_bb;
     enemy_bb.position = enemy->enemy.entity.position;
     enemy_bb.r        = enemy->enemy.entity.r;
 
     if (sphere_sphere_collision(entity_bb, enemy_bb))
     {
+      score += 100;
       enemy->enemy.entity.hp = 0;
       return true;
     }
@@ -909,7 +901,6 @@ void update_entities(Entities* entities, Enemies* enemies)
   EntityNode* prev = 0;
   while (node)
   {
-    printf("Updating entities!\n");
     Entity* entity = &node->entity;
     entity->position.x += entity->velocity.x;
     entity->position.y += entity->velocity.y;
@@ -939,7 +930,6 @@ void render_entities(Renderer* renderer, Entities* entities, Camera camera)
   EntityNode* node = entities->head;
   while (node)
   {
-    printf("Rendering entities!\n");
     Entity entity = node->entity;
     entity.shader.use();
     Mat44 m = {};
@@ -1007,6 +997,9 @@ int main()
   InputState input_state(renderer.window);
   u32        ticks = 0;
   Arena      arena(1024 * 1024);
+
+  // ToDo make this work when game over is implemented
+  score = 0;
 
   init_imgui(renderer.window, renderer.context);
 
@@ -1091,70 +1084,153 @@ int main()
   wave.spawn_count          = 0;
   map.init_map();
 
-  u32 render_ticks = 0, update_ticks = 0, ms = 0;
-  f32 fps = 0.0f;
+  u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0;
+  u32      game_running_ticks = 0;
+  f32      fps                = 0.0f;
 
+  UI_State ui_state           = UI_STATE_MAIN_MENU;
+
+  bool     console            = false;
+
+  char     console_buf[1024];
+  memset(console_buf, 0, ArrayCount(console_buf));
   while (true)
   {
-    input_state.update();
-    if (input_state.should_quit())
-    {
-      break;
-    }
 
-    renderer.clear_framebuffer();
     if (ticks + 16 < SDL_GetTicks())
     {
+      input_state.update();
+      if (input_state.should_quit())
+      {
+        break;
+      }
+      renderer.clear_framebuffer();
       if (entity.hp == 0)
       {
         return 1;
       }
+      if (input_state.is_key_pressed('c'))
+      {
+        console = true;
+      }
+
+      u32 start_tick = SDL_GetTicks();
+      if (ui_state == UI_STATE_GAME_RUNNING && input_state.is_key_pressed('p'))
+      {
+        ui_state = UI_STATE_OPTIONS_MENU;
+        continue;
+      }
+
       ImGui_ImplOpenGL3_NewFrame();
       ImGui_ImplSDL2_NewFrame();
       ImGui::NewFrame();
-      ImGui::Begin("Frame times");
-      ImGui::Text("Update:     %d", update_ticks);
-      ImGui::Text("path: %ld", find_path_timer);
-      ImGui::Text("progress: %ld", progress_movement_timer);
-      ImGui::Text("Rendering : %d", render_ticks);
-      ImGui::Text("MS: %d", ms);
-      ImGui::Text("FPS: %f", fps * 1000);
-      ImGui::End();
 
-      u32 start_tick = SDL_GetTicks();
+      u32 prior_render_ticks = 0;
+      if (ui_state == UI_STATE_GAME_RUNNING)
+      {
+        game_running_ticks += SDL_GetTicks() - ticks;
+        ImGui::Begin("Frame times");
+        ImGui::Text("Update:     %d", update_ticks);
+        ImGui::Text("Rendering : %d", render_ticks);
+        ImGui::Text("MS: %d", ms);
+        ImGui::Text("FPS: %f", fps * 1000);
+        ImGui::End();
 
-      handle_abilities(camera, &entities, &input_state, &entity, ticks);
-      handle_movement(camera, &entity, &char_shader, &input_state, ticks);
-      update_entities(&entities, &enemies);
-      spawn_enemies(&wave, &map, &enemies, ticks);
+        // ToDo render hp and score
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(ImVec2(center.x, center.y * 0.5f), 0, ImVec2(0.5f, 0.5f));
+        ImGui::Begin("Game ui!", 0, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
 
-      find_path_timer         = 0;
-      progress_movement_timer = 0;
-      update_enemies(&map, &enemies, &entity);
-      detect_collision(&map, entity.position);
-      update_ticks             = SDL_GetTicks() - start_tick;
-      u32   prior_render_ticks = SDL_GetTicks();
+        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
+        ImGui::Text("HP: %d ", entity.hp);
+        ImGui::Text("Score: %d", (i32)score);
+        ImGui::PopStyleColor();
 
-      Mat44 m                  = {};
-      m.identity();
-      m = m.translate(camera.translation);
-      map_shader.use();
-      map_shader.set_mat4("view", m);
+        ImGui::End();
 
-      // render map
-      renderer.bind_texture(texture, 0);
-      renderer.render_buffer(map_buffer);
-      render_entities(&renderer, &entities, camera);
-      render_enemies(&renderer, &enemies, camera);
+        handle_abilities(camera, &entities, &input_state, &entity, ticks);
+        handle_movement(camera, &entity, &char_shader, &input_state, ticks);
+        update_entities(&entities, &enemies);
+        spawn_enemies(&wave, &map, &enemies, game_running_ticks);
 
-      // render entity
+        update_enemies(&map, &enemies, &entity);
+        detect_collision(&map, entity.position);
+        u32 spawn_count = __builtin_popcount(wave.spawn_count);
+        if (spawn_count == wave.enemy_count && enemies.head == 0)
+        {
+          // ToDo this should get you back to main menu or game over screen or smth
+          printf("YOU WON\n");
+          return 0;
+        }
 
-      char_shader.use();
-      Color color = entity.can_take_damage_tick >= SDL_GetTicks() ? BLUE : BLACK;
-      char_shader.set_float4f("color", (float*)&color);
-      renderer.render_buffer(entity_buffer);
+        update_ticks       = SDL_GetTicks() - start_tick;
+        prior_render_ticks = SDL_GetTicks();
 
-      renderer.draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r * 2, 1, RED);
+        Mat44 m            = {};
+        m.identity();
+        m = m.translate(camera.translation);
+        map_shader.use();
+        map_shader.set_mat4("view", m);
+
+        // render map
+        renderer.bind_texture(texture, 0);
+        renderer.render_buffer(map_buffer);
+        render_entities(&renderer, &entities, camera);
+        render_enemies(&renderer, &enemies, camera);
+
+        // render entity
+
+        char_shader.use();
+        Color color = entity.can_take_damage_tick >= SDL_GetTicks() ? BLUE : BLACK;
+        char_shader.set_float4f("color", (float*)&color);
+        renderer.render_buffer(entity_buffer);
+
+        renderer.draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r * 2, 1, RED);
+      }
+      else if (ui_state == UI_STATE_MAIN_MENU)
+      {
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(ImVec2(center.x, center.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        ImGui::Begin("Main menu!", 0, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
+
+        ImGui::Text("MPLUS!");
+        if (ImGui::Button("Run game!"))
+        {
+          ui_state = UI_STATE_GAME_RUNNING;
+        }
+
+        ImGui::End();
+      }
+      else if (ui_state == UI_STATE_OPTIONS_MENU)
+      {
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(ImVec2(center.x, center.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        ImGui::Begin("Main menu!", 0, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
+
+        if (ImGui::Button("Return!"))
+        {
+          ui_state = UI_STATE_GAME_RUNNING;
+        }
+
+        ImGui::End();
+      }
+
+      if (console)
+      {
+        if (input_state.is_key_released(ASCII_RETURN))
+        {
+          printf("%s\n", console_buf);
+          memset(console_buf, 0, ArrayCount(console_buf));
+        }
+        ImGui::Begin("Console!", 0, ImGuiWindowFlags_NoDecoration);
+        if (ImGui::InputText("Console input", console_buf, ArrayCount(console_buf)))
+        {
+        }
+
+        ImGui::End();
+      }
 
       ImGui::Render();
       ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
