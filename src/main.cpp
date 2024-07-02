@@ -781,10 +781,6 @@ bool sphere_sphere_collision(Sphere s0, Sphere s1)
   f32 y_diff                           = ABS(s0.position.y - s1.position.y);
   f32 distance_between_centers_squared = x_diff * x_diff + y_diff * y_diff;
   f32 radii_diff                       = (s0.r + s1.r) * (s0.r + s1.r);
-  if (distance_between_centers_squared <= radii_diff)
-  {
-    printf("%f, %f -> %f <= %f\n", x_diff, y_diff, distance_between_centers_squared, radii_diff);
-  }
   return distance_between_centers_squared <= radii_diff;
 }
 
@@ -1072,6 +1068,9 @@ int main()
   wave.spawn_count         = 0;
   map.init_map();
 
+  u32 render_ticks = 0, update_ticks = 0, ms = 0;
+  f32 fps = 0.0f;
+
   while (true)
   {
     input_state.update();
@@ -1083,35 +1082,56 @@ int main()
     renderer.clear_framebuffer();
     if (ticks + 16 < SDL_GetTicks())
     {
-      ticks = SDL_GetTicks() + 16;
-      if(entity.hp == 0){
+      if (entity.hp == 0)
+      {
         return 1;
       }
+      ImGui_ImplOpenGL3_NewFrame();
+      ImGui_ImplSDL2_NewFrame();
+      ImGui::NewFrame();
+      ImGui::Begin("Frame times");
+      ImGui::Text("Update:     %d", update_ticks);
+      ImGui::Text("Rendering : %d", render_ticks);
+      ImGui::Text("MS: %d", ms);
+      ImGui::Text("FPS: %f", fps * 1000);
+      ImGui::End();
+
+      u32 start_tick = SDL_GetTicks();
+
       handle_abilities(camera, &entities, &input_state, &entity, ticks);
       handle_movement(camera, &entity, &char_shader, &input_state, ticks);
       update_entities(&entities, &enemies);
       spawn_enemies(&wave, &map, &enemies, ticks);
       update_enemies(&map, &enemies, &entity);
       detect_collision(&map, entity.position);
+      update_ticks             = SDL_GetTicks() - start_tick;
+      u32   prior_render_ticks = SDL_GetTicks();
+
+      Mat44 m                  = {};
+      m.identity();
+      m = m.translate(camera.translation);
+      map_shader.use();
+      map_shader.set_mat4("view", m);
+
+      // render map
+      renderer.bind_texture(texture, 0);
+      renderer.render_buffer(map_buffer);
+      render_entities(&renderer, &entities, camera);
+      render_enemies(&renderer, &enemies, camera);
+
+      // render entity
+
+      char_shader.use();
+      renderer.render_buffer(entity_buffer);
+
+      ImGui::Render();
+      ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+      renderer.swap_buffers();
+      render_ticks = SDL_GetTicks() - prior_render_ticks;
+
+      ms           = SDL_GetTicks() - start_tick;
+      fps          = 1 / (f32)MAX(ms, 0.0001);
+      ticks        = SDL_GetTicks() + 16;
     }
-
-    Mat44 m = {};
-    m.identity();
-    m = m.translate(camera.translation);
-    map_shader.use();
-    map_shader.set_mat4("view", m);
-
-    // render map
-    renderer.bind_texture(texture, 0);
-    renderer.render_buffer(map_buffer);
-    debug_render_map_grid(&renderer, &map, camera);
-    render_entities(&renderer, &entities, camera);
-    render_enemies(&renderer, &enemies, camera);
-    // render entity
-
-    char_shader.use();
-    renderer.render_buffer(entity_buffer);
-
-    renderer.swap_buffers();
   }
 }
