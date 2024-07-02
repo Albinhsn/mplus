@@ -817,7 +817,7 @@ void update_enemies(Map* map, Enemies* enemies, Entity* player)
     enemy_sphere.position = node->enemy.entity.position;
     if (sphere_sphere_collision(player_sphere, enemy_sphere))
     {
-      player->hp = 0;
+      // player->hp = 0;
       printf("TOOK DAMAGE\n");
     }
 
@@ -1114,15 +1114,18 @@ int main()
       map_shader.set_mat4("view", m);
 
       // render map
-      renderer.bind_texture(texture, 0);
-      renderer.render_buffer(map_buffer);
-      render_entities(&renderer, &entities, camera);
-      render_enemies(&renderer, &enemies, camera);
+      // renderer.bind_texture(texture, 0);
+      // renderer.render_buffer(map_buffer);
+      // render_entities(&renderer, &entities, camera);
+      // render_enemies(&renderer, &enemies, camera);
 
       // render entity
+      Color c = RED;
+      renderer.draw_circle(Vector2(0, 0), 0.2f, 2, RED);
 
-      char_shader.use();
-      renderer.render_buffer(entity_buffer);
+      // char_shader.use();
+      // renderer.render_buffer(entity_buffer);
+
 
       ImGui::Render();
       ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

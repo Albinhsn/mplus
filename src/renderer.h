@@ -36,7 +36,9 @@ public:
   GLBufferIndex  quad_buffer_2d;
   Shader         quad_shader;
   Shader         text_shader;
+  Shader         circle_shader;
   GLBufferIndex  text_buffer;
+  GLBufferIndex  circle_buffer;
   u32            screen_width;
   u32            screen_height;
   GLBufferIndex* index_buffers;
@@ -56,6 +58,7 @@ public:
     this->init_quad_buffer_2d();
     this->init_text_shader();
     this->init_line_buffer();
+    this->init_circle_buffer();
     this->index_buffers_cap   = 0;
     this->index_buffers_count = 0;
   }
@@ -69,10 +72,11 @@ public:
   void          swap_buffers();
   void          enable_2d_rendering();
   void          disable_2d_rendering();
-  void init_line_buffer();
+  void          init_line_buffer();
   u32           create_buffer_indices(u64 buffer_size, void* buffer_data, u64 index_count, u32* indices, BufferAttributes* attributes, u32 attribute_count);
   u32           create_buffer(u64 buffer_size, void* buffer_data, BufferAttributes* attributes, u64 attribute_count);
   void          render_arrays(u32 buffer_id, GLenum type, u32 count);
+  void          draw_circle(Vector2 position, f32 radius, f32 thickness, Color color);
   void          render_buffer(u32 buffer_id);
   void          render_2d_quad(f32 min[2], f32 max[2], Color color);
   void          draw_line(f32 x1, f32 y1, f32 x2, f32 y2, u32 line_width, Color color);
@@ -84,6 +88,7 @@ public:
 private:
   void init_quad_buffer_2d();
   void init_text_shader();
+  void init_circle_buffer();
 };
 
 #endif

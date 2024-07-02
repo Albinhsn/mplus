@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "sdl.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
 void Renderer::enable_2d_rendering()
@@ -23,6 +24,64 @@ void Renderer::change_screen_size(u32 screen_width, u32 screen_height)
 {
   SDL_SetWindowSize(this->window, screen_width, screen_height);
   glViewport(0, 0, screen_width, screen_height);
+}
+
+void Renderer::init_circle_buffer()
+{
+  GLBufferIndex* circle_buffer = &this->circle_buffer;
+  sta_glGenVertexArrays(1, &circle_buffer->vao);
+  sta_glGenBuffers(1, &circle_buffer->vbo);
+  sta_glGenBuffers(1, &circle_buffer->ebo);
+
+  sta_glBindVertexArray(circle_buffer->vao);
+  sta_glBindBuffer(GL_ARRAY_BUFFER, circle_buffer->vbo);
+  const int vertices_in_a_quad = 16;
+  f32       tot[16]            = {
+      1.0f,  1.0f,  1.0f, 1.0f, //
+      1.0f,  -1.0,  1.0f, 0.0f, //
+      -1.0f, -1.0f, 0.0f, 0.0f, //
+      -1.0f, 1.0,   0.0f, 1.0f, //
+  };
+  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * vertices_in_a_quad, tot, GL_DYNAMIC_DRAW);
+
+  sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, circle_buffer->ebo);
+  u32 indices[6] = {1, 3, 0, 1, 2, 3};
+  sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * ArrayCount(indices), indices, GL_STATIC_DRAW);
+
+  sta_glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(f32) * 4, (void*)(0));
+  sta_glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(f32) * 4, (void*)(2 * sizeof(float)));
+  sta_glEnableVertexAttribArray(0);
+  sta_glEnableVertexAttribArray(1);
+
+  this->circle_shader = Shader("./shaders/circle.vert", "./shaders/circle.frag");
+}
+
+void Renderer::draw_circle(Vector2 position, f32 radius, f32 thickness, Color color)
+{
+  this->circle_shader.use();
+  this->circle_shader.set_float("thickness", thickness);
+  this->circle_shader.set_float4f("color", (float*)&color);
+  sta_glBindVertexArray(this->circle_buffer.vao);
+  sta_glBindBuffer(GL_ARRAY_BUFFER, this->circle_buffer.vbo);
+  const int vertices_in_a_quad = 16;
+  f32 min_x = position.x - radius, max_x = position.x + radius;
+  f32 min_y = position.y - radius, max_y = position.y + radius;
+
+  f32 min_u = (min_x + 1.0f) / 2.0f;
+  f32 max_u = (max_x + 1.0f) / 2.0f;
+
+  f32 min_v = (min_y + 1.0f) / 2.0f;
+  f32 max_v = (max_y + 1.0f) / 2.0f;
+
+  f32       tot[16]            = {
+      max_x, max_y, 1.0f, 1.0f, //
+      max_x, min_y, 1.0f, 0.0f, //
+      min_x, min_y, 0.0f, 0.0f, //
+      min_x, max_y, 0.0f, 1.0f  //
+  };
+  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * vertices_in_a_quad, tot, GL_DYNAMIC_DRAW);
+
+  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 }
 
 void Renderer::init_line_buffer()

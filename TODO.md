@@ -1,21 +1,4 @@
 
-Wave enemy spawn thing first
-    * Can still do 
-    * Can build ui system
-    * Can build “hero” system
-    * Still just some a star shit and attack for enemies
-Map can first just be plane
-Then plane with hole/pillar etc
-Then just build out map/hero pool further
-Then turn into arena game
-Then turn into m+ game
-Create effects system which you queue things into 
-
-
-# Actual ToDo 
-* Fix some camera things?
-* Get your dude in and be able to walk around
-* Write debug window of time it takes for ach system
 
 # Modelling
 ## Heroes/Champs
