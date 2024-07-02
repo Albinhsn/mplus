@@ -473,7 +473,7 @@ public:
     enemy->shader    = enemy_shader;
     enemy->buffer_id = enemy_buffer_id;
     enemy->hp        = 1;
-    enemy->r         = 0.01f;
+    enemy->r         = 0.04f;
 
     en->next         = head;
     head             = en;
@@ -570,7 +570,7 @@ void      handle_movement(Camera& camera, Entity* entity, Shader* char_shader, I
 
   Mat44 a = {};
   a.identity();
-  a                  = a.scale(0.05f).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(angle) - 90);
+  a                  = a.scale(0.03f).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(angle) - 90);
   camera.translation = Vector3(-entity->position.x, -entity->position.y, 0.0);
   char_shader->use();
   char_shader->set_mat4("view", a);
@@ -725,11 +725,77 @@ f32 tile_position_to_game_centered(u8 x)
   return (tile_size * (f32)x) * 2.0f - 1.0f;
 }
 
-void update_enemies(Map* map, Enemies* enemies, Vector2 target_position)
+void handle_enemy_movement(Map* map, Enemy* enemy, Vector2 target_position)
 {
-  EnemyNode*       node = enemies->head;
-  EnemyNode*       prev = 0;
-  const static f32 ms   = 0.005f;
+  const static f32 ms = 0.005f;
+  enemy->path.find(map, target_position, enemy->entity.position);
+  Path path = enemy->path;
+  if (path.path_count == 1)
+  {
+    return;
+  }
+
+  u32     path_idx           = 2;
+  Vector2 curr               = enemy->entity.position;
+  f32     movement_remaining = ms;
+  while (true)
+  {
+    f32 x = tile_position_to_game_centered(path.path[path_idx][0]);
+    f32 y = tile_position_to_game_centered(path.path[path_idx][1]);
+    path_idx++;
+    if (compare_float(x, curr.x) && compare_float(y, curr.y))
+    {
+      continue;
+    }
+    Vector2 point(x, y);
+
+    // distance from curr to point
+    f32 moved = (ABS(point.x - curr.x) + ABS(point.y - curr.y)) / tile_size;
+    if (moved > movement_remaining)
+    {
+      Vector2 velocity(point.x - curr.x, point.y - curr.y);
+      velocity.normalize();
+      velocity.scale(movement_remaining);
+      curr.x                 = curr.x + velocity.x;
+      curr.y                 = curr.y + velocity.y;
+      enemy->entity.position = curr;
+      return;
+    }
+    // convert current position to curr
+    movement_remaining -= moved;
+    curr = point;
+    if (path_idx >= path.path_count)
+    {
+      return;
+    }
+  }
+}
+struct Sphere
+{
+  Vector2 position;
+  f32     r;
+};
+bool sphere_sphere_collision(Sphere s0, Sphere s1)
+{
+  f32 x_diff                           = ABS(s0.position.x - s1.position.x);
+  f32 y_diff                           = ABS(s0.position.y - s1.position.y);
+  f32 distance_between_centers_squared = x_diff * x_diff + y_diff * y_diff;
+  f32 radii_diff                       = (s0.r + s1.r) * (s0.r + s1.r);
+  if (distance_between_centers_squared <= radii_diff)
+  {
+    printf("%f, %f -> %f <= %f\n", x_diff, y_diff, distance_between_centers_squared, radii_diff);
+  }
+  return distance_between_centers_squared <= radii_diff;
+}
+
+void update_enemies(Map* map, Enemies* enemies, Entity* player)
+{
+  EnemyNode* node = enemies->head;
+  EnemyNode* prev = 0;
+
+  Sphere     player_sphere;
+  player_sphere.r        = player->r;
+  player_sphere.position = player->position;
 
   while (node)
   {
@@ -747,48 +813,16 @@ void update_enemies(Map* map, Enemies* enemies, Vector2 target_position)
       sta_pool_free(&enemies->pool, (u64)node);
       continue;
     }
-    node->enemy.path.find(map, target_position, node->enemy.entity.position);
-    Path path = node->enemy.path;
-    if (path.path_count == 1)
-    {
-      prev = node;
-      node = node->next;
-      continue;
-    }
 
-    u32     path_idx           = 2;
-    Vector2 curr               = node->enemy.entity.position;
-    f32     movement_remaining = ms;
-    while (true)
-    {
-      f32 x = tile_position_to_game_centered(path.path[path_idx][0]);
-      f32 y = tile_position_to_game_centered(path.path[path_idx][1]);
-      path_idx++;
-      if (compare_float(x, curr.x) && compare_float(y, curr.y))
-      {
-        continue;
-      }
-      Vector2 point(x, y);
+    handle_enemy_movement(map, &node->enemy, player->position);
 
-      // distance from curr to point
-      f32 moved = (ABS(point.x - curr.x) + ABS(point.y - curr.y)) / tile_size;
-      if (moved > movement_remaining)
-      {
-        Vector2 velocity(point.x - curr.x, point.y - curr.y);
-        velocity.normalize();
-        velocity.scale(movement_remaining);
-        curr.x                      = curr.x + velocity.x;
-        curr.y                      = curr.y + velocity.y;
-        node->enemy.entity.position = curr;
-        break;
-      }
-      // convert current position to curr
-      movement_remaining -= moved;
-      curr = point;
-      if (path_idx >= path.path_count)
-      {
-        break;
-      }
+    Sphere enemy_sphere;
+    enemy_sphere.r        = node->enemy.entity.r;
+    enemy_sphere.position = node->enemy.entity.position;
+    if (sphere_sphere_collision(player_sphere, enemy_sphere))
+    {
+      player->hp = 0;
+      printf("TOOK DAMAGE\n");
     }
 
     prev = node;
@@ -827,21 +861,6 @@ void render_enemies(Renderer* renderer, Enemies* enemies, Camera camera)
   }
 }
 
-struct Sphere
-{
-  Vector2 position;
-  f32     r;
-};
-
-bool sphere_sphere_collision(Sphere s0, Sphere s1)
-{
-  f32 x_diff                           = ABS(s0.position.x - s1.position.x);
-  f32 y_diff                           = ABS(s0.position.y - s0.position.y);
-  f32 distance_between_centers_squared = x_diff * x_diff + y_diff * y_diff;
-  f32 radii_diff                       = (s0.r + s1.r) * (s0.r + s1.r);
-  return distance_between_centers_squared <= radii_diff;
-}
-
 bool handle_entity_collision(Entity* entity, Enemies* enemies)
 {
   EnemyNode* enemy = enemies->head;
@@ -857,7 +876,6 @@ bool handle_entity_collision(Entity* entity, Enemies* enemies)
 
     if (sphere_sphere_collision(entity_bb, enemy_bb))
     {
-      printf("HIT ENEMY (%f, %f) and (%f, %f)\n", entity_bb.position.x, entity_bb.position.y, enemy_bb.position.x, enemy_bb.position.y);
       enemy->enemy.entity.hp = 0;
       return true;
     }
@@ -1035,7 +1053,7 @@ int main()
   entity.animation_tick_start = 0;
   entity.id                   = 0;
   entity.velocity             = Vector2(0, 0);
-  entity.r                    = 0.02f;
+  entity.r                    = 0.04f;
   entity.hp                   = 1;
   read_abilities(entity.abilities);
 
@@ -1066,11 +1084,14 @@ int main()
     if (ticks + 16 < SDL_GetTicks())
     {
       ticks = SDL_GetTicks() + 16;
+      if(entity.hp == 0){
+        return 1;
+      }
       handle_abilities(camera, &entities, &input_state, &entity, ticks);
+      handle_movement(camera, &entity, &char_shader, &input_state, ticks);
       update_entities(&entities, &enemies);
       spawn_enemies(&wave, &map, &enemies, ticks);
-      update_enemies(&map, &enemies, entity.position);
-      handle_movement(camera, &entity, &char_shader, &input_state, ticks);
+      update_enemies(&map, &enemies, &entity);
       detect_collision(&map, entity.position);
     }
 
