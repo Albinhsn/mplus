@@ -5,7 +5,9 @@ TARGET = main
 
 
 c:
-	$(CC) $(CFLAGS) src/main.cpp -o main $(LDFLAGS)
+	$(CC) $(CFLAGS) src/main.cpp -o main $(LDFLAGS) && ./main
+d:
+	$(CC) $(CFLAGS) src/main.cpp -o main $(LDFLAGS) -DDEBUG && ./main
 
 clean:
 	rm -rf obj/ $(TARGET)

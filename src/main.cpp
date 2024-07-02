@@ -44,6 +44,9 @@
 #include "ui.cpp"
 #include "gltf.cpp"
 
+u64 find_path_timer;
+u64 progress_movement_timer;
+
 struct Camera
 {
   Vector3 translation;
@@ -169,7 +172,11 @@ public:
   }
   void insert(HeapNode node)
   {
-    RESIZE_ARRAY(nodes, HeapNode, node_count, node_capacity);
+    if (node_count >= node_capacity)
+    {
+      node_capacity *= 2;
+      nodes = (HeapNode*)realloc(nodes, sizeof(HeapNode) * node_capacity);
+    }
     nodes[node_count] = node;
     heapify_up(node_count);
     node_count++;
@@ -260,16 +267,9 @@ public:
     }
     if (visited_count >= visited_capacity)
     {
-      u64 prev_cap = visited_capacity;
       visited_capacity *= 2;
-      u16* arr = (u16*)sta_allocate(sizeof(u16) * visited_capacity);
-      memcpy(arr, visited, sizeof(u16) * prev_cap);
-      sta_deallocate(visited, sizeof(u16) * prev_cap);
-      visited   = arr;
-      u32* arr2 = (u32*)sta_allocate(sizeof(u32) * visited_capacity);
-      memcpy(arr2, distances, sizeof(u32) * prev_cap);
-      sta_deallocate(distances, sizeof(u32) * prev_cap);
-      distances = arr2;
+      visited   = (u16*)realloc(visited, sizeof(u16) * visited_capacity);
+      distances = (u32*)realloc(distances, sizeof(u32) * visited_capacity);
     }
     visited[visited_count]     = position;
     distances[visited_count++] = curr.path_count + curr.distance;
@@ -285,116 +285,120 @@ public:
 };
 struct Path
 {
-public:
-  void find(Map* map, Vector2 needle, Vector2 source)
-  {
-    // get the tile position of both source and needle
-    u8 source_x, source_y;
-    u8 needle_x, needle_y;
-    map->get_tile_position(source_x, source_y, source);
-    map->get_tile_position(needle_x, needle_y, needle);
-
-    // init heap
-    Heap heap               = {};
-    heap.node_count         = 0;
-    heap.node_capacity      = 2;
-    heap.nodes              = (HeapNode*)sta_allocate_struct(HeapNode, heap.node_capacity);
-
-    HeapNode init_node      = {};
-    init_node.path_capacity = 2;
-    init_node.path_count    = 1;
-    init_node.path          = (u16*)sta_allocate_struct(u16, init_node.path_capacity);
-    init_node.path[0]       = (source_x << 8) | source_y;
-    // should include number of steps
-    init_node.distance = ABS((i16)(source_x - needle_x)) + ABS((i16)(source_y - needle_y));
-
-    heap.insert(init_node);
-
-    heap.visited_count    = 0;
-    heap.visited_capacity = 2;
-    heap.visited          = (u16*)sta_allocate_struct(u16, heap.visited_capacity);
-    heap.distances        = (u32*)sta_allocate_struct(u32, heap.visited_capacity);
-
-    path_count            = 0;
-    while (heap.node_count != 0)
-    {
-      HeapNode curr = heap.remove();
-      assert(curr.path_count <= curr.path_capacity && "How?");
-      u16 curr_pos = curr.path[curr.path_count - 1];
-      if (heap.have_visited(curr))
-      {
-        continue;
-      }
-
-      if (needle_x == (curr_pos >> 8) && (needle_y == (curr_pos & 0xFF)))
-      {
-        for (u32 i = 0; i < curr.path_count; i++)
-        {
-          path[i][0] = curr.path[i] >> 8;
-          path[i][1] = curr.path[i] & 0xFF;
-        }
-        path_count = curr.path_count;
-        sta_deallocate(curr.path, sizeof(u16) * curr.path_capacity);
-        for (u32 i = 0; i < heap.node_count; i++)
-        {
-          HeapNode curr = heap.nodes[i];
-          sta_deallocate(curr.path, sizeof(u16) * curr.path_capacity);
-        }
-        sta_deallocate(heap.nodes, sizeof(HeapNode) * heap.node_capacity);
-        return;
-      }
-      // add neighbours if needed
-      i8 XY[8][2] = {
-          { 1,  0},
-          { 0, -1},
-          {-1,  0},
-          { 0,  1},
-          { 1,  1},
-          {-1,  1},
-          { 1, -1},
-          {-1, -1},
-      };
-      for (u32 i = 0; i < 8; i++)
-      {
-        i16  x         = (curr_pos >> 8) + XY[i][0];
-        i16  y         = (curr_pos & 0xFF) + XY[i][1];
-        u16  new_pos   = (x << 8) | y;
-        bool is_target = needle_x == x && needle_y == y;
-        if (!is_target)
-        {
-          if (x < 0 || y < 0 || x >= (i16)tile_count || y >= (i16)tile_count)
-          {
-            continue;
-          }
-          if (!map->tiles[y][x])
-          {
-            continue;
-          }
-        }
-        HeapNode new_node      = {};
-        new_node.path          = (u16*)sta_allocate_struct(u16, curr.path_capacity);
-        new_node.path_capacity = curr.path_capacity;
-        for (u32 j = 0; j < curr.path_count; j++)
-        {
-          new_node.path[j] = curr.path[j];
-        }
-        new_node.distance = ABS((i16)(x - needle_x)) + ABS((i16)(y - needle_y));
-        // if so create new with same path and add the neighbour coordinates
-        new_node.path_count = curr.path_count;
-        RESIZE_ARRAY(new_node.path, u16, new_node.path_count, new_node.path_capacity);
-        new_node.path[new_node.path_count++] = new_pos;
-        assert(new_node.path_count <= tile_count * 4 && "Out of range for path!");
-        heap.insert(new_node);
-      }
-      // free node memory :)
-      sta_deallocate(curr.path, sizeof(u16) * curr.path_capacity);
-    }
-    assert(!"Didn't find a path to player!");
-  }
   u8  path[tile_count * 4][2];
   u32 path_count;
 };
 
+void find_path(Path* path, Map* map, Vector2 needle, Vector2 source)
+{
+  // get the tile position of both source and needle
+  u8 source_x, source_y;
+  u8 needle_x, needle_y;
+  map->get_tile_position(source_x, source_y, source);
+  map->get_tile_position(needle_x, needle_y, needle);
+
+  // init heap
+  Heap heap               = {};
+  heap.node_count         = 0;
+  heap.node_capacity      = 2;
+  heap.nodes              = (HeapNode*)malloc(sizeof(HeapNode) * heap.node_capacity);
+
+  HeapNode init_node      = {};
+  init_node.path_capacity = 2;
+  init_node.path_count    = 1;
+  init_node.path          = (u16*)malloc(sizeof(u16) * init_node.path_capacity);
+  init_node.path[0]       = (source_x << 8) | source_y;
+  // should include number of steps
+  init_node.distance = ABS((i16)(source_x - needle_x)) + ABS((i16)(source_y - needle_y));
+
+  heap.insert(init_node);
+
+  heap.visited_count    = 0;
+  heap.visited_capacity = 2;
+  heap.visited          = (u16*)malloc(sizeof(u16) * heap.visited_capacity);
+  heap.distances        = (u32*)malloc(sizeof(u32) * heap.visited_capacity);
+
+  path->path_count      = 0;
+  while (heap.node_count != 0)
+  {
+    // printf("Looking for path!\n");
+    HeapNode curr = heap.remove();
+    assert(curr.path_count <= curr.path_capacity && "How?");
+    u16 curr_pos = curr.path[curr.path_count - 1];
+    if (heap.have_visited(curr))
+    {
+      continue;
+    }
+
+    if (needle_x == (curr_pos >> 8) && (needle_y == (curr_pos & 0xFF)))
+    {
+      for (u32 i = 0; i < curr.path_count; i++)
+      {
+        path->path[i][0] = curr.path[i] >> 8;
+        path->path[i][1] = curr.path[i] & 0xFF;
+      }
+      path->path_count = curr.path_count;
+      free(curr.path);
+      for (u32 i = 0; i < heap.node_count; i++)
+      {
+        HeapNode curr = heap.nodes[i];
+        free(curr.path);
+      }
+      free(heap.nodes);
+      return;
+    }
+    // add neighbours if needed
+    i8 XY[8][2] = {
+        { 1,  0},
+        { 0, -1},
+        {-1,  0},
+        { 0,  1},
+        { 1,  1},
+        {-1,  1},
+        { 1, -1},
+        {-1, -1},
+    };
+    for (u32 i = 0; i < 8; i++)
+    {
+      i16  x         = (curr_pos >> 8) + XY[i][0];
+      i16  y         = (curr_pos & 0xFF) + XY[i][1];
+      u16  new_pos   = (x << 8) | y;
+      bool is_target = needle_x == x && needle_y == y;
+      if (!is_target)
+      {
+        if (x < 0 || y < 0 || x >= (i16)tile_count || y >= (i16)tile_count)
+        {
+          continue;
+        }
+        if (!map->tiles[y][x])
+        {
+          continue;
+        }
+      }
+      HeapNode new_node      = {};
+      new_node.path          = (u16*)malloc(sizeof(u16) * curr.path_capacity);
+      new_node.path_capacity = curr.path_capacity;
+      for (u32 j = 0; j < curr.path_count; j++)
+      {
+        new_node.path[j] = curr.path[j];
+      }
+      new_node.distance = ABS((i16)(x - needle_x)) + ABS((i16)(y - needle_y));
+      // if so create new with same path and add the neighbour coordinates
+      new_node.path_count = curr.path_count;
+      if (new_node.path_count >= new_node.path_capacity)
+      {
+        new_node.path_capacity *= 2;
+        new_node.path = (u16*)realloc(new_node.path, sizeof(u16) * new_node.path_capacity);
+      }
+      new_node.path[new_node.path_count++] = new_pos;
+      assert(new_node.path_count <= tile_count * 4 && "Out of range for path!");
+      heap.insert(new_node);
+    }
+    // free node memory :)
+    free(curr.path);
+  }
+  assert(!"Didn't find a path to player!");
+}
 struct Enemy
 {
   Entity entity;
@@ -449,6 +453,7 @@ Vector2 get_random_position(Map* map, u32 tick, u32 enemy_counter)
 
     position = Vector2((x / 255.0f) * 2.0f - 1.0f, (y / 255.0f) * 2.0f - 1.0f);
 
+    printf("Looking for position!\n");
   } while (!is_valid_tile(map, position));
 
   return position;
@@ -548,6 +553,7 @@ void      handle_movement(Camera& camera, Entity* entity, Shader* char_shader, I
   entity->position.x += entity->velocity.x;
   entity->position.y += entity->velocity.y;
 
+  char_shader->use();
   if (entity->velocity.x != 0 || entity->velocity.y != 0)
   {
     if (entity->animation_tick_start == -1)
@@ -572,7 +578,6 @@ void      handle_movement(Camera& camera, Entity* entity, Shader* char_shader, I
   a.identity();
   a                  = a.scale(0.03f).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(angle) - 90);
   camera.translation = Vector3(-entity->position.x, -entity->position.y, 0.0);
-  char_shader->use();
   char_shader->set_mat4("view", a);
 }
 
@@ -710,7 +715,7 @@ void use_ability_fireball(Camera* camera, Entities* entities, InputState* input,
   e->buffer_id          = fireball_id;
   e->shader             = fireball_shader;
   e->scale              = 0.05f;
-  e->r                  = 0.01f;
+  e->r                  = 0.03f;
 }
 
 void read_abilities(Ability* abilities)
@@ -728,7 +733,7 @@ f32 tile_position_to_game_centered(u8 x)
 void handle_enemy_movement(Map* map, Enemy* enemy, Vector2 target_position)
 {
   const static f32 ms = 0.005f;
-  enemy->path.find(map, target_position, enemy->entity.position);
+  find_path(&enemy->path, map, target_position, enemy->entity.position);
   Path path = enemy->path;
   if (path.path_count == 1)
   {
@@ -740,6 +745,7 @@ void handle_enemy_movement(Map* map, Enemy* enemy, Vector2 target_position)
   f32     movement_remaining = ms;
   while (true)
   {
+    // printf("Enemy movement!\n");
     f32 x = tile_position_to_game_centered(path.path[path_idx][0]);
     f32 y = tile_position_to_game_centered(path.path[path_idx][1]);
     path_idx++;
@@ -799,14 +805,15 @@ void update_enemies(Map* map, Enemies* enemies, Entity* player)
     {
       if (prev)
       {
-        prev->next = node;
+        prev->next = node->next;
       }
       else
       {
         enemies->head = node->next;
       }
-      node = node->next;
+      EnemyNode* new_node = node->next;
       sta_pool_free(&enemies->pool, (u64)node);
+      node = new_node;
       continue;
     }
 
@@ -817,8 +824,7 @@ void update_enemies(Map* map, Enemies* enemies, Entity* player)
     enemy_sphere.position = node->enemy.entity.position;
     if (sphere_sphere_collision(player_sphere, enemy_sphere))
     {
-      // player->hp = 0;
-      printf("TOOK DAMAGE\n");
+      player->hp = 0;
     }
 
     prev = node;
@@ -831,6 +837,7 @@ void render_enemies(Renderer* renderer, Enemies* enemies, Camera camera)
   EnemyNode* node = enemies->head;
   while (node)
   {
+
     Entity* entity = &node->enemy.entity;
     entity->shader.use();
     Color green = BLUE;
@@ -842,6 +849,11 @@ void render_enemies(Renderer* renderer, Enemies* enemies, Camera camera)
     entity->shader.set_mat4("view", pos);
     renderer->render_buffer(node->enemy.entity.buffer_id);
 
+    Color   red = RED;
+    Vector2 position(entity->position.x + camera.translation.x, entity->position.y + camera.translation.y);
+    renderer->draw_circle(position, entity->r, 1, red);
+
+#if DEBUG
     Path path = node->enemy.path;
     for (u32 i = 0; i < path.path_count - 1; i++)
     {
@@ -852,6 +864,8 @@ void render_enemies(Renderer* renderer, Enemies* enemies, Camera camera)
       f32 y1 = tile_position_to_game_centered(path.path[i + 1][1]) + camera.translation.y;
       renderer->draw_line(x0, y0, x1, y1, 4, RED);
     }
+
+#endif
 
     node = node->next;
   }
@@ -866,6 +880,7 @@ bool handle_entity_collision(Entity* entity, Enemies* enemies)
   while (enemy)
   {
 
+    printf("Handling entity collision!\n");
     Sphere enemy_bb;
     enemy_bb.position = enemy->enemy.entity.position;
     enemy_bb.r        = enemy->enemy.entity.r;
@@ -884,57 +899,55 @@ void update_entities(Entities* entities, Enemies* enemies)
 {
   EntityNode* node = entities->head;
   EntityNode* prev = 0;
-  if (node)
+  while (node)
   {
-    do
+    printf("Updating entities!\n");
+    Entity* entity = &node->entity;
+    entity->position.x += entity->velocity.x;
+    entity->position.y += entity->velocity.y;
+
+    Vector2 closest_point = {};
+    if (handle_entity_collision(entity, enemies) || out_of_map(&closest_point, &map, entity->position))
     {
-      Entity* entity = &node->entity;
-      entity->position.x += entity->velocity.x;
-      entity->position.y += entity->velocity.y;
-
-      Vector2 closest_point = {};
-      if (handle_entity_collision(entity, enemies) || out_of_map(&closest_point, &map, entity->position))
+      if (prev)
       {
-        if (prev)
-        {
-          prev->next = node->next;
-        }
-        else
-        {
-          entities->head = 0;
-        }
-
-        sta_pool_free(&entities->pool, (u64)entity);
+        prev->next = node->next;
+      }
+      else
+      {
+        entities->head = 0;
       }
 
-      prev = node;
-      node = node->next;
+      sta_pool_free(&entities->pool, (u64)entity);
+    }
 
-    } while (node);
+    prev = node;
+    node = node->next;
   }
 }
 
 void render_entities(Renderer* renderer, Entities* entities, Camera camera)
 {
   EntityNode* node = entities->head;
-  if (node)
+  while (node)
   {
-    do
-    {
-      Entity entity = node->entity;
-      entity.shader.use();
-      Mat44 m = {};
-      m.identity();
-      entity.shader.set_mat4("projection", m);
+    printf("Rendering entities!\n");
+    Entity entity = node->entity;
+    entity.shader.use();
+    Mat44 m = {};
+    m.identity();
+    entity.shader.set_mat4("projection", m);
 
-      m           = m.scale(entity.scale);
-      m           = m.translate(camera.translation).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
-      Color green = GREEN;
-      entity.shader.set_float4f("color", (float*)&green);
-      entity.shader.set_mat4("view", m);
-      renderer->render_buffer(entity.buffer_id);
-      node = node->next;
-    } while (node);
+    m           = m.scale(entity.scale);
+    m           = m.translate(camera.translation).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
+    Color green = GREEN;
+    entity.shader.set_float4f("color", (float*)&green);
+    entity.shader.set_mat4("view", m);
+    renderer->render_buffer(entity.buffer_id);
+
+    renderer->draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r, 1, RED);
+
+    node = node->next;
   }
 }
 
@@ -945,6 +958,7 @@ void spawn_enemies(Wave* wave, Map* map, Enemies* enemies, u32 tick)
   u32 spawn_count = __builtin_popcount(wave->spawn_count);
   while (wave->enemy_count > spawn_count && SHOULD_SPAWN(wave->spawn_times, spawn_count, tick))
   {
+    printf("Checking spawn!\n");
     wave->spawn_count |= (1 << ++spawn_count);
     enemies->spawn(map, wave->spawn_times[spawn_count - 1]);
   }
@@ -1061,11 +1075,11 @@ int main()
   enemies.head    = 0;
   sta_pool_init(&enemies.pool, sta_allocate(sizeof(EnemyNode) * 100), sizeof(EnemyNode), 100);
 
-  Wave wave                = {};
-  u32  wave_spawn_times[1] = {100};
-  wave.spawn_times         = &wave_spawn_times[0];
-  wave.enemy_count         = 1;
-  wave.spawn_count         = 0;
+  Wave wave                 = {};
+  u32  wave_spawn_times[10] = {100, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000};
+  wave.spawn_times          = &wave_spawn_times[0];
+  wave.enemy_count          = ArrayCount(wave_spawn_times);
+  wave.spawn_count          = 0;
   map.init_map();
 
   u32 render_ticks = 0, update_ticks = 0, ms = 0;
@@ -1091,6 +1105,8 @@ int main()
       ImGui::NewFrame();
       ImGui::Begin("Frame times");
       ImGui::Text("Update:     %d", update_ticks);
+      ImGui::Text("path: %ld", find_path_timer);
+      ImGui::Text("progress: %ld", progress_movement_timer);
       ImGui::Text("Rendering : %d", render_ticks);
       ImGui::Text("MS: %d", ms);
       ImGui::Text("FPS: %f", fps * 1000);
@@ -1102,6 +1118,9 @@ int main()
       handle_movement(camera, &entity, &char_shader, &input_state, ticks);
       update_entities(&entities, &enemies);
       spawn_enemies(&wave, &map, &enemies, ticks);
+
+      find_path_timer         = 0;
+      progress_movement_timer = 0;
       update_enemies(&map, &enemies, &entity);
       detect_collision(&map, entity.position);
       update_ticks             = SDL_GetTicks() - start_tick;
@@ -1114,18 +1133,16 @@ int main()
       map_shader.set_mat4("view", m);
 
       // render map
-      // renderer.bind_texture(texture, 0);
-      // renderer.render_buffer(map_buffer);
-      // render_entities(&renderer, &entities, camera);
-      // render_enemies(&renderer, &enemies, camera);
+      renderer.bind_texture(texture, 0);
+      renderer.render_buffer(map_buffer);
+      render_entities(&renderer, &entities, camera);
+      render_enemies(&renderer, &enemies, camera);
 
       // render entity
-      Color c = RED;
-      renderer.draw_circle(Vector2(0, 0), 0.2f, 2, RED);
 
-      // char_shader.use();
-      // renderer.render_buffer(entity_buffer);
-
+      char_shader.use();
+      renderer.render_buffer(entity_buffer);
+      renderer.draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r * 2, 1, RED);
 
       ImGui::Render();
       ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

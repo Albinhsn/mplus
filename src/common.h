@@ -75,13 +75,14 @@ public:
     maxSize = size;
     ptr     = 0;
   }
+  u64 push(u64 size);
+  void pop(u64 size);
   u64 memory;
   u64 ptr;
   u64 maxSize;
 };
-typedef struct Arena Arena;
-u64                  sta_arena_push(Arena* arena, u64 size, u64 alignment);
-void                 sta_arena_pop(Arena* arena, u64 size);
+u64  sta_arena_push(Arena* arena, u64 size);
+void sta_arena_pop(Arena* arena, u64 size);
 #define DEFAULT_ALIGNMENT                        2 * sizeof(void*)
 
 #define sta_arena_push_array(arena, type, count) (type*)sta_arena_push((arena), sizeof(type) * (count), DEFAULT_ALIGNMENT)

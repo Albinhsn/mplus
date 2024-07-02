@@ -17,6 +17,24 @@ static int align_offset(u64 offset, u64 alignment)
   return offset;
 }
 
+u64 Arena::push(u64 size)
+{
+  size += align_offset(size, DEFAULT_ALIGNMENT);
+  if (this->ptr + size > this->maxSize)
+  {
+    return 0;
+  }
+  u64 out = this->memory + this->ptr;
+  memset((void*)out, 0, size);
+  this->ptr += size;
+  return out;
+}
+
+void Arena::pop(u64 size)
+{
+  this->ptr -= size;
+}
+
 u64 sta_arena_push(Arena* arena, u64 size, u64 alignment)
 {
   size += align_offset(size, alignment);
