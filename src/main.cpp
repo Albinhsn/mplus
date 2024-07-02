@@ -1,5 +1,3 @@
-#include "common.h"
-#include "files.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <stdio.h>
@@ -77,12 +75,8 @@ struct Entity
   u32             buffer_id;
   u32             id;
 };
-bool triangle_triangle_intersection(Triangle t0, Triangle t1)
-{
-  return true;
-}
 
-const static u32 tile_count = 128;
+const static u32 tile_count = 64;
 struct Map
 {
 public:
@@ -99,12 +93,13 @@ public:
     u32*        indices      = model->indices;
     for (u32 x = 0; x < tile_count; x++)
     {
-      f32 x0 = x * tile_size, x1 = x0 + tile_size;
+      f32 x0 = x * tile_size * 2.0f - 1.0f, x1 = x0 + tile_size * 2.0f;
       for (u32 y = 0; y < tile_count; y++)
       {
-        f32      y0 = y * -tile_size, y1 = y0 - tile_size;
-        Triangle t0(Vector2(x0, y0), Vector2(x0, y1), Vector2(x1, y1));
-        Triangle t1(Vector2(x0, y0), Vector2(x0, y1), Vector2(x1, y1));
+        f32 y0 = y * tile_size * 2.0f - 1.0f, y1 = y0 + tile_size * 2.0f;
+        f32 x_middle = x0 + (x1 - x0) / 2.0f;
+        f32 y_middle = y0 + (y1 - y0) / 2.0f;
+
         for (u32 i = 0; i < vertex_count; i += 3)
         {
           Triangle t;
@@ -114,15 +109,13 @@ public:
           t.points[1].y = vertices[indices[i + 1]].vertex.y;
           t.points[2].x = vertices[indices[i + 2]].vertex.x;
           t.points[2].y = vertices[indices[i + 2]].vertex.y;
-          tiles[y][x]   = triangle_triangle_intersection(t, t0) | triangle_triangle_intersection(t, t1);
+          tiles[y][x]   = point_in_triangle_2d(t, Vector2(x_middle, y_middle));
           if (tiles[y][x])
           {
             break;
           }
         }
-        printf("%c", tiles[y][x] ? '.' : ' ');
       }
-      printf("\n");
     }
   }
   ModelData* model;
@@ -169,51 +162,52 @@ public:
     HeapNode out = nodes[0];
     nodes[0]     = nodes[node_count - 1];
     node_count--;
+    heapify_down(0);
+
     return out;
   }
   void insert(HeapNode node)
   {
     RESIZE_ARRAY(nodes, HeapNode, node_count, node_capacity);
     nodes[node_count] = node;
-    heapify_up(node_count++);
+    heapify_up(node_count);
+    node_count++;
   }
   void heapify_down(u16 idx)
   {
-    if (idx >= node_count)
-    {
-      return;
-    }
 
     u16 lIdx = left_child(idx);
     u16 rIdx = right_child(idx);
 
-    if (lIdx >= node_count)
+    if (idx >= node_count || lIdx >= node_count)
     {
       return;
     }
 
+    HeapNode lV  = nodes[lIdx];
+    HeapNode v   = nodes[idx];
+    u32      lVD = lV.distance + lV.path_count;
+    u32      vD  = v.distance + v.path_count;
     if (rIdx >= node_count)
     {
-      HeapNode lV = nodes[lIdx];
-      HeapNode v  = nodes[idx];
-      if (v.distance > lV.distance)
+
+      if (vD > lVD)
       {
         nodes[lIdx] = v;
         nodes[idx]  = lV;
       }
       return;
     }
-    HeapNode lV = nodes[lIdx];
-    HeapNode rV = nodes[rIdx];
-    HeapNode v  = nodes[idx];
+    HeapNode rV  = nodes[rIdx];
+    u32      rVD = rV.distance + rV.path_count;
 
-    if (lV.distance < rV.distance && lV.distance < v.distance)
+    if (lVD <= rVD && lVD < vD)
     {
       nodes[lIdx] = v;
       nodes[idx]  = lV;
       heapify_down(lIdx);
     }
-    else if (rV.distance < lV.distance && rV.distance < v.distance)
+    else if (rVD < lVD && rVD < vD)
     {
       nodes[rIdx] = v;
       nodes[idx]  = rV;
@@ -230,8 +224,10 @@ public:
     u32      pIdx = parent(idx);
     HeapNode pV   = nodes[pIdx];
     HeapNode v    = nodes[idx];
+    u32      pVD  = pV.distance + pV.path_count;
+    u32      vD   = v.distance + v.path_count;
 
-    if (pV.distance > v.distance)
+    if (pVD > vD)
     {
       nodes[idx]  = pV;
       nodes[pIdx] = v;
@@ -250,19 +246,37 @@ public:
   {
     return (idx - 1) / 2;
   }
-  bool have_visited(u16 position)
+  bool have_visited(HeapNode curr)
   {
+    u16 position = curr.path[curr.path_count - 1];
     for (u32 i = 0; i < visited_count; i++)
     {
       if (visited[i] == position)
       {
-        return true;
+        distances[i] = MIN(distances[i], curr.distance + curr.path_count);
+        return distances[i] <= curr.distance + curr.path_count;
       }
     }
+    if (visited_count >= visited_capacity)
+    {
+      u64 prev_cap = visited_capacity;
+      visited_capacity *= 2;
+      u16* arr = (u16*)sta_allocate(sizeof(u16) * visited_capacity);
+      memcpy(arr, visited, sizeof(u16) * prev_cap);
+      sta_deallocate(visited, sizeof(u16) * prev_cap);
+      visited   = arr;
+      u32* arr2 = (u32*)sta_allocate(sizeof(u32) * visited_capacity);
+      memcpy(arr2, distances, sizeof(u32) * prev_cap);
+      sta_deallocate(distances, sizeof(u32) * prev_cap);
+      distances = arr2;
+    }
+    visited[visited_count]     = position;
+    distances[visited_count++] = curr.path_count + curr.distance;
     return false;
   }
   HeapNode* nodes;
   u16*      visited;
+  u32*      distances;
   u32       visited_count;
   u32       visited_capacity;
   u32       node_count;
@@ -298,6 +312,7 @@ public:
     heap.visited_count    = 0;
     heap.visited_capacity = 2;
     heap.visited          = (u16*)sta_allocate_struct(u16, heap.visited_capacity);
+    heap.distances        = (u32*)sta_allocate_struct(u32, heap.visited_capacity);
 
     path_count            = 0;
     while (heap.node_count != 0)
@@ -305,13 +320,10 @@ public:
       HeapNode curr = heap.remove();
       assert(curr.path_count <= curr.path_capacity && "How?");
       u16 curr_pos = curr.path[curr.path_count - 1];
-      if (heap.have_visited(curr_pos))
+      if (heap.have_visited(curr))
       {
         continue;
       }
-
-      RESIZE_ARRAY(heap.visited, u16, heap.visited_count, heap.visited_capacity);
-      heap.visited[heap.visited_count++] = curr_pos;
 
       if (needle_x == (curr_pos >> 8) && (needle_y == (curr_pos & 0xFF)))
       {
@@ -331,24 +343,32 @@ public:
         return;
       }
       // add neighbours if needed
-      i8 XY[4][2] = {
+      i8 XY[8][2] = {
           { 1,  0},
           { 0, -1},
           {-1,  0},
           { 0,  1},
+          { 1,  1},
+          {-1,  1},
+          { 1, -1},
+          {-1, -1},
       };
-      for (u32 i = 0; i < 4; i++)
+      for (u32 i = 0; i < 8; i++)
       {
-        i16 x       = (curr_pos >> 8) + XY[i][0];
-        i16 y       = (curr_pos & 0xFF) + XY[i][1];
-        u16 new_pos = (x << 8) | y;
-        if (x < 0 || y < 0 || x >= (i16)tile_count || y >= (i16)tile_count || heap.have_visited(new_pos))
+        i16  x         = (curr_pos >> 8) + XY[i][0];
+        i16  y         = (curr_pos & 0xFF) + XY[i][1];
+        u16  new_pos   = (x << 8) | y;
+        bool is_target = needle_x == x && needle_y == y;
+        if (!is_target)
         {
-          continue;
-        }
-        if (!map->tiles[y][x])
-        {
-          continue;
+          if (x < 0 || y < 0 || x >= (i16)tile_count || y >= (i16)tile_count)
+          {
+            continue;
+          }
+          if (!map->tiles[y][x])
+          {
+            continue;
+          }
         }
         HeapNode new_node      = {};
         new_node.path          = (u16*)sta_allocate_struct(u16, curr.path_capacity);
@@ -362,6 +382,7 @@ public:
         new_node.path_count = curr.path_count;
         RESIZE_ARRAY(new_node.path, u16, new_node.path_count, new_node.path_capacity);
         new_node.path[new_node.path_count++] = new_pos;
+        assert(new_node.path_count <= tile_count * 4 && "Out of range for path!");
         heap.insert(new_node);
       }
       // free node memory :)
@@ -369,7 +390,7 @@ public:
     }
     assert(!"Didn't find a path to player!");
   }
-  u8  path[tile_count][2];
+  u8  path[tile_count * 4][2];
   u32 path_count;
 };
 
@@ -707,7 +728,7 @@ void update_enemies(Map* map, Enemies* enemies, Vector2 target_position)
     node->enemy.path.find(map, target_position, node->enemy.entity.position);
     Path path = node->enemy.path;
 
-    node = node->next;
+    node      = node->next;
   }
 }
 
@@ -725,13 +746,15 @@ void render_enemies(Renderer* renderer, Enemies* enemies, Camera camera)
     entity->shader.set_mat4("view", pos);
     renderer->render_buffer(node->enemy.entity.buffer_id);
 
-    Path path = node->enemy.path;
+    Path path      = node->enemy.path;
+    f32  tile_size = 1.0f / (f32)tile_count;
     for (u32 i = 0; i < path.path_count - 1; i++)
     {
-      f32 x0 = 1.0f / tile_count * path.path[i][0] * 2.0f - 1.0f + camera.translation.x;
-      f32 y0 = 1.0f / tile_count * path.path[i][1] * 2.0f - 1.0f + camera.translation.y;
-      f32 x1 = 1.0f / tile_count * path.path[i + 1][0] * 2.0f - 1.0f + camera.translation.x;
-      f32 y1 = 1.0f / tile_count * path.path[i + 1][1] * 2.0f - 1.0f + camera.translation.y;
+
+      f32 x0 = tile_size * path.path[i][0] * 2.0f - 1.0f + camera.translation.x + tile_size / 2.0f;
+      f32 y0 = tile_size * path.path[i][1] * 2.0f - 1.0f + camera.translation.y + tile_size / 2.0f;
+      f32 x1 = tile_size * path.path[i + 1][0] * 2.0f - 1.0f + camera.translation.x + tile_size / 2.0f;
+      f32 y1 = tile_size * path.path[i + 1][1] * 2.0f - 1.0f + camera.translation.y + tile_size / 2.0f;
       renderer->draw_line(x0, y0, x1, y1, 4, RED);
     }
 
@@ -804,6 +827,30 @@ void spawn_enemies(Wave* wave, Map* map, Enemies* enemies, u32 tick)
   {
     wave->spawn_count |= (1 << ++spawn_count);
     enemies->spawn(map, wave->spawn_times[spawn_count - 1]);
+  }
+}
+
+void debug_render_map_grid(Renderer* renderer, Map* map, Camera camera)
+{
+  f32 tile_size = 1 / (f32)tile_count;
+  for (u32 x = 0; x < tile_count; x++)
+  {
+    f32 x0 = x * tile_size * 2.0f - 1.0f, x1 = x0 + tile_size * 2.0f;
+    x0 += camera.translation.x;
+    x1 += camera.translation.x;
+    for (u32 y = 0; y < tile_count; y++)
+    {
+      if (map->tiles[y][x])
+      {
+        f32 y0 = y * tile_size * 2.0f - 1.0f, y1 = y0 + tile_size * 2.0f;
+        y0 += camera.translation.y;
+        y1 += camera.translation.y;
+        renderer->draw_line(x0, y0, x0, y1, 1, BLUE);
+        renderer->draw_line(x1, y0, x1, y1, 1, BLUE);
+        renderer->draw_line(x0, y1, x1, y1, 1, BLUE);
+        renderer->draw_line(x0, y0, x1, y0, 1, BLUE);
+      }
+    }
   }
 }
 
@@ -924,6 +971,7 @@ int main()
     // render map
     renderer.bind_texture(texture, 0);
     renderer.render_buffer(map_buffer);
+    debug_render_map_grid(&renderer, &map, camera);
     render_entities(&renderer, &entities, camera);
     render_enemies(&renderer, &enemies, camera);
     // render entity
