@@ -44,9 +44,6 @@
 #include "ui.cpp"
 #include "gltf.cpp"
 
-#define PLAYER_BIT 1
-#define ENEMY_BIT  2
-
 struct Camera
 {
   Vector3 translation;
@@ -68,13 +65,17 @@ struct Entity
   AnimationModel* animated_model;
   Shader          shader;
   Ability         abilities[5];
-  Vector2         position;
-  Vector2         velocity;
-  u32             flags;
-  f32             scale;
-  i32             animation_tick_start;
-  u32             buffer_id;
-  u32             id;
+  // position + r is sphere bb
+  Vector2 position;
+  f32     r;
+  Vector2 velocity;
+  u32     flags;
+  f32     scale;
+  i32     animation_tick_start;
+  u32     buffer_id;
+  u32     id;
+  u32     parent_id;
+  u32     hp;
 };
 
 const static u32 tile_count = 64;
@@ -471,6 +472,8 @@ public:
     enemy->scale     = 0.05;
     enemy->shader    = enemy_shader;
     enemy->buffer_id = enemy_buffer_id;
+    enemy->hp        = 1;
+    enemy->r         = 0.01f;
 
     en->next         = head;
     head             = en;
@@ -707,6 +710,7 @@ void use_ability_fireball(Camera* camera, Entities* entities, InputState* input,
   e->buffer_id          = fireball_id;
   e->shader             = fireball_shader;
   e->scale              = 0.05f;
+  e->r                  = 0.01f;
 }
 
 void read_abilities(Ability* abilities)
@@ -724,14 +728,30 @@ f32 tile_position_to_game_centered(u8 x)
 void update_enemies(Map* map, Enemies* enemies, Vector2 target_position)
 {
   EnemyNode*       node = enemies->head;
+  EnemyNode*       prev = 0;
   const static f32 ms   = 0.005f;
 
   while (node)
   {
+    if (node->enemy.entity.hp == 0)
+    {
+      if (prev)
+      {
+        prev->next = node;
+      }
+      else
+      {
+        enemies->head = node->next;
+      }
+      node = node->next;
+      sta_pool_free(&enemies->pool, (u64)node);
+      continue;
+    }
     node->enemy.path.find(map, target_position, node->enemy.entity.position);
     Path path = node->enemy.path;
     if (path.path_count == 1)
     {
+      prev = node;
       node = node->next;
       continue;
     }
@@ -769,9 +789,9 @@ void update_enemies(Map* map, Enemies* enemies, Vector2 target_position)
       {
         break;
       }
-      // apply collision from walls
     }
 
+    prev = node;
     node = node->next;
   }
 }
@@ -783,10 +803,12 @@ void render_enemies(Renderer* renderer, Enemies* enemies, Camera camera)
   {
     Entity* entity = &node->enemy.entity;
     entity->shader.use();
+    Color green = BLUE;
+    entity->shader.set_float4f("color", (float*)&green);
     Mat44 pos = {};
     pos.identity();
     entity->shader.set_mat4("projection", pos);
-    pos = pos.scale(entity->scale).translate(camera.translation).translate(Vector3(entity->position.x, entity->position.y, 0));
+    pos = pos.scale(entity->scale).rotate_x(90).translate(camera.translation).translate(Vector3(entity->position.x, entity->position.y, 0));
     entity->shader.set_mat4("view", pos);
     renderer->render_buffer(node->enemy.entity.buffer_id);
 
@@ -805,7 +827,46 @@ void render_enemies(Renderer* renderer, Enemies* enemies, Camera camera)
   }
 }
 
-void update_entities(Entities* entities)
+struct Sphere
+{
+  Vector2 position;
+  f32     r;
+};
+
+bool sphere_sphere_collision(Sphere s0, Sphere s1)
+{
+  f32 x_diff                           = ABS(s0.position.x - s1.position.x);
+  f32 y_diff                           = ABS(s0.position.y - s0.position.y);
+  f32 distance_between_centers_squared = x_diff * x_diff + y_diff * y_diff;
+  f32 radii_diff                       = (s0.r + s1.r) * (s0.r + s1.r);
+  return distance_between_centers_squared <= radii_diff;
+}
+
+bool handle_entity_collision(Entity* entity, Enemies* enemies)
+{
+  EnemyNode* enemy = enemies->head;
+  Sphere     entity_bb;
+  entity_bb.position = entity->position;
+  entity_bb.r        = entity->r;
+  while (enemy)
+  {
+
+    Sphere enemy_bb;
+    enemy_bb.position = enemy->enemy.entity.position;
+    enemy_bb.r        = enemy->enemy.entity.r;
+
+    if (sphere_sphere_collision(entity_bb, enemy_bb))
+    {
+      printf("HIT ENEMY (%f, %f) and (%f, %f)\n", entity_bb.position.x, entity_bb.position.y, enemy_bb.position.x, enemy_bb.position.y);
+      enemy->enemy.entity.hp = 0;
+      return true;
+    }
+    enemy = enemy->next;
+  }
+  return false;
+}
+
+void update_entities(Entities* entities, Enemies* enemies)
 {
   EntityNode* node = entities->head;
   EntityNode* prev = 0;
@@ -818,7 +879,7 @@ void update_entities(Entities* entities)
       entity->position.y += entity->velocity.y;
 
       Vector2 closest_point = {};
-      if (out_of_map(&closest_point, &map, entity->position))
+      if (handle_entity_collision(entity, enemies) || out_of_map(&closest_point, &map, entity->position))
       {
         if (prev)
         {
@@ -852,8 +913,10 @@ void render_entities(Renderer* renderer, Entities* entities, Camera camera)
       m.identity();
       entity.shader.set_mat4("projection", m);
 
-      m = m.scale(entity.scale);
-      m = m.translate(camera.translation).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
+      m           = m.scale(entity.scale);
+      m           = m.translate(camera.translation).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
+      Color green = GREEN;
+      entity.shader.set_float4f("color", (float*)&green);
       entity.shader.set_mat4("view", m);
       renderer->render_buffer(entity.buffer_id);
       node = node->next;
@@ -933,7 +996,11 @@ int main()
 
   enemy_shader    = fireball_shader;
   ModelData enemy_model = {};
-  sta_parse_wavefront_object_from_file(&enemy_model, "./data/fireball.obj");
+  if (!sta_parse_wavefront_object_from_file(&enemy_model, "./data/enemy.obj"))
+  {
+    printf("Failed to parse enemy!\n");
+    return 1;
+  }
   enemy_buffer_id =
       renderer.create_buffer_indices(sizeof(VertexData) * enemy_model.vertex_count, enemy_model.vertices, enemy_model.vertex_count, enemy_model.indices, map_attributes, ArrayCount(map_attributes));
 
@@ -968,6 +1035,8 @@ int main()
   entity.animation_tick_start = 0;
   entity.id                   = 0;
   entity.velocity             = Vector2(0, 0);
+  entity.r                    = 0.02f;
+  entity.hp                   = 1;
   read_abilities(entity.abilities);
 
   Camera   camera   = {};
@@ -998,7 +1067,7 @@ int main()
     {
       ticks = SDL_GetTicks() + 16;
       handle_abilities(camera, &entities, &input_state, &entity, ticks);
-      update_entities(&entities);
+      update_entities(&entities, &enemies);
       spawn_enemies(&wave, &map, &enemies, ticks);
       update_enemies(&map, &enemies, entity.position);
       handle_movement(camera, &entity, &char_shader, &input_state, ticks);
