@@ -114,13 +114,15 @@ public:
           t.points[1].y = vertices[indices[i + 1]].vertex.y;
           t.points[2].x = vertices[indices[i + 2]].vertex.x;
           t.points[2].y = vertices[indices[i + 2]].vertex.y;
-          tiles[y][x]   = triangle_triangle_intersection(t, t0);
-          if (!tiles[y][x])
+          tiles[y][x]   = triangle_triangle_intersection(t, t0) | triangle_triangle_intersection(t, t1);
+          if (tiles[y][x])
           {
-            tiles[y][x] = triangle_triangle_intersection(t, t1);
+            break;
           }
         }
+        printf("%c", tiles[y][x] ? '.' : ' ');
       }
+      printf("\n");
     }
   }
   ModelData* model;
@@ -307,6 +309,7 @@ public:
       {
         continue;
       }
+
       RESIZE_ARRAY(heap.visited, u16, heap.visited_count, heap.visited_capacity);
       heap.visited[heap.visited_count++] = curr_pos;
 
@@ -336,13 +339,14 @@ public:
       };
       for (u32 i = 0; i < 4; i++)
       {
-        i16 x = (curr_pos >> 8) + XY[i][0];
-        i16 y = (curr_pos & 0xFF) + XY[i][1];
-        // check valid neighbour
-        //  check < 0 or > tile_count
-        //  check if in visited as well
+        i16 x       = (curr_pos >> 8) + XY[i][0];
+        i16 y       = (curr_pos & 0xFF) + XY[i][1];
         u16 new_pos = (x << 8) | y;
         if (x < 0 || y < 0 || x >= (i16)tile_count || y >= (i16)tile_count || heap.have_visited(new_pos))
+        {
+          continue;
+        }
+        if (!map->tiles[y][x])
         {
           continue;
         }
@@ -365,7 +369,7 @@ public:
     }
     assert(!"Didn't find a path to player!");
   }
-  u8  path[tile_count / 2][2];
+  u8  path[tile_count][2];
   u32 path_count;
 };
 
@@ -695,11 +699,14 @@ void read_abilities(Ability* abilities)
 }
 void update_enemies(Map* map, Enemies* enemies, Vector2 target_position)
 {
-  EnemyNode* node = enemies->head;
-  // const static f32 ms   = 0.01f;
+  EnemyNode*       node        = enemies->head;
+  const static f32 ms          = 0.01f;
+  const static f32 tiles_moved = ms / (1.0f / (f32)tile_count);
   while (node)
   {
     node->enemy.path.find(map, target_position, node->enemy.entity.position);
+    Path path = node->enemy.path;
+
     node = node->next;
   }
 }
@@ -715,9 +722,19 @@ void render_enemies(Renderer* renderer, Enemies* enemies, Camera camera)
     pos.identity();
     entity->shader.set_mat4("projection", pos);
     pos = pos.scale(entity->scale).translate(camera.translation).translate(Vector3(entity->position.x, entity->position.y, 0));
-    // calculate angle from next tile in path
     entity->shader.set_mat4("view", pos);
     renderer->render_buffer(node->enemy.entity.buffer_id);
+
+    Path path = node->enemy.path;
+    for (u32 i = 0; i < path.path_count - 1; i++)
+    {
+      f32 x0 = 1.0f / tile_count * path.path[i][0] * 2.0f - 1.0f + camera.translation.x;
+      f32 y0 = 1.0f / tile_count * path.path[i][1] * 2.0f - 1.0f + camera.translation.y;
+      f32 x1 = 1.0f / tile_count * path.path[i + 1][0] * 2.0f - 1.0f + camera.translation.x;
+      f32 y1 = 1.0f / tile_count * path.path[i + 1][1] * 2.0f - 1.0f + camera.translation.y;
+      renderer->draw_line(x0, y0, x1, y1, 4, RED);
+    }
+
     node = node->next;
   }
 }
@@ -876,6 +893,7 @@ int main()
   wave.spawn_times         = &wave_spawn_times[0];
   wave.enemy_count         = 1;
   wave.spawn_count         = 0;
+  map.init_map();
 
   while (true)
   {
@@ -913,12 +931,6 @@ int main()
     char_shader.use();
     renderer.render_buffer(entity_buffer);
 
-    // ImGui::Render();
-    // ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
     renderer.swap_buffers();
-    // ImGui_ImplOpenGL3_NewFrame();
-    // ImGui_ImplSDL2_NewFrame();
-    // ImGui::NewFrame();
   }
 }

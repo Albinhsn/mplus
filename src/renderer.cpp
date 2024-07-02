@@ -1,4 +1,6 @@
 #include "renderer.h"
+#include <GL/gl.h>
+#include <GL/glext.h>
 void Renderer::enable_2d_rendering()
 {
   glDisable(GL_DEPTH_TEST);
@@ -23,12 +25,37 @@ void Renderer::change_screen_size(u32 screen_width, u32 screen_height)
   glViewport(0, 0, screen_width, screen_height);
 }
 
-void Renderer::draw_line(f32 x1, f32 y1, f32 x2, f32 y2)
+void Renderer::init_line_buffer()
 {
-  glBegin(GL_LINES);
-  glVertex2f(x1, y1);
-  glVertex2f(x2, y2);
-  glEnd();
+  sta_glGenVertexArrays(1, &this->line_vao);
+  sta_glGenBuffers(1, &this->line_vbo);
+
+  sta_glBindVertexArray(this->line_vao);
+  sta_glBindBuffer(GL_ARRAY_BUFFER, this->line_vbo);
+  const int vertices_in_a_line = 4;
+  f32       tot[4]             = {
+      1.0f, 1.0f, //
+      1.0f, -1.0, //
+  };
+  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * vertices_in_a_line, tot, GL_DYNAMIC_DRAW);
+
+  sta_glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(f32) * 2, (void*)(0));
+  sta_glEnableVertexAttribArray(0);
+}
+
+void Renderer::draw_line(f32 x1, f32 y1, f32 x2, f32 y2, u32 line_width, Color color)
+{
+  this->enable_2d_rendering();
+  f32 lines[4] = {x1, y1, x2, y2};
+  this->text_shader.use();
+  this->text_shader.set_float4f("color", (float*)&color);
+
+  sta_glBindVertexArray(this->line_vao);
+  sta_glBindBuffer(GL_ARRAY_BUFFER, this->line_vbo);
+  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * 4, lines, GL_DYNAMIC_DRAW);
+  glLineWidth(line_width);
+  glDrawArrays(GL_LINES, 0, 2);
+  this->disable_2d_rendering();
 }
 
 void Renderer::look_at(Vector3 c, Vector3 l, Vector3 u_prime, Vector3 t)
@@ -379,7 +406,7 @@ void Renderer::init_text_shader()
   sta_glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(f32) * 2, (void*)(0));
   sta_glEnableVertexAttribArray(0);
 
-  // this->text_shader = Shader("./shaders/text.vert", "./shaders/text.frag");
+  this->text_shader = Shader("./shaders/text.vert", "./shaders/text.frag");
 }
 void Renderer::render_2d_quad(f32 min[2], f32 max[2], Color color)
 {
