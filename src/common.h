@@ -75,11 +75,11 @@ public:
     maxSize = size;
     ptr     = 0;
   }
-  u64 push(u64 size);
+  u64  push(u64 size);
   void pop(u64 size);
-  u64 memory;
-  u64 ptr;
-  u64 maxSize;
+  u64  memory;
+  u64  ptr;
+  u64  maxSize;
 };
 u64  sta_arena_push(Arena* arena, u64 size);
 void sta_arena_pop(Arena* arena, u64 size);

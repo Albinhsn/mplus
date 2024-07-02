@@ -76,6 +76,8 @@ struct Entity
   f32     scale;
   i32     animation_tick_start;
   u32     buffer_id;
+  u32     can_take_damage_tick;
+  u32     damage_taken_cd;
   u32     id;
   u32     parent_id;
   u32     hp;
@@ -453,7 +455,6 @@ Vector2 get_random_position(Map* map, u32 tick, u32 enemy_counter)
 
     position = Vector2((x / 255.0f) * 2.0f - 1.0f, (y / 255.0f) * 2.0f - 1.0f);
 
-    printf("Looking for position!\n");
   } while (!is_valid_tile(map, position));
 
   return position;
@@ -822,9 +823,16 @@ void update_enemies(Map* map, Enemies* enemies, Entity* player)
     Sphere enemy_sphere;
     enemy_sphere.r        = node->enemy.entity.r;
     enemy_sphere.position = node->enemy.entity.position;
+
     if (sphere_sphere_collision(player_sphere, enemy_sphere))
     {
-      player->hp = 0;
+      u32 tick = SDL_GetTicks();
+      if (tick >= player->can_take_damage_tick)
+      {
+        player->can_take_damage_tick = tick + player->damage_taken_cd;
+        player->hp -= 1;
+        printf("Took damage! %d\n", player->hp);
+      }
     }
 
     prev = node;
@@ -958,7 +966,6 @@ void spawn_enemies(Wave* wave, Map* map, Enemies* enemies, u32 tick)
   u32 spawn_count = __builtin_popcount(wave->spawn_count);
   while (wave->enemy_count > spawn_count && SHOULD_SPAWN(wave->spawn_times, spawn_count, tick))
   {
-    printf("Checking spawn!\n");
     wave->spawn_count |= (1 << ++spawn_count);
     enemies->spawn(map, wave->spawn_times[spawn_count - 1]);
   }
@@ -1063,8 +1070,10 @@ int main()
   entity.animation_tick_start = 0;
   entity.id                   = 0;
   entity.velocity             = Vector2(0, 0);
+  entity.can_take_damage_tick = 0;
+  entity.damage_taken_cd      = 500;
   entity.r                    = 0.04f;
-  entity.hp                   = 1;
+  entity.hp                   = 3;
   read_abilities(entity.abilities);
 
   Camera   camera   = {};
@@ -1141,7 +1150,10 @@ int main()
       // render entity
 
       char_shader.use();
+      Color color = entity.can_take_damage_tick >= SDL_GetTicks() ? BLUE : BLACK;
+      char_shader.set_float4f("color", (float*)&color);
       renderer.render_buffer(entity_buffer);
+
       renderer.draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r * 2, 1, RED);
 
       ImGui::Render();

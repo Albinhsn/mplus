@@ -253,7 +253,7 @@ public:
 
 Vector3 interpolate_translation(Vector3 v0, Vector3 v1, f32 t);
 Mat44   interpolate_transforms(Mat44 first, Mat44 second, f32 time);
-#define BLACK Color(0, 0, 0, 0)
+#define BLACK Color(0, 0, 0, 1)
 #define WHITE Color(1, 1, 1, 1)
 #define RED   Color(1, 0, 0, 1)
 #define GREEN Color(0, 1, 0, 1)
