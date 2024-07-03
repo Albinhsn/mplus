@@ -545,10 +545,11 @@ Shader fireball_shader;
 u32    fireball_id;
 Map    map;
 
-void   handle_movement(Camera& camera, Entity* entity, Shader* char_shader, InputState* input, u32 tick)
+void   handle_movement(Camera& camera, Entity* entity, Shader* char_shader, InputState* input, u32 tick, u32 tick_difference)
 {
   entity->velocity = {};
-  f32 MS           = 0.01f;
+  f32 MS           = 0.01f * ((f32)tick_difference / 16.0f);
+
   if (input->is_key_pressed('w'))
   {
     entity->velocity.y += MS;
@@ -568,7 +569,6 @@ void   handle_movement(Camera& camera, Entity* entity, Shader* char_shader, Inpu
 
   f32* mouse_pos = input->mouse_position;
   f32  angle     = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
-  // the velocity should be based on the direction as well
 
   entity->position.x += entity->velocity.x;
   entity->position.y += entity->velocity.y;
@@ -751,9 +751,9 @@ f32 tile_position_to_game_centered(u8 x)
   return (tile_size * (f32)x) * 2.0f - 1.0f;
 }
 
-void handle_enemy_movement(Map* map, Enemy* enemy, Vector2 target_position)
+void handle_enemy_movement(Map* map, Enemy* enemy, Vector2 target_position, u32 tick_difference)
 {
-  const static f32 ms = 0.005f;
+  const static f32 ms = 0.005f * ((f32)tick_difference / 16.0f);
   find_path(&enemy->path, map, target_position, enemy->entity.position);
   Path path = enemy->path;
   if (path.path_count == 1)
@@ -810,7 +810,7 @@ bool sphere_sphere_collision(Sphere s0, Sphere s1)
   return distance_between_centers_squared <= radii_diff;
 }
 
-void update_enemies(Map* map, Enemies* enemies, Entity* player)
+void update_enemies(Map* map, Enemies* enemies, Entity* player, u32 tick_difference)
 {
   EnemyNode* node = enemies->head;
   EnemyNode* prev = 0;
@@ -837,7 +837,7 @@ void update_enemies(Map* map, Enemies* enemies, Entity* player)
       continue;
     }
 
-    handle_enemy_movement(map, &node->enemy, player->position);
+    handle_enemy_movement(map, &node->enemy, player->position, tick_difference);
 
     Sphere enemy_sphere;
     enemy_sphere.r        = node->enemy.entity.r;
@@ -1242,7 +1242,7 @@ int main()
   parse_wave_from_file(&wave, "./data/wave01.txt");
   map.init_map();
 
-  u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0;
+  u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0, last_tick = 0;
   f32      fps      = 0.0f;
 
   UI_State ui_state = UI_STATE_MAIN_MENU;
@@ -1253,8 +1253,13 @@ int main()
   while (true)
   {
 
+    // while (ticks + 33 > SDL_GetTicks())
+    // {
+    // }
+
     if (ticks + 16 < SDL_GetTicks())
     {
+      u32 tick_difference = SDL_GetTicks() - ticks;
       input_state.update();
       if (input_state.should_quit())
       {
@@ -1312,11 +1317,11 @@ int main()
         ImGui::End();
 
         handle_abilities(camera, &entities, &input_state, &entity, ticks);
-        handle_movement(camera, &entity, &char_shader, &input_state, ticks);
+        handle_movement(camera, &entity, &char_shader, &input_state, ticks, tick_difference);
         update_entities(&entities, &enemies);
         spawn_enemies(&wave, &map, &enemies, game_running_ticks);
 
-        update_enemies(&map, &enemies, &entity);
+        update_enemies(&map, &enemies, &entity, tick_difference);
         detect_collision(&map, entity.position);
         u32 spawn_count = __builtin_popcount(wave.spawn_count);
         if (spawn_count == wave.enemy_count && enemies.head == 0)
@@ -1403,9 +1408,11 @@ int main()
       renderer.swap_buffers();
       render_ticks = SDL_GetTicks() - prior_render_ticks;
 
-      ms           = SDL_GetTicks() - start_tick;
-      fps          = 1 / (f32)MAX(ms, 0.0001);
-      ticks        = SDL_GetTicks() + 16;
+      // since last frame
+      ms        = SDL_GetTicks() - last_tick;
+      fps       = 1 / (f32)MAX(ms, 0.0001);
+      ticks     = SDL_GetTicks();
+      last_tick = SDL_GetTicks();
     }
   }
 }
