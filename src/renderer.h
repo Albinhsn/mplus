@@ -9,6 +9,19 @@
 #include "sdl.h"
 #include "shader.h"
 
+struct RenderBuffer
+{
+  const char* model_name;
+  u32         buffer_id;
+};
+
+enum ModelFileExtensions
+{
+  MODEL_FILE_OBJ,
+  MODEL_FILE_GLB,
+  MODEL_FILE_UNKNOWN,
+};
+
 enum TextAlignment
 {
   TextAlignment_Start_At,
@@ -16,11 +29,17 @@ enum TextAlignment
   TextAlignment_Centered
 };
 
+enum BufferAttributeType
+{
+  BUFFER_ATTRIBUTE_FLOAT,
+  BUFFER_ATTRIBUTE_INT,
+};
+
 struct BufferAttributes
 {
 
-  u8  count;
-  u32 type;
+  u8                  count;
+  BufferAttributeType type;
 };
 
 struct GLBufferIndex
@@ -59,6 +78,10 @@ public:
   u32            line_vao;
   u32            line_vbo;
   Logger*        logger;
+  Model*         models;
+  u32            model_count;
+  RenderBuffer*  buffers;
+  u32            buffer_count;
   SDL_Window*    window;
   SDL_GLContext  context;
   Renderer(u32 screen_width, u32 screen_height, AFont* font, Logger* logger, bool vsync)
@@ -89,8 +112,13 @@ public:
   u32     create_buffer_from_model(Model* model, BufferAttributes* attributes, u32 attribute_count);
   bool    load_shaders_from_files(const char* file_location);
   bool    load_textures_from_files(const char* file_location);
+  bool    load_buffers_from_files(const char* file_location);
+  bool    load_models_from_files(const char* file_location);
+
   u32     get_texture(const char* name);
   Shader* get_shader_by_name(const char* name);
+  Model*  get_model_by_filename(const char* filename);
+  u32     get_buffer_by_filename(const char* filename);
   // render some buffer
   void render_arrays(u32 buffer_id, GLenum type, u32 count);
   void render_buffer(u32 buffer_id);

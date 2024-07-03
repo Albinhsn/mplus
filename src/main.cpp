@@ -19,7 +19,6 @@
 #include "files.h"
 #include "shader.h"
 #include "animation.h"
-#include "gltf.h"
 #include "collision.h"
 #include "input.h"
 #include "font.h"
@@ -524,7 +523,6 @@ struct Wave
   Enemy* enemies;
 };
 
-Model* fireball;
 Shader fireball_shader;
 u32    fireball_id;
 Map    map;
@@ -1012,125 +1010,8 @@ bool parse_wave_from_file(Wave* wave, const char* filename)
   return true;
 }
 
-enum ModelFileExtensions
-{
-  MODEL_FILE_OBJ,
-  MODEL_FILE_GLB,
-  MODEL_FILE_UNKNOWN,
-};
-
-ModelFileExtensions get_model_file_extension(char* file_name)
-{
-  u32 len = strlen(file_name);
-  if (len > 4 && compare_strings("obj", &file_name[len - 3]))
-  {
-    return MODEL_FILE_OBJ;
-  }
-  if (len > 4 && compare_strings("glb", &file_name[len - 3]))
-  {
-    return MODEL_FILE_GLB;
-  }
-
-  return MODEL_FILE_UNKNOWN;
-}
-
-Model* get_model_by_filename(Model* models, u32 model_count, const char* filename)
-{
-  for (u32 i = 0; i < model_count; i++)
-  {
-    if (compare_strings(filename, models[i].name))
-    {
-      return &models[i];
-    }
-  }
-  logger.error("Didn't find model '%s'", filename);
-  assert(!"Could find model!");
-}
-
-Shader* get_shader_by_name(Shader* shaders, u32 shader_count, const char* name)
-{
-  for (u32 i = 0; i < shader_count; i++)
-  {
-    if (compare_strings(shaders[i].name, name))
-    {
-      return &shaders[i];
-    }
-  }
-  logger.error("Couldn't find shader %s", name);
-  assert(!"Couldn't find shader");
-}
-
-bool parse_models_from_files(Model** _models, u32& model_count, const char* filename)
-{
-
-  Buffer      buffer = {};
-  StringArray lines  = {};
-  if (!sta_read_file(&buffer, filename))
-  {
-    return false;
-  }
-  split_buffer_by_newline(&lines, &buffer);
-
-  Model* models = sta_allocate_struct(Model, lines.count);
-  model_count   = lines.count;
-  for (u32 i = 0; i < lines.count; i++)
-
-  {
-    // ToDo free the loaded memory?
-    char*               model_file_location = lines.strings[i];
-    ModelFileExtensions extension           = get_model_file_extension(model_file_location);
-    Model*              model               = &models[i];
-    model->name                             = model_file_location;
-    logger.info("Reading model %s\n", model_file_location);
-    switch (extension)
-    {
-    case MODEL_FILE_OBJ:
-    {
-      ModelData model_data = {};
-      sta_parse_wavefront_object_from_file(&model_data, model_file_location);
-
-      model->index_count      = model_data.vertex_count;
-      model->vertex_count     = model_data.vertex_count;
-      model->indices          = model_data.indices;
-      model->animation_data   = 0;
-      model->vertex_data      = (void*)model_data.vertices;
-      model->vertex_data_size = sizeof(VertexData);
-      break;
-    }
-    case MODEL_FILE_GLB:
-    {
-      AnimationModel model_data = {};
-      gltf_parse(&model_data, model_file_location);
-      model->indices                  = model_data.indices;
-      model->index_count              = model_data.index_count;
-      model->vertex_count             = model_data.vertex_count;
-      model->vertex_data_size         = sizeof(SkinnedVertex);
-      model->vertex_data              = (void*)model_data.vertices;
-      model->animation_data           = (AnimationData*)sta_allocate_struct(AnimationData, 1);
-      model->animation_data->skeleton = model_data.skeleton;
-      // ToDo this should change once you fixed the parser
-      model->animation_data->animation_count = 1;
-      model->animation_data->animations      = (Animation*)sta_allocate_struct(Animation, model->animation_data->animation_count);
-      model->animation_data->animations[0]   = model_data.animations;
-      break;
-    }
-    case MODEL_FILE_UNKNOWN:
-    {
-      assert(!"Unknown model!");
-    }
-    }
-  }
-  *_models = models;
-
-  return true;
-}
-
 int main()
 {
-
-  Model* models;
-  u32    model_count;
-  parse_models_from_files(&models, model_count, "./data/models.txt");
 
   entities  = (Entity*)sta_allocate_struct(Entity, entity_capacity);
   fireballs = (u32*)sta_allocate_struct(u32, fireball_capacity);
@@ -1141,16 +1022,31 @@ int main()
   const int          screen_height = 480;
   Renderer           renderer(screen_width, screen_height, &font, &logger, true);
 
+  const static char* model_locations = "./data/models.txt";
+  if (!renderer.load_models_from_files(model_locations))
+  {
+    logger.error("Failed to read models from '%s'", model_locations);
+    return 1;
+  }
+
   const static char* texture_locations = "./data/textures.txt";
   if (!renderer.load_textures_from_files(texture_locations))
   {
     logger.error("Failed to read textures from '%s'", texture_locations);
     return 1;
   }
+
   const static char* shader_locations = "./data/shader.txt";
   if (!renderer.load_shaders_from_files(shader_locations))
   {
     logger.error("Failed to read shaders from '%s'", shader_locations);
+    return 1;
+  }
+
+  const static char* buffer_locations = "./data/buffers.txt";
+  if (!renderer.load_buffers_from_files(buffer_locations))
+  {
+    logger.error("Failed to read buffers from '%s'", buffer_locations);
     return 1;
   }
 
@@ -1169,25 +1065,16 @@ int main()
     return 1;
   }
 
-  BufferAttributes map_attributes[3] = {
-      {3, GL_FLOAT},
-      {2, GL_FLOAT},
-      {3, GL_FLOAT}
-  };
-
-  fireball        = get_model_by_filename(models, model_count, "./data/fireball.obj");
-
-  fireball_id     = renderer.create_buffer_from_model(fireball, map_attributes, ArrayCount(map_attributes));
+  fireball_id     = renderer.get_buffer_by_filename("./data/fireball.obj");
   fireball_shader = *renderer.get_shader_by_name("model2");
 
   enemy_shader    = fireball_shader;
   // ToDo This should be hoisted
-  Model* enemy_model                     = get_model_by_filename(models, model_count, "./data/enemy.obj");
-  enemy_buffer_id                        = renderer.create_buffer_from_model(enemy_model, map_attributes, ArrayCount(map_attributes));
+  enemy_buffer_id                        = renderer.get_buffer_by_filename("./data/enemy.obj");
 
   enemy_render_data.buffer_id            = enemy_buffer_id;
   enemy_render_data.scale                = 0.02f;
-  enemy_render_data.model                = enemy_model;
+  enemy_render_data.model                = 0;
   enemy_render_data.shader               = enemy_shader;
   enemy_render_data.color                = BLUE;
   enemy_render_data.animation_tick_start = 0;
@@ -1196,7 +1083,7 @@ int main()
   fireball_render_data.shader            = fireball_shader;
   fireball_render_data.scale             = 0.05f;
   fireball_render_data.color             = GREEN;
-  fireball_render_data.model             = fireball;
+  fireball_render_data.model             = 0;
 
   Shader map_shader                      = *renderer.get_shader_by_name("model");
   Mat44  ident                           = {};
@@ -1204,22 +1091,14 @@ int main()
   map_shader.use();
   map_shader.set_mat4("view", ident);
 
-  map                                     = {};
-  map.model                               = get_model_by_filename(models, model_count, "./data/map_with_hole.obj");
-  u32              map_buffer             = renderer.create_buffer_from_model(map.model, map_attributes, ArrayCount(map_attributes));
+  map                   = {};
+  u32     map_buffer    = renderer.get_buffer_by_filename("./data/map_with_hole.obj");
 
-  u32              texture                = renderer.get_texture("./data/blizzard.tga");
+  u32     texture       = renderer.get_texture("./data/blizzard.tga");
 
-  Model*           model                  = get_model_by_filename(models, model_count, "./data/model.glb");
+  Model*  model         = renderer.get_model_by_filename("./data/model.glb");
+  u32     entity_buffer = renderer.get_buffer_by_filename("./data/model.glb");
 
-  BufferAttributes animated_attributes[5] = {
-      {3, GL_FLOAT},
-      {2, GL_FLOAT},
-      {3, GL_FLOAT},
-      {4, GL_FLOAT},
-      {4,   GL_INT}
-  };
-  u32     entity_buffer = renderer.create_buffer_from_model(model, animated_attributes, ArrayCount(animated_attributes));
   Shader  char_shader   = *renderer.get_shader_by_name("animation");
   Vector2 char_pos(0.5, 0.5);
 
@@ -1248,6 +1127,7 @@ int main()
 
   Wave   wave   = {};
   parse_wave_from_file(&wave, "./data/wave01.txt");
+  map.model = renderer.get_model_by_filename("./data/map_with_hole.obj");
   map.init_map();
 
   u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0, last_tick = 0;

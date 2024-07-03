@@ -2,6 +2,7 @@
 #include "common.h"
 #include "files.h"
 #include "platform.h"
+#include "gltf.h"
 #include "sdl.h"
 #include "shader.h"
 #include <GL/gl.h>
@@ -521,6 +522,151 @@ bool Renderer::load_shaders_from_files(const char* file_location)
   return true;
 }
 
+ModelFileExtensions get_model_file_extension(char* file_name)
+{
+  u32 len = strlen(file_name);
+  if (len > 4 && compare_strings("obj", &file_name[len - 3]))
+  {
+    return MODEL_FILE_OBJ;
+  }
+  if (len > 4 && compare_strings("glb", &file_name[len - 3]))
+  {
+    return MODEL_FILE_GLB;
+  }
+
+  return MODEL_FILE_UNKNOWN;
+}
+
+bool Renderer::load_models_from_files(const char* file_location)
+{
+
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, file_location))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+
+  this->models      = sta_allocate_struct(Model, lines.count);
+  this->model_count = lines.count;
+  for (u32 i = 0; i < lines.count; i++)
+
+  {
+    // ToDo free the loaded memory?
+    char*               model_file_location = lines.strings[i];
+    ModelFileExtensions extension           = get_model_file_extension(model_file_location);
+    Model*              model               = &this->models[i];
+    model->name                             = model_file_location;
+    logger->info("Reading model %s\n", model_file_location);
+    switch (extension)
+    {
+    case MODEL_FILE_OBJ:
+    {
+      ModelData model_data = {};
+      sta_parse_wavefront_object_from_file(&model_data, model_file_location);
+
+      model->index_count      = model_data.vertex_count;
+      model->vertex_count     = model_data.vertex_count;
+      model->indices          = model_data.indices;
+      model->animation_data   = 0;
+      model->vertex_data      = (void*)model_data.vertices;
+      model->vertex_data_size = sizeof(VertexData);
+      break;
+    }
+    case MODEL_FILE_GLB:
+    {
+      AnimationModel model_data = {};
+      gltf_parse(&model_data, model_file_location);
+      model->indices                  = model_data.indices;
+      model->index_count              = model_data.index_count;
+      model->vertex_count             = model_data.vertex_count;
+      model->vertex_data_size         = sizeof(SkinnedVertex);
+      model->vertex_data              = (void*)model_data.vertices;
+      model->animation_data           = (AnimationData*)sta_allocate_struct(AnimationData, 1);
+      model->animation_data->skeleton = model_data.skeleton;
+      // ToDo this should change once you fixed the parser
+      model->animation_data->animation_count = 1;
+      model->animation_data->animations      = (Animation*)sta_allocate_struct(Animation, model->animation_data->animation_count);
+      model->animation_data->animations[0]   = model_data.animations;
+      break;
+    }
+    case MODEL_FILE_UNKNOWN:
+    {
+      assert(!"Unknown model!");
+    }
+    }
+  }
+  return true;
+}
+
+bool Renderer::load_buffers_from_files(const char* file_location)
+{
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, file_location))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+
+  assert(lines.count > 0 && "Buffers file had no content?");
+
+  u32 count          = parse_int_from_string(lines.strings[0]);
+
+  this->buffers      = (RenderBuffer*)sta_allocate_struct(RenderBuffer, count);
+  this->buffer_count = count;
+
+  for (u32 i = 0, string_index = 1; i < count; i++)
+  {
+    char*            model_name             = lines.strings[string_index++];
+    Model*           model                  = this->get_model_by_filename(model_name);
+    u32              buffer_attribute_count = parse_int_from_string(lines.strings[string_index++]);
+    BufferAttributes attributes[buffer_attribute_count];
+    for (u32 j = 0; j < buffer_attribute_count; j++)
+    {
+      char*  line = lines.strings[string_index];
+      string_index++;
+      Buffer buffer(line, strlen(line));
+      attributes[j].count = buffer.parse_int();
+      buffer.skip_whitespace();
+
+      // ToDo check validity
+      attributes[j].type = (BufferAttributeType)buffer.parse_int();
+    }
+    this->buffers[i].model_name = model_name;
+    this->buffers[i].buffer_id  = this->create_buffer_from_model(model, attributes, buffer_attribute_count);
+    this->logger->info("Found buffer '%s': %d\n", model_name, buffers[i].buffer_id);
+  }
+  return true;
+}
+
+u32 Renderer::get_buffer_by_filename(const char* filename)
+{
+  for (u32 i = 0; i < buffer_count; i++)
+  {
+    if (compare_strings(buffers[i].model_name, filename))
+    {
+      return buffers[i].buffer_id;
+    }
+  }
+  logger->error("Couldn't find buffer '%s'", filename);
+  assert(!"Couldn't find the buffer!");
+}
+
+Model* Renderer::get_model_by_filename(const char* filename)
+{
+  for (u32 i = 0; i < model_count; i++)
+  {
+    if (compare_strings(filename, models[i].name))
+    {
+      return &models[i];
+    }
+  }
+  logger->error("Didn't find model '%s'", filename);
+  assert(!"Could find model!");
+}
+
 bool Renderer::load_textures_from_files(const char* file_location)
 {
 
@@ -589,12 +735,12 @@ u32 Renderer::create_buffer(u64 buffer_size, void* buffer_data, BufferAttributes
     BufferAttributes attribute = attributes[i];
     switch (attribute.type)
     {
-    case GL_FLOAT:
+    case BUFFER_ATTRIBUTE_FLOAT:
     {
       sta_glVertexAttribPointer(i, attribute.count, GL_FLOAT, GL_FALSE, size, (void*)(stride * sizeof(int)));
       break;
     }
-    case GL_INT:
+    case BUFFER_ATTRIBUTE_INT:
     {
       sta_glVertexAttribIPointer(i, attribute.count, GL_INT, size, (void*)(stride * sizeof(int)));
       break;
@@ -645,12 +791,12 @@ u32 Renderer::create_buffer_indices(u64 buffer_size, void* buffer_data, u64 inde
     BufferAttributes attribute = attributes[i];
     switch (attribute.type)
     {
-    case GL_FLOAT:
+    case BUFFER_ATTRIBUTE_FLOAT:
     {
       sta_glVertexAttribPointer(i, attribute.count, GL_FLOAT, GL_FALSE, size, (void*)(stride * sizeof(int)));
       break;
     }
-    case GL_INT:
+    case BUFFER_ATTRIBUTE_INT:
     {
       sta_glVertexAttribIPointer(i, attribute.count, GL_INT, size, (void*)(stride * sizeof(int)));
       break;
