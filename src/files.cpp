@@ -190,6 +190,11 @@ float Buffer::parse_float()
 
   return sign ? -value : value;
 }
+float parse_float_from_string(char* s)
+{
+  Buffer b(s, strlen(s));
+  return parse_float_from_string(&b);
+}
 float parse_float_from_string(Buffer* buffer)
 {
   bool sign = false;

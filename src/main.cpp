@@ -77,6 +77,7 @@ struct Hero
 
 struct EntityRenderData
 {
+  char*          name;
   AnimationData* model;
   u32            texture;
   Shader         shader;
@@ -103,18 +104,31 @@ struct Entity
   EntityType        type;
 };
 
-u32              score;
-EntityRenderData enemy_render_data;
-EntityRenderData fireball_render_data;
-Entity*          entities;
-u32              entity_capacity = 2;
-u32              entity_count    = 0;
-u32*             fireballs;
-u32              fireball_count    = 0;
-u32              fireball_capacity = 2;
-bool             god               = false;
+u32               score;
+EntityRenderData* render_data;
+u32               render_data_count;
+Entity*           entities;
+u32               entity_capacity = 2;
+u32               entity_count    = 0;
+u32*              fireballs;
+u32               fireball_count    = 0;
+u32               fireball_capacity = 2;
+bool              god               = false;
 
-u32              get_new_entity()
+EntityRenderData* get_render_data_by_name(const char* name)
+{
+  for (u32 i = 0; i < render_data_count; i++)
+  {
+    if (compare_strings(render_data[i].name, name))
+    {
+      return &render_data[i];
+    }
+  }
+  logger.error("Couldn't find render data with name '%s'", name);
+  assert(!"Couldn't find render data!");
+}
+
+u32 get_new_entity()
 {
   RESIZE_ARRAY(entities, Entity, entity_count, entity_capacity);
   return entity_count++;
@@ -725,7 +739,7 @@ void use_ability_fireball(Camera* camera, InputState* input, Hero* player)
   e->velocity                 = Vector2(cosf(player_entity.angle) * ms, sinf(player_entity.angle) * ms);
   e->angle                    = player_entity.angle;
   e->r                        = 0.03f;
-  e->render_data              = &fireball_render_data;
+  e->render_data              = get_render_data_by_name("fireball");
   e->hp                       = 1;
 }
 
@@ -1006,12 +1020,53 @@ bool parse_wave_from_file(Wave* wave, const char* filename)
     wave->spawn_times[i]         = parse_int_from_string(lines.strings[i + 1]);
     Enemy* enemy                 = &wave->enemies[i];
     u32    entity                = get_new_entity();
-    entities[entity].render_data = &enemy_render_data;
+    entities[entity].render_data = get_render_data_by_name("enemy");
     entities[entity].type        = ENTITY_ENEMY;
 
     enemy->entity                = entity;
   }
   logger.info("Read wave from '%s', got %d enemies", filename, wave->enemy_count);
+
+  return true;
+}
+
+bool load_entity_render_data_from_file(Renderer* renderer, const char* file_location)
+{
+
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, file_location))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+
+  assert(lines.count > 0 && "Empty render data file?");
+  u32 count         = parse_int_from_string(lines.strings[0]);
+  render_data       = sta_allocate_struct(EntityRenderData, count);
+  render_data_count = count;
+  for (u32 i = 0, string_index = 1; i < count; i++)
+  {
+    EntityRenderData* data = &render_data[i];
+    data->name             = lines.strings[string_index++];
+    if (lines.strings[string_index][0] == '0')
+    {
+      data->model = 0;
+    }
+    else
+    {
+      Model* model = renderer->get_model_by_filename(lines.strings[string_index]);
+      assert(model->animation_data && "No animation data for the model!");
+      data->model = model->animation_data;
+    }
+    string_index++;
+
+    data->texture              = renderer->get_texture(lines.strings[string_index++]);
+    data->shader               = *renderer->get_shader_by_name(lines.strings[string_index++]);
+    data->scale                = parse_float_from_string(lines.strings[string_index++]);
+    data->buffer_id            = renderer->get_buffer_by_filename(lines.strings[string_index++]);
+    data->animation_tick_start = 0;
+  }
 
   return true;
 }
@@ -1063,6 +1118,13 @@ int main()
     return 1;
   }
 
+  const static char* render_data_location = "./data/render_data.txt";
+  if (!load_entity_render_data_from_file(&renderer, render_data_location))
+  {
+    logger.error("Failed to read render data from '%s'", render_data_location);
+    return 1;
+  }
+
   InputState input_state(renderer.window);
 
   // ToDo make this work when game over is implemented
@@ -1070,28 +1132,14 @@ int main()
 
   init_imgui(renderer.window, renderer.context);
 
-  fireball_id     = renderer.get_buffer_by_filename("./data/fireball.obj");
-  fireball_shader = *renderer.get_shader_by_name("model");
+  fireball_id       = renderer.get_buffer_by_filename("./data/fireball.obj");
+  fireball_shader   = *renderer.get_shader_by_name("model");
 
-  enemy_shader    = fireball_shader;
-  // ToDo This should be hoisted
-  enemy_buffer_id                        = renderer.get_buffer_by_filename("./data/enemy.obj");
+  enemy_shader      = fireball_shader;
+  enemy_buffer_id   = renderer.get_buffer_by_filename("./data/enemy.obj");
 
-  enemy_render_data.buffer_id            = enemy_buffer_id;
-  enemy_render_data.scale                = 0.02f;
-  enemy_render_data.model                = 0;
-  enemy_render_data.shader               = enemy_shader;
-  enemy_render_data.texture              = renderer.get_texture("./data/blue.tga");
-  enemy_render_data.animation_tick_start = 0;
-
-  fireball_render_data.buffer_id         = fireball_id;
-  fireball_render_data.shader            = fireball_shader;
-  fireball_render_data.scale             = 0.05f;
-  fireball_render_data.texture           = renderer.get_texture("./data/green.tga");
-  fireball_render_data.model             = 0;
-
-  Shader map_shader                      = *renderer.get_shader_by_name("model");
-  Mat44  ident                           = {};
+  Shader map_shader = *renderer.get_shader_by_name("model");
+  Mat44  ident      = {};
   ident.identity();
   map_shader.use();
   map_shader.set_mat4("view", ident);
@@ -1107,25 +1155,19 @@ int main()
   Shader  char_shader   = *renderer.get_shader_by_name("animation");
   Vector2 char_pos(0.5, 0.5);
 
-  Hero    player                            = {};
+  Hero    player              = {};
 
-  u32     entity_index                      = get_new_entity();
-  Entity* entity                            = &entities[entity_index];
-  player.entity                             = entity_index;
-  entity->type                              = ENTITY_PLAYER;
-  entity->render_data                       = sta_allocate_struct(EntityRenderData, 1);
-  entity->render_data->model                = model->animation_data;
-  entity->render_data->texture              = renderer.get_texture("./data/black.tga");
-  entity->render_data->shader               = char_shader;
-  entity->render_data->buffer_id            = entity_buffer;
-  entity->render_data->scale                = 0.03f;
-  entity->position                          = char_pos;
-  entity->render_data->animation_tick_start = 0;
-  entity->velocity                          = Vector2(0, 0);
-  player.can_take_damage_tick               = 0;
-  player.damage_taken_cd                    = 500;
-  entity->r                                 = 0.05f;
-  entity->hp                                = 3;
+  u32     entity_index        = get_new_entity();
+  Entity* entity              = &entities[entity_index];
+  player.entity               = entity_index;
+  entity->type                = ENTITY_PLAYER;
+  entity->render_data         = get_render_data_by_name("player");
+  entity->position            = char_pos;
+  entity->velocity            = Vector2(0, 0);
+  player.can_take_damage_tick = 0;
+  player.damage_taken_cd      = 500;
+  entity->r                   = 0.05f;
+  entity->hp                  = 3;
   read_abilities(player.abilities);
 
   Camera camera = {};
