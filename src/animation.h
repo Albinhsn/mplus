@@ -5,7 +5,6 @@
 #include "files.h"
 #include "vector.h"
 
-
 struct Joint
 {
 public:
@@ -89,8 +88,8 @@ struct ColladaControllers
 };
 
 bool sta_collada_parse_from_file(AnimationModel* animation, const char* filename);
-void calculate_new_pose(Mat44* poses, u32 count, Animation *animation, u32 ticks);
-void update_animation(Skeleton * skeleton, Animation * animation, Shader shader, u32 ticks);
+void calculate_new_pose(Mat44* poses, u32 count, Animation* animation, u32 ticks);
+void update_animation(Skeleton* skeleton, Animation* animation, Shader shader, u32 ticks);
 
 struct JointData
 {
@@ -159,10 +158,34 @@ struct ColladaAnimationData
 
 struct ColladaModelData
 {
-  SkeletonData  skeleton_data;
-  MeshData      mesh_data;
-  SkinningData  skinning_data;
+  SkeletonData         skeleton_data;
+  MeshData             mesh_data;
+  SkinningData         skinning_data;
   ColladaAnimationData animation_data;
+};
+
+enum ModelType
+{
+  MODEL_TYPE_ANIMATION_MODEL,
+  MODEL_TYPE_MODEL_DATA,
+};
+
+struct AnimationData
+{
+  Animation* animations;
+  u32        animation_count;
+  Skeleton   skeleton;
+};
+
+struct Model
+{
+  const char*    name;
+  void*          vertex_data;
+  u32*           indices;
+  AnimationData* animation_data;
+  u32            vertex_data_size;
+  u32            index_count;
+  u32            vertex_count;
 };
 
 #endif

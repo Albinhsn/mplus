@@ -3,6 +3,7 @@
 #include "files.h"
 #include "platform.h"
 #include "sdl.h"
+#include "shader.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <SDL2/SDL_video.h>
@@ -57,7 +58,9 @@ void Renderer::init_circle_buffer()
   sta_glEnableVertexAttribArray(0);
   sta_glEnableVertexAttribArray(1);
 
-  this->circle_shader = Shader("./shaders/circle.vert", "./shaders/circle.frag");
+  ShaderType  types[2] = {SHADER_TYPE_VERT, SHADER_TYPE_FRAG};
+  const char* names[2] = {"./shaders/circle.vert", "./shaders/circle.frag"};
+  this->circle_shader  = Shader(types, names, ArrayCount(types), "circle");
 }
 
 void Renderer::draw_circle(Vector2 position, f32 radius, f32 thickness, Color color)
@@ -410,6 +413,12 @@ void Renderer::render_arrays(u32 buffer_id, GLenum type, u32 count)
   glDrawArrays(type, 0, count);
 }
 
+u32 Renderer::create_buffer_from_model(Model* model, BufferAttributes* attributes, u32 attribute_count)
+{
+
+  return this->create_buffer_indices(model->vertex_data_size * model->vertex_count, model->vertex_data, model->index_count, model->indices, attributes, attribute_count);
+}
+
 void Renderer::toggle_vsync()
 {
   this->vsync = !this->vsync;
@@ -442,6 +451,74 @@ u32 Renderer::get_texture(const char* name)
     }
   }
   assert(!"Didn't find texture!");
+}
+
+Shader* Renderer::get_shader_by_name(const char* name)
+{
+  for (u32 i = 0; i < this->shader_count; i++)
+  {
+    if (compare_strings(name, this->shaders[i].name))
+    {
+      return &this->shaders[i];
+    }
+  }
+  logger->error("Didn't find shader '%s'", name);
+  assert(!"Couldn't find shader!");
+}
+
+bool Renderer::load_shaders_from_files(const char* file_location)
+{
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, file_location))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+  assert(lines.count > 0 && "No lines in shader file?");
+
+  u32 count = parse_int_from_string(lines.strings[0]);
+  logger->info("Found %d shaders at '%s'\n", count, file_location);
+
+  Shader* shaders = sta_allocate_struct(Shader, count);
+
+  for (u32 i = 0, string_index = 1; i < count; i++)
+  {
+    const char* name         = lines.strings[string_index++];
+    u32         shader_count = parse_int_from_string(lines.strings[string_index++]);
+    ShaderType  types[shader_count];
+    char*       shader_locations[shader_count];
+
+    logger->info("Found shader %s\n", name);
+    for (u32 j = 0; j < shader_count; j++)
+    {
+      char*      line = lines.strings[string_index++];
+      Buffer     buffer(line, strlen(line));
+      ShaderType type = (ShaderType)buffer.parse_int();
+      while (!buffer.is_out_of_bounds() && buffer.current_char() == ' ')
+      {
+        buffer.advance();
+      }
+
+      if (buffer.is_out_of_bounds())
+      {
+        assert(!"Expected shader file location but found end of line!");
+      }
+
+      char* file_location                      = sta_allocate_struct(char, buffer.len - buffer.index + 1);
+      file_location[buffer.len - buffer.index] = '\0';
+      strncpy(file_location, buffer.current_address(), buffer.len - buffer.index);
+
+      logger->info("Found shader %d: %d %s\n", j, type, file_location);
+      shader_locations[j] = file_location;
+      types[j]            = type;
+    }
+
+    shaders[i] = Shader(types, (const char**)shader_locations, shader_count, name);
+  }
+  this->shaders      = shaders;
+  this->shader_count = count;
+  return true;
 }
 
 bool Renderer::load_textures_from_files(const char* file_location)

@@ -2,6 +2,7 @@
 #define RENDERER_H
 
 #include "collision.h"
+#include "animation.h"
 #include "common.h"
 #include "files.h"
 #include "font.h"
@@ -28,10 +29,6 @@ struct GLBufferIndex
   GLuint index_count;
 };
 
-// init textures via a list of strings
-// generate the textures and store them in unit if space is possible
-// send back the index of a texture, when generating we can still query the hashmap for the texture
-// so bind texture takes the name/index of a texture
 struct Texture
 {
   const char* name;
@@ -42,15 +39,16 @@ struct Texture
 struct Renderer
 {
 public:
-  bool vsync;
+  bool           vsync;
   Texture*       textures;
   u32            texture_count;
   u64            used_texture_units;
   u32            texture_capacity;
   AFont*         font;
-  Logger*        logger;
   Shader         text_shader;
   Shader         circle_shader;
+  Shader*        shaders;
+  u32            shader_count;
   GLBufferIndex  text_buffer;
   GLBufferIndex  circle_buffer;
   u32            screen_width;
@@ -60,16 +58,17 @@ public:
   u32            index_buffers_cap;
   u32            line_vao;
   u32            line_vbo;
+  Logger*        logger;
   SDL_Window*    window;
   SDL_GLContext  context;
   Renderer(u32 screen_width, u32 screen_height, AFont* font, Logger* logger, bool vsync)
   {
-    this->vsync = !vsync;
+    this->vsync  = !vsync;
+    this->logger = logger;
     sta_init_sdl_gl(&window, &context, screen_width, screen_height, this->vsync);
     this->screen_width  = screen_width;
     this->screen_height = screen_height;
     this->font          = font;
-    this->logger        = logger;
     this->init_line_buffer();
     this->init_circle_buffer();
     this->index_buffers_cap   = 0;
@@ -83,13 +82,15 @@ public:
   void swap_buffers();
 
   // manage some buffer
-  u32  create_buffer_indices(u64 buffer_size, void* buffer_data, u64 index_count, u32* indices, BufferAttributes* attributes, u32 attribute_count);
-  u32  create_buffer(u64 buffer_size, void* buffer_data, BufferAttributes* attributes, u64 attribute_count);
-  u32  create_texture(u32 width, u32 height, void* data);
-  void bind_texture(Shader shader, const char* uniform_name, u32 texture_index);
-  bool load_textures_from_files(const char* file_location);
-  u32  get_texture(const char* name);
-
+  u32     create_buffer_indices(u64 buffer_size, void* buffer_data, u64 index_count, u32* indices, BufferAttributes* attributes, u32 attribute_count);
+  u32     create_buffer(u64 buffer_size, void* buffer_data, BufferAttributes* attributes, u64 attribute_count);
+  u32     create_texture(u32 width, u32 height, void* data);
+  void    bind_texture(Shader shader, const char* uniform_name, u32 texture_index);
+  u32     create_buffer_from_model(Model* model, BufferAttributes* attributes, u32 attribute_count);
+  bool    load_shaders_from_files(const char* file_location);
+  bool    load_textures_from_files(const char* file_location);
+  u32     get_texture(const char* name);
+  Shader* get_shader_by_name(const char* name);
   // render some buffer
   void render_arrays(u32 buffer_id, GLenum type, u32 count);
   void render_buffer(u32 buffer_id);

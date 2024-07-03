@@ -1,4 +1,5 @@
 #include "shader.h"
+#include <GL/glext.h>
 
 static bool test_shader_compilation(unsigned int id)
 {
@@ -88,58 +89,51 @@ static GLuint compile_shader(const char* path, GLint shader_type)
   return vertex;
 }
 
-Shader::Shader(const char* vertex_path, const char* tessellation_control_path, const char* tessellation_evaluation_path, const char* fragment_path)
+static inline GLuint get_gl_shader_type(ShaderType type)
 {
-  GLuint vertex = compile_shader(vertex_path, GL_VERTEX_SHADER);
-  if ((i32)vertex == -1)
+  switch (type)
   {
-    return;
-  }
-
-  GLuint fragment = compile_shader(fragment_path, GL_FRAGMENT_SHADER);
-  if ((i32)fragment == -1)
+  case SHADER_TYPE_VERT:
   {
-    return;
+    return GL_VERTEX_SHADER;
   }
-  GLuint tessellation_control = compile_shader(tessellation_control_path, GL_TESS_CONTROL_SHADER);
-  if ((i32)fragment == -1)
+  case SHADER_TYPE_FRAG:
   {
-    return;
+    return GL_FRAGMENT_SHADER;
   }
-  GLuint tessellation_evaluation = compile_shader(tessellation_evaluation_path, GL_TESS_EVALUATION_SHADER);
-  if ((i32)fragment == -1)
+  case SHADER_TYPE_TESS_CONTROL:
   {
-    return;
+    return GL_TESS_CONTROL_SHADER;
   }
-
-  this->id = sta_glCreateProgram();
-  sta_glAttachShader(this->id, vertex);
-  sta_glAttachShader(this->id, fragment);
-  sta_glAttachShader(this->id, tessellation_control);
-  sta_glAttachShader(this->id, tessellation_evaluation);
-  sta_glLinkProgram(this->id);
-
-  test_program_linking(this->id);
+  case SHADER_TYPE_TESS_EVALUATION:
+  {
+    return GL_TESS_EVALUATION_SHADER;
+  }
+  case SHADER_TYPE_COMPUTE:
+  {
+    return GL_COMPUTE_SHADER;
+  }
+  }
+  assert(!"Unknown shader type to gl conversion?");
 }
 
-Shader::Shader(const char* vertex_path, const char* fragment_path)
+Shader::Shader(ShaderType* types, const char** names, u32 count, const char* name)
 {
+  this->name = name;
+  this->id   = sta_glCreateProgram();
 
-  GLuint vertex = compile_shader(vertex_path, GL_VERTEX_SHADER);
-  if ((i32)vertex == -1)
+  for (u32 i = 0; i < count; i++)
   {
-    return;
-  }
 
-  GLuint fragment = compile_shader(fragment_path, GL_FRAGMENT_SHADER);
-  if ((i32)fragment == -1)
-  {
-    return;
+    GLuint shader_id = compile_shader(names[i], get_gl_shader_type(types[i]));
+    if ((i32)shader_id == -1)
+    {
+      logger.error("Failed to compile shader '%s'", names[i]);
+      assert(!"Failed to compile shader!");
+      return;
+    }
+    sta_glAttachShader(this->id, shader_id);
   }
-
-  this->id = sta_glCreateProgram();
-  sta_glAttachShader(this->id, vertex);
-  sta_glAttachShader(this->id, fragment);
   sta_glLinkProgram(this->id);
 
   test_program_linking(this->id);

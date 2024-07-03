@@ -1,6 +1,3 @@
-#include "common.h"
-#include "files.h"
-#include "gltf.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <sys/time.h>
@@ -12,7 +9,22 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <cstdarg>
 #include <SDL2/SDL.h>
+#include <byteswap.h>
+
+#include "platform.h"
+#include "common.h"
+#include "vector.h"
+#include "files.h"
+#include "shader.h"
+#include "animation.h"
+#include "gltf.h"
+#include "collision.h"
+#include "input.h"
+#include "font.h"
+#include "renderer.h"
+#include "ui.h"
 
 #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
 #define IMGUI_DEFINE_MATH_OPERATORS
@@ -20,9 +32,9 @@
 
 Logger logger;
 
-#include "platform.h"
 #include "sdl.cpp"
 #include "vector.cpp"
+#include "font.cpp"
 #include "shader.cpp"
 #include "collision.cpp"
 
@@ -34,36 +46,11 @@ Logger logger;
 #include "../libs/imgui/imgui_widgets.cpp"
 
 #include "files.cpp"
-#include "font.cpp"
 #include "animation.cpp"
 #include "input.cpp"
 #include "renderer.cpp"
 #include "ui.cpp"
 #include "gltf.cpp"
-
-enum ModelType
-{
-  MODEL_TYPE_ANIMATION_MODEL,
-  MODEL_TYPE_MODEL_DATA,
-};
-
-struct AnimationData
-{
-  Animation* animations;
-  u32        animation_count;
-  Skeleton   skeleton;
-};
-
-struct Model
-{
-  const char*    name;
-  void*          vertex_data;
-  u32*           indices;
-  AnimationData* animation_data;
-  u32            vertex_data_size;
-  u32            index_count;
-  u32            vertex_count;
-};
 
 struct Camera
 {
@@ -1060,6 +1047,19 @@ Model* get_model_by_filename(Model* models, u32 model_count, const char* filenam
   assert(!"Could find model!");
 }
 
+Shader* get_shader_by_name(Shader* shaders, u32 shader_count, const char* name)
+{
+  for (u32 i = 0; i < shader_count; i++)
+  {
+    if (compare_strings(shaders[i].name, name))
+    {
+      return &shaders[i];
+    }
+  }
+  logger.error("Couldn't find shader %s", name);
+  assert(!"Couldn't find shader");
+}
+
 bool parse_models_from_files(Model** _models, u32& model_count, const char* filename)
 {
 
@@ -1139,12 +1139,18 @@ int main()
   font.parse_ttf("./data/fonts/OpenSans-Regular.ttf");
   const int          screen_width  = 620;
   const int          screen_height = 480;
-  Renderer           renderer(screen_width, screen_height, &font, 0, true);
+  Renderer           renderer(screen_width, screen_height, &font, &logger, true);
 
   const static char* texture_locations = "./data/textures.txt";
   if (!renderer.load_textures_from_files(texture_locations))
   {
     logger.error("Failed to read textures from '%s'", texture_locations);
+    return 1;
+  }
+  const static char* shader_locations = "./data/shader.txt";
+  if (!renderer.load_shaders_from_files(shader_locations))
+  {
+    logger.error("Failed to read shaders from '%s'", shader_locations);
     return 1;
   }
 
@@ -1169,18 +1175,16 @@ int main()
       {3, GL_FLOAT}
   };
 
-  fireball = get_model_by_filename(models, model_count, "./data/fireball.obj");
+  fireball        = get_model_by_filename(models, model_count, "./data/fireball.obj");
 
-  fireball_id =
-      renderer.create_buffer_indices(fireball->vertex_data_size * fireball->vertex_count, fireball->vertex_data, fireball->index_count, fireball->indices, map_attributes, ArrayCount(map_attributes));
-  fireball_shader = Shader("./shaders/model2.vert", "./shaders/model2.frag");
+  fireball_id     = renderer.create_buffer_from_model(fireball, map_attributes, ArrayCount(map_attributes));
+  fireball_shader = *renderer.get_shader_by_name("model2");
 
   enemy_shader    = fireball_shader;
   // ToDo This should be hoisted
-  Model* enemy_model = get_model_by_filename(models, model_count, "./data/enemy.obj");
+  Model* enemy_model                     = get_model_by_filename(models, model_count, "./data/enemy.obj");
+  enemy_buffer_id                        = renderer.create_buffer_from_model(enemy_model, map_attributes, ArrayCount(map_attributes));
 
-  enemy_buffer_id = renderer.create_buffer_indices(enemy_model->vertex_data_size * enemy_model->vertex_count, enemy_model->vertex_data, enemy_model->index_count, enemy_model->indices, map_attributes,
-                                                   ArrayCount(map_attributes));
   enemy_render_data.buffer_id            = enemy_buffer_id;
   enemy_render_data.scale                = 0.02f;
   enemy_render_data.model                = enemy_model;
@@ -1194,22 +1198,19 @@ int main()
   fireball_render_data.color             = GREEN;
   fireball_render_data.model             = fireball;
 
-  Shader map_shader("./shaders/model.vert", "./shaders/model.frag");
-  Mat44  ident = {};
+  Shader map_shader                      = *renderer.get_shader_by_name("model");
+  Mat44  ident                           = {};
   ident.identity();
   map_shader.use();
   map_shader.set_mat4("view", ident);
-  map_shader.set_mat4("projection", ident);
-  TargaImage image  = {};
 
-  map               = {};
-  map.model         = get_model_by_filename(models, model_count, "./data/map_with_hole.obj");
-  u32    map_buffer = renderer.create_buffer_indices(map.model->vertex_data_size * map.model->vertex_count, map.model->vertex_data, map.model->index_count, map.model->indices, map_attributes,
-                                                     ArrayCount(map_attributes));
+  map                                     = {};
+  map.model                               = get_model_by_filename(models, model_count, "./data/map_with_hole.obj");
+  u32              map_buffer             = renderer.create_buffer_from_model(map.model, map_attributes, ArrayCount(map_attributes));
 
-  u32    texture    = renderer.get_texture("./data/blizzard.tga");
+  u32              texture                = renderer.get_texture("./data/blizzard.tga");
 
-  Model* model      = get_model_by_filename(models, model_count, "./data/model.glb");
+  Model*           model                  = get_model_by_filename(models, model_count, "./data/model.glb");
 
   BufferAttributes animated_attributes[5] = {
       {3, GL_FLOAT},
@@ -1218,9 +1219,8 @@ int main()
       {4, GL_FLOAT},
       {4,   GL_INT}
   };
-  u32 entity_buffer =
-      renderer.create_buffer_indices(model->vertex_data_size * model->vertex_count, model->vertex_data, model->index_count, model->indices, animated_attributes, ArrayCount(animated_attributes));
-  Shader  char_shader("./shaders/animation.vert", "./shaders/animation.frag");
+  u32     entity_buffer = renderer.create_buffer_from_model(model, animated_attributes, ArrayCount(animated_attributes));
+  Shader  char_shader   = *renderer.get_shader_by_name("animation");
   Vector2 char_pos(0.5, 0.5);
 
   Hero    player                            = {};
@@ -1260,7 +1260,6 @@ int main()
 
   while (true)
   {
-
     // while (ticks + 33 > SDL_GetTicks())
     // {
     // }

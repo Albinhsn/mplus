@@ -5,6 +5,7 @@
 #include "vector.h"
 #include <stdbool.h>
 #include <stdio.h>
+
 #define CURRENT_CHAR(buf) ((buf)->buffer[(buf)->index])
 #define NEXT_CHAR(buf)    ((buf)->buffer[(buf)->index + 1])
 #define ADVANCE(buffer)   ((buffer)->index++)
