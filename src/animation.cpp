@@ -16,24 +16,24 @@ void AnimationModel::debug()
   printf("Vertices: %ld\n", this->vertex_count);
 }
 
-void calculate_new_pose(AnimationModel anim, Mat44* poses, u32 count, Animation animation, u32 ticks)
+void calculate_new_pose(Mat44* poses, u32 count, Animation* animation, u32 ticks)
 {
   const f32 EPSILON   = 0.0001f;
-  u64       loop_time = (u64)(1000 * animation.duration);
+  u64       loop_time = (u64)(1000 * animation->duration);
   f32       time      = (ticks % loop_time) / (f32)loop_time;
   if (time == 0)
   {
     time += EPSILON;
   }
 
-  for (u32 i = 0; i < animation.joint_count; i++)
+  for (u32 i = 0; i < animation->joint_count; i++)
   {
-    if (time >= animation.duration - EPSILON)
+    if (time >= animation->duration - EPSILON)
     {
-      time = animation.duration;
+      time = animation->duration;
     }
     u32        pose_idx = 0;
-    JointPose* pose     = &animation.poses[i];
+    JointPose* pose     = &animation->poses[i];
     for (; pose_idx < pose->step_count && pose->steps[pose_idx] < time; pose_idx++)
       ;
 
@@ -45,12 +45,11 @@ void calculate_new_pose(AnimationModel anim, Mat44* poses, u32 count, Animation 
   }
 }
 
-void update_animation(AnimationModel animation, Shader shader, u32 ticks)
+void update_animation(Skeleton * skeleton, Animation * animation, Shader shader, u32 ticks)
 {
-  Skeleton* skeleton = &animation.skeleton;
   Mat44     transforms[skeleton->joint_count];
   Mat44     current_poses[skeleton->joint_count];
-  calculate_new_pose(animation, current_poses, skeleton->joint_count, animation.animations, ticks);
+  calculate_new_pose(current_poses, skeleton->joint_count, animation, ticks);
 
   Mat44 parent_transforms[skeleton->joint_count];
   for (u32 i = 0; i < skeleton->joint_count; i++)
@@ -487,7 +486,7 @@ static void get_joint_id(String* joint_id, XML_Node* joint_node)
   joint_id->length    = source_tag->value_length - 1;
 }
 
-static void load_joint_transforms(Skeleton* skeleton, AnimationData* animation_data, XML_Node* joint_node)
+static void load_joint_transforms(Skeleton* skeleton, ColladaAnimationData* animation_data, XML_Node* joint_node)
 {
   String joint_name = {};
   get_joint_name(&joint_name, joint_node);
@@ -515,7 +514,7 @@ static void load_animation_data(Skeleton* skeleton, ColladaModelData* model_data
 {
 
   XML_Node*      animation_node = head->find_key("library_animations");
-  AnimationData* animation_data = &model_data->animation_data;
+  ColladaAnimationData* animation_data = &model_data->animation_data;
   get_key_times(animation_node, &animation_data->timesteps, animation_data->count);
   animation_data->duration   = animation_data->timesteps[animation_data->count - 1];
 

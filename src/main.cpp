@@ -1,8 +1,8 @@
 #include "common.h"
 #include "files.h"
+#include "gltf.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
-#include <stdio.h>
 #include <sys/time.h>
 #include <x86intrin.h>
 #include <sys/mman.h>
@@ -43,6 +43,30 @@ Logger logger;
 
 u32 score;
 
+enum ModelType
+{
+  MODEL_TYPE_ANIMATION_MODEL,
+  MODEL_TYPE_MODEL_DATA,
+};
+
+struct AnimationData
+{
+  Animation* animations;
+  u32        animation_count;
+  Skeleton   skeleton;
+};
+
+struct Model
+{
+  const char*    name;
+  void*          vertex_data;
+  u32*           indices;
+  AnimationData* animation_data;
+  u32            vertex_data_size;
+  u32            index_count;
+  u32            vertex_count;
+};
+
 struct Camera
 {
   Vector3 translation;
@@ -61,9 +85,9 @@ struct Ability
 
 struct Entity
 {
-  AnimationModel* animated_model;
-  Shader          shader;
-  Ability         abilities[5];
+  Model*  model;
+  Shader  shader;
+  Ability abilities[5];
   // position + r is sphere bb
   Vector2 position;
   f32     r;
@@ -92,7 +116,7 @@ public:
   {
     assert(model && "Can't init map without model");
     u32         vertex_count = model->vertex_count;
-    VertexData* vertices     = model->vertices;
+    VertexData* vertices     = (VertexData*)model->vertex_data;
     u32*        indices      = model->indices;
     for (u32 x = 0; x < tile_count; x++)
     {
@@ -121,9 +145,9 @@ public:
       }
     }
   }
-  ModelData* model;
-  bool       tiles[tile_count][tile_count];
-  void       get_tile_position(u8& tile_x, u8& tile_y, Vector2 position)
+  Model* model;
+  bool   tiles[tile_count][tile_count];
+  void   get_tile_position(u8& tile_x, u8& tile_y, Vector2 position)
   {
     for (u32 y = 0; y < tile_count; y++)
     {
@@ -516,12 +540,12 @@ struct Wave
   u64  spawn_count;
 };
 
-ModelData fireball;
-Shader    fireball_shader;
-u32       fireball_id;
-Map       map;
+Model* fireball;
+Shader fireball_shader;
+u32    fireball_id;
+Map    map;
 
-void      handle_movement(Camera& camera, Entity* entity, Shader* char_shader, InputState* input, u32 tick)
+void   handle_movement(Camera& camera, Entity* entity, Shader* char_shader, InputState* input, u32 tick)
 {
   entity->velocity = {};
   f32 MS           = 0.01f;
@@ -550,6 +574,7 @@ void      handle_movement(Camera& camera, Entity* entity, Shader* char_shader, I
   entity->position.y += entity->velocity.y;
 
   char_shader->use();
+  Model* model = entity->model;
   if (entity->velocity.x != 0 || entity->velocity.y != 0)
   {
     if (entity->animation_tick_start == -1)
@@ -557,16 +582,16 @@ void      handle_movement(Camera& camera, Entity* entity, Shader* char_shader, I
       entity->animation_tick_start = tick;
     }
     tick -= entity->animation_tick_start;
-    update_animation(*entity->animated_model, *char_shader, tick);
+    update_animation(&model->animation_data->skeleton, &model->animation_data->animations[0], *char_shader, tick);
   }
   else
   {
-    Mat44 joint_transforms[entity->animated_model->skeleton.joint_count];
-    for (u32 i = 0; i < entity->animated_model->skeleton.joint_count; i++)
+    Mat44 joint_transforms[model->animation_data->skeleton.joint_count];
+    for (u32 i = 0; i < model->animation_data->skeleton.joint_count; i++)
     {
       joint_transforms[i].identity();
     }
-    char_shader->set_mat4("jointTransforms", joint_transforms, entity->animated_model->skeleton.joint_count);
+    char_shader->set_mat4("jointTransforms", joint_transforms, model->animation_data->skeleton.joint_count);
     entity->animation_tick_start = -1;
   }
 
@@ -643,8 +668,8 @@ Vector2 closest_point_triangle(Triangle triangle, Vector2 p)
 
 bool out_of_map(Vector2* closest_point, Map* map, Vector2 position)
 {
-  ModelData*  map_data = map->model;
-  VertexData* vertices = map_data->vertices;
+  Model*      map_data = map->model;
+  VertexData* vertices = (VertexData*)map_data->vertex_data;
   u32*        indices  = map_data->indices;
   f32         distance = FLT_MAX;
   for (u32 i = 0; i < map_data->vertex_count - 2; i += 3)
@@ -1011,8 +1036,112 @@ bool parse_wave_from_file(Wave* wave, const char* filename)
   return true;
 }
 
+enum ModelFileExtensions
+{
+  MODEL_FILE_OBJ,
+  MODEL_FILE_GLB,
+  MODEL_FILE_UNKNOWN,
+};
+
+ModelFileExtensions get_model_file_extension(char* file_name)
+{
+  u32 len = strlen(file_name);
+  if (len > 4 && compare_strings("obj", &file_name[len - 3]))
+  {
+    return MODEL_FILE_OBJ;
+  }
+  if (len > 4 && compare_strings("glb", &file_name[len - 3]))
+  {
+    return MODEL_FILE_GLB;
+  }
+
+  return MODEL_FILE_UNKNOWN;
+}
+
+Model* get_model_by_filename(Model* models, u32 model_count, const char* filename)
+{
+  for (u32 i = 0; i < model_count; i++)
+  {
+    if (compare_strings(filename, models[i].name))
+    {
+      return &models[i];
+    }
+  }
+  logger.error("Didn't find model '%s'", filename);
+  assert(!"Could find model!");
+}
+
+bool parse_models_from_files(Model** _models, u32& model_count, const char* filename)
+{
+
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, filename))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+
+  Model* models = sta_allocate_struct(Model, lines.count);
+  model_count   = lines.count;
+  for (u32 i = 0; i < lines.count; i++)
+
+  {
+    // ToDo free the loaded memory?
+    char*               model_file_location = lines.strings[i];
+    ModelFileExtensions extension           = get_model_file_extension(model_file_location);
+    Model*              model               = &models[i];
+    model->name                             = model_file_location;
+    logger.info("Reading model %s\n", model_file_location);
+    switch (extension)
+    {
+    case MODEL_FILE_OBJ:
+    {
+      ModelData model_data = {};
+      sta_parse_wavefront_object_from_file(&model_data, model_file_location);
+
+      model->index_count      = model_data.vertex_count;
+      model->vertex_count     = model_data.vertex_count;
+      model->indices          = model_data.indices;
+      model->animation_data   = 0;
+      model->vertex_data      = (void*)model_data.vertices;
+      model->vertex_data_size = sizeof(VertexData);
+      break;
+    }
+    case MODEL_FILE_GLB:
+    {
+      AnimationModel model_data = {};
+      gltf_parse(&model_data, model_file_location);
+      model->indices                  = model_data.indices;
+      model->index_count              = model_data.index_count;
+      model->vertex_count             = model_data.vertex_count;
+      model->vertex_data_size         = sizeof(SkinnedVertex);
+      model->vertex_data              = (void*)model_data.vertices;
+      model->animation_data           = (AnimationData*)sta_allocate_struct(AnimationData, 1);
+      model->animation_data->skeleton = model_data.skeleton;
+      // ToDo this should change once you fixed the parser
+      model->animation_data->animation_count = 1;
+      model->animation_data->animations      = (Animation*)sta_allocate_struct(Animation, model->animation_data->animation_count);
+      model->animation_data->animations[0]   = model_data.animations;
+      break;
+    }
+    case MODEL_FILE_UNKNOWN:
+    {
+      assert(!"Unknown model!");
+    }
+    }
+  }
+  *_models = models;
+
+  return true;
+}
+
 int main()
 {
+
+  Model* models;
+  u32    model_count;
+  parse_models_from_files(&models, model_count, "./data/models.txt");
 
   AFont font;
   font.parse_ttf("./data/fonts/OpenSans-Regular.ttf");
@@ -1047,24 +1176,19 @@ int main()
       {2, GL_FLOAT},
       {3, GL_FLOAT}
   };
-  map       = {};
-  map.model = (ModelData*)sta_allocate_struct(ModelData, 1);
-  sta_parse_wavefront_object_from_file(map.model, "./data/map_with_hole.obj");
-  fireball = {};
-  sta_parse_wavefront_object_from_file(&fireball, "./data/fireball.obj");
-  fireball_id     = renderer.create_buffer_indices(sizeof(VertexData) * fireball.vertex_count, fireball.vertices, fireball.vertex_count, fireball.indices, map_attributes, ArrayCount(map_attributes));
+
+  fireball = get_model_by_filename(models, model_count, "./data/fireball.obj");
+
+  fireball_id =
+      renderer.create_buffer_indices(fireball->vertex_data_size * fireball->vertex_count, fireball->vertex_data, fireball->index_count, fireball->indices, map_attributes, ArrayCount(map_attributes));
   fireball_shader = Shader("./shaders/model2.vert", "./shaders/model2.frag");
 
   enemy_shader    = fireball_shader;
   // ToDo This should be hoisted
-  ModelData enemy_model = {};
-  if (!sta_parse_wavefront_object_from_file(&enemy_model, "./data/enemy.obj"))
-  {
-    printf("Failed to parse enemy!\n");
-    return 1;
-  }
-  enemy_buffer_id =
-      renderer.create_buffer_indices(sizeof(VertexData) * enemy_model.vertex_count, enemy_model.vertices, enemy_model.vertex_count, enemy_model.indices, map_attributes, ArrayCount(map_attributes));
+  Model* enemy_model = get_model_by_filename(models, model_count, "./data/enemy.obj");
+
+  enemy_buffer_id = renderer.create_buffer_indices(enemy_model->vertex_data_size * enemy_model->vertex_count, enemy_model->vertex_data, enemy_model->index_count, enemy_model->indices, map_attributes,
+                                                   ArrayCount(map_attributes));
 
   Shader map_shader("./shaders/model.vert", "./shaders/model.frag");
   Mat44  ident = {};
@@ -1072,15 +1196,17 @@ int main()
   map_shader.use();
   map_shader.set_mat4("view", ident);
   map_shader.set_mat4("projection", ident);
-  TargaImage image = {};
+  TargaImage image  = {};
 
-  u32        map_buffer =
-      renderer.create_buffer_indices(sizeof(VertexData) * map.model->vertex_count, map.model->vertices, map.model->vertex_count, map.model->indices, map_attributes, ArrayCount(map_attributes));
+  map               = {};
+  map.model         = get_model_by_filename(models, model_count, "./data/map_with_hole.obj");
+  u32    map_buffer = renderer.create_buffer_indices(map.model->vertex_data_size * map.model->vertex_count, map.model->vertex_data, map.model->index_count, map.model->indices, map_attributes,
+                                                     ArrayCount(map_attributes));
 
-  u32            texture = renderer.get_texture("./data/blizzard.tga");
+  u32    texture    = renderer.get_texture("./data/blizzard.tga");
 
-  AnimationModel model   = {};
-  gltf_parse(&model, "./data/model.glb");
+  Model* model      = get_model_by_filename(models, model_count, "./data/model.glb");
+
   BufferAttributes animated_attributes[5] = {
       {3, GL_FLOAT},
       {2, GL_FLOAT},
@@ -1089,11 +1215,11 @@ int main()
       {4,   GL_INT}
   };
   u32 entity_buffer =
-      renderer.create_buffer_indices(sizeof(SkinnedVertex) * model.vertex_count, model.vertices, model.index_count, model.indices, animated_attributes, ArrayCount(animated_attributes));
+      renderer.create_buffer_indices(model->vertex_data_size * model->vertex_count, model->vertex_data, model->index_count, model->indices, animated_attributes, ArrayCount(animated_attributes));
   Shader  char_shader("./shaders/animation.vert", "./shaders/animation.frag");
   Vector2 char_pos(0.5, 0.5);
   Entity  entity              = {};
-  entity.animated_model       = &model;
+  entity.model                = model;
   entity.position             = char_pos;
   entity.animation_tick_start = 0;
   entity.id                   = 0;
@@ -1117,10 +1243,10 @@ int main()
   map.init_map();
 
   u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0;
-  f32      fps                = 0.0f;
+  f32      fps      = 0.0f;
 
-  UI_State ui_state           = UI_STATE_MAIN_MENU;
-  bool     console            = false;
+  UI_State ui_state = UI_STATE_MAIN_MENU;
+  bool     console  = false;
   char     console_buf[1024];
   memset(console_buf, 0, ArrayCount(console_buf));
 

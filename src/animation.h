@@ -89,8 +89,8 @@ struct ColladaControllers
 };
 
 bool sta_collada_parse_from_file(AnimationModel* animation, const char* filename);
-void calculate_new_pose(Mat44* poses, u32 count, Animation animation, u32 ticks);
-void update_animation(AnimationModel animation, Shader shader, u32 ticks);
+void calculate_new_pose(Mat44* poses, u32 count, Animation *animation, u32 ticks);
+void update_animation(Skeleton * skeleton, Animation * animation, Shader shader, u32 ticks);
 
 struct JointData
 {
@@ -149,7 +149,7 @@ struct KeyFrameData
   JointTransformData* transforms;
 };
 
-struct AnimationData
+struct ColladaAnimationData
 {
   KeyFrameData* key_frames;
   float*        timesteps;
@@ -162,7 +162,7 @@ struct ColladaModelData
   SkeletonData  skeleton_data;
   MeshData      mesh_data;
   SkinningData  skinning_data;
-  AnimationData animation_data;
+  ColladaAnimationData animation_data;
 };
 
 #endif

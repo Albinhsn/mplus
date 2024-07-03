@@ -1,0 +1,4 @@
+./data/map_with_hole.obj
+./data/fireball.obj
+./data/enemy.obj
+./data/model.glb
