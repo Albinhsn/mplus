@@ -183,6 +183,13 @@ private:
 };
 typedef struct Logger Logger;
 
+struct StringArray
+{
+  char** strings;
+  u32    count;
+  u32    capacity;
+};
+
 struct String
 {
 public:
@@ -204,7 +211,11 @@ public:
   char* buffer;
   u32   length;
 };
-bool compare_float(f32 a, f32 b);
-u32  sta_hash_string_fnv(String* s);
+bool        compare_float(f32 a, f32 b);
+inline bool compare_strings(const char* s1, const char* s2)
+{
+  return strlen(s1) == strlen(s2) && strncmp(s1, s2, strlen(s1)) == 0;
+}
+u32 sta_hash_string_fnv(String* s);
 
 #endif

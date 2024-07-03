@@ -987,32 +987,6 @@ void debug_render_map_grid(Renderer* renderer, Map* map, Camera camera)
   }
 }
 
-struct StringArray
-{
-  char** strings;
-  u32    count;
-  u32    capacity;
-};
-
-void split_buffer_by_newline(StringArray* array, Buffer* buffer)
-{
-  array->count    = 0;
-  array->capacity = 2;
-  array->strings  = sta_allocate_struct(char*, array->capacity);
-  while (!buffer->is_out_of_bounds())
-  {
-
-    u64 prev = buffer->index;
-    SKIP(buffer, buffer->current_char() != '\n' || buffer->current_char() == '\0');
-    RESIZE_ARRAY(array->strings, char*, array->count, array->capacity);
-    array->strings[array->count] = (char*)sta_allocate_struct(char, buffer->index - prev + 1);
-    strncpy(array->strings[array->count], &buffer->buffer[prev], buffer->index - prev);
-    array->strings[array->count][buffer->index - prev] = '\0';
-    array->count++;
-    buffer->advance();
-  }
-}
-
 bool parse_wave_from_file(Wave* wave, const char* filename)
 {
   Buffer      buffer = {};
@@ -1045,13 +1019,18 @@ int main()
 
   AFont font;
   font.parse_ttf("./data/fonts/OpenSans-Regular.ttf");
-  const int  screen_width  = 620;
-  const int  screen_height = 480;
-  Renderer   renderer(screen_width, screen_height, &font, 0);
+  const int screen_width  = 620;
+  const int screen_height = 480;
+  Renderer  renderer(screen_width, screen_height, &font, 0);
+
+  if (!renderer.load_textures_from_files("./data/textures.txt"))
+  {
+    printf("Failed to read textures\n");
+    return 1;
+  }
 
   InputState input_state(renderer.window);
   u32        ticks = 0;
-  Arena      arena(1024 * 1024);
 
   // ToDo make this work when game over is implemented
   score = 0;
@@ -1095,10 +1074,11 @@ int main()
   map_shader.set_mat4("projection", ident);
   TargaImage image = {};
 
-  sta_targa_read_from_file_rgba(&image, "./data/blizzard.tga");
-  u32 map_buffer =
+  u32        map_buffer =
       renderer.create_buffer_indices(sizeof(VertexData) * map.model->vertex_count, map.model->vertices, map.model->vertex_count, map.model->indices, map_attributes, ArrayCount(map_attributes));
-  u32            texture = renderer.create_texture(image.width, image.height, image.data);
+
+  u32            texture = renderer.get_texture("./data/blizzard.tga");
+
   AnimationModel model   = {};
   gltf_parse(&model, "./data/model.glb");
   BufferAttributes animated_attributes[5] = {
@@ -1231,7 +1211,7 @@ int main()
         map_shader.set_mat4("view", m);
 
         // render map
-        renderer.bind_texture(texture, 0);
+        renderer.bind_texture(map_shader, "texture1", texture);
         renderer.render_buffer(map_buffer);
         render_entities(&renderer, &entities, camera);
         render_enemies(&renderer, &enemies, camera);

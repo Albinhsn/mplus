@@ -1,4 +1,7 @@
 #include "renderer.h"
+#include "common.h"
+#include "files.h"
+#include "platform.h"
 #include "sdl.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
@@ -117,41 +120,6 @@ void Renderer::draw_line(f32 x1, f32 y1, f32 x2, f32 y2, u32 line_width, Color c
   glLineWidth(line_width);
   glDrawArrays(GL_LINES, 0, 2);
   this->disable_2d_rendering();
-}
-
-void Renderer::look_at(Vector3 c, Vector3 l, Vector3 u_prime, Vector3 t)
-{
-  Vector3 v     = c.sub(l);
-  f32     v_len = v.len();
-  if (v_len != 0)
-  {
-    v.scale(1.0f / v_len);
-  }
-
-  Vector3 r = v.cross(u_prime);
-  if (r.len() != 0)
-  {
-    r.scale(-1.0f / r.len());
-  }
-
-  Vector3 u          = v.cross(r);
-
-  this->camera.m[0]  = r.x;
-  this->camera.m[1]  = u.x;
-  this->camera.m[2]  = v.x;
-  this->camera.m[3]  = 0;
-  this->camera.m[4]  = r.y;
-  this->camera.m[5]  = u.y;
-  this->camera.m[6]  = v.y;
-  this->camera.m[7]  = 0;
-  this->camera.m[8]  = r.z;
-  this->camera.m[9]  = u.z;
-  this->camera.m[10] = v.z;
-  this->camera.m[11] = 0;
-  this->camera.m[12] = -t.dot(r);
-  this->camera.m[13] = -t.dot(u);
-  this->camera.m[14] = -t.dot(v);
-  this->camera.m[15] = 1.0f;
 }
 
 static void triangulate_simple_glyph(Vector2** _vertices, u32& vertex_count, i16& x_offset, i16& y_offset, Glyph* glyph)
@@ -401,10 +369,19 @@ void Renderer::render_text(const char* string, u32 string_length, f32 x, f32 y, 
 
   glDrawElements(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0);
 }
-void Renderer::bind_texture(u32 texture_id, u32 texture_unit)
+void Renderer::bind_texture(Shader shader, const char* uniform_name, u32 texture_index)
 {
-  glActiveTexture(texture_unit);
-  sta_glBindTexture(GL_TEXTURE_2D, texture_id);
+  Texture texture = this->textures[texture_index];
+  if (texture.unit == -1)
+  {
+    texture.unit = this->get_free_texture_unit();
+  }
+
+  shader.use();
+  GLuint location = sta_glGetUniformLocation(shader.id, uniform_name);
+  sta_glUniform1i(location, texture.unit);
+  glActiveTexture(GL_TEXTURE0 + texture.unit);
+  sta_glBindTexture(GL_TEXTURE_2D, texture.id);
 }
 u32 Renderer::create_texture(u32 width, u32 height, void* data)
 {
@@ -423,70 +400,6 @@ void Renderer::swap_buffers()
 {
   sta_gl_render(this->window);
 }
-void Renderer::init_quad_buffer_2d()
-{
-  this->quad_buffer_2d = {};
-  sta_glGenVertexArrays(1, &this->quad_buffer_2d.vao);
-  sta_glGenBuffers(1, &this->quad_buffer_2d.vbo);
-  sta_glGenBuffers(1, &this->quad_buffer_2d.ebo);
-
-  sta_glBindVertexArray(this->quad_buffer_2d.vao);
-  sta_glBindBuffer(GL_ARRAY_BUFFER, this->quad_buffer_2d.vbo);
-  const int vertices_in_a_quad = 8;
-  f32       tot[8]             = {
-      1.0f,  1.0f,  //
-      1.0f,  -1.0,  //
-      -1.0f, -1.0f, //
-      -1.0f, 1.0,   //
-  };
-  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * vertices_in_a_quad, tot, GL_DYNAMIC_DRAW);
-
-  sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->quad_buffer_2d.ebo);
-  u32 indices[6] = {0, 1, 2, 0, 2, 3};
-  sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * ArrayCount(indices), indices, GL_STATIC_DRAW);
-
-  sta_glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(f32) * 2, (void*)(0));
-  sta_glEnableVertexAttribArray(0);
-
-  // this->quad_shader = Shader("./shaders/quad.vert", "./shaders/quad.frag");
-}
-void Renderer::init_text_shader()
-{
-  this->text_buffer = {};
-  sta_glGenVertexArrays(1, &this->text_buffer.vao);
-  sta_glGenBuffers(1, &this->text_buffer.vbo);
-  sta_glGenBuffers(1, &this->text_buffer.ebo);
-
-  sta_glBindVertexArray(this->text_buffer.vao);
-  sta_glBindBuffer(GL_ARRAY_BUFFER, this->text_buffer.vbo);
-  sta_glBufferData(GL_ARRAY_BUFFER, 0, 0, GL_DYNAMIC_DRAW);
-
-  sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->text_buffer.ebo);
-  sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, 0, 0, GL_DYNAMIC_DRAW);
-
-  sta_glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(f32) * 2, (void*)(0));
-  sta_glEnableVertexAttribArray(0);
-
-  this->text_shader = Shader("./shaders/text.vert", "./shaders/text.frag");
-}
-void Renderer::render_2d_quad(f32 min[2], f32 max[2], Color color)
-{
-  sta_glBindVertexArray(this->quad_buffer_2d.vao);
-  sta_glBindBuffer(GL_ARRAY_BUFFER, this->quad_buffer_2d.vbo);
-  f32 tot[8] = {
-      max[0], min[1], //
-      max[0], max[1], //
-      min[0], max[1], //
-      min[0], min[1], //
-  };
-  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * 8, tot, GL_DYNAMIC_DRAW);
-  this->quad_shader.use();
-
-  this->quad_shader.set_float4f("color", (float*)&color);
-
-  sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->quad_buffer_2d.ebo);
-  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-}
 
 void Renderer::render_arrays(u32 buffer_id, GLenum type, u32 count)
 {
@@ -494,6 +407,80 @@ void Renderer::render_arrays(u32 buffer_id, GLenum type, u32 count)
   sta_glBindVertexArray(buffer.vao);
 
   glDrawArrays(type, 0, count);
+}
+
+u32 Renderer::get_free_texture_unit()
+{
+  const static u32 MAX_UNITS = 38;
+  u64              inv       = ~this->used_texture_units;
+
+  u64              index     = __builtin_ctzll(inv);
+  if (index == MAX_UNITS)
+  {
+    Texture* texture = &textures[0];
+    u32      out     = texture->unit;
+    texture->unit    = -1;
+    return out;
+  }
+  this->used_texture_units |= index == 0 ? 1 : (1UL << index);
+  return index;
+}
+
+u32 Renderer::get_texture(const char* name)
+{
+  for (u32 i = 0; i < this->texture_count; i++)
+  {
+    if (this->textures[i].id != -1 && compare_strings(name, this->textures[i].name))
+    {
+      return i;
+    }
+  }
+  assert(!"Didn't find texture!");
+}
+
+bool Renderer::load_textures_from_files(const char* file_location)
+{
+
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, file_location))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+
+  // ToDo increase?
+  const u32 initial_texture_capacity = 4;
+  if (this->texture_capacity == 0)
+  {
+    this->texture_capacity = initial_texture_capacity;
+    this->textures         = sta_allocate_struct(Texture, initial_texture_capacity);
+  }
+
+  for (u32 i = 0; i < lines.count; i++)
+  {
+    Texture    texture = {};
+    TargaImage image   = {};
+    texture.name       = lines.strings[i];
+
+    sta_targa_read_from_file_rgba(&image, texture.name);
+    texture.id   = this->create_texture(image.width, image.height, image.data);
+    texture.unit = this->get_free_texture_unit();
+    sta_deallocate(image.data, image.width * image.height * 4);
+
+    RESIZE_ARRAY(this->textures, Texture, this->texture_count, this->texture_capacity);
+    this->textures[this->texture_count++] = texture;
+  }
+
+  printf("Found %d textures\n", this->texture_count);
+  for (u32 i = 0; i < this->texture_count; i++)
+  {
+    Texture texture = this->textures[i];
+    printf("%s: %d, %d\n", texture.name, texture.id, texture.unit);
+  }
+
+  // ToDo free the line memory
+  return true;
 }
 
 u32 Renderer::create_buffer(u64 buffer_size, void* buffer_data, BufferAttributes* attributes, u64 attribute_count)

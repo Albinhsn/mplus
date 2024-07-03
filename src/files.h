@@ -327,6 +327,7 @@ bool  sta_parse_wavefront_object_from_file(ModelData* model, const char* filenam
 bool  sta_convert_obj_to_model(const char* input_filename, const char* output_filename);
 
 int parse_int_from_string(const char* s);
+void split_buffer_by_newline(StringArray* array, Buffer* buffer);
 int   parse_int_from_string(Buffer* buffer);
 float parse_float_from_string(Buffer* buffer);
 void  skip_whitespace(Buffer* buffer);

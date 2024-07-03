@@ -574,6 +574,7 @@ bool sta_targa_read_from_file_rgba(TargaImage* image, const char* filename)
   }
   else
   {
+    // ToDo fix this xD
     assert(0 && "Can't parse this targa type");
   }
 
@@ -1979,4 +1980,29 @@ bool sta_xml_parse_version_and_encoding(XML* xml, Buffer* buffer)
   buffer->advance();
 
   return true;
+}
+
+void split_buffer_by_newline(StringArray* array, Buffer* buffer)
+{
+  array->count    = 0;
+  array->capacity = 2;
+  array->strings  = sta_allocate_struct(char*, array->capacity);
+  while (!buffer->is_out_of_bounds())
+  {
+
+    u64 prev = buffer->index;
+    SKIP(buffer, buffer->current_char() != '\n' || buffer->current_char() == '\0');
+
+    if (buffer->current_char() == '\0')
+    {
+      break;
+    }
+
+    RESIZE_ARRAY(array->strings, char*, array->count, array->capacity);
+    array->strings[array->count] = (char*)sta_allocate_struct(char, buffer->index - prev + 1);
+    strncpy(array->strings[array->count], &buffer->buffer[prev], buffer->index - prev);
+    array->strings[array->count][buffer->index - prev] = '\0';
+    array->count++;
+    buffer->advance();
+  }
 }
