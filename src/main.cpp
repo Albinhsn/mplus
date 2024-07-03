@@ -964,11 +964,14 @@ void render_entities(Renderer* renderer, Camera camera)
       Mat44 m = {};
       m.identity();
 
-      m = m.scale(render_data->scale).rotate_x(90).rotate_z(RADIANS_TO_DEGREES(entity.angle) - 90);
+      renderer->enable_2d_rendering();
+      m = m.scale(render_data->scale).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(entity.angle) - 90).rotate_x(-30.0f);
       m = m.translate(camera.translation).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
       renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
       render_data->shader.set_mat4("view", m);
       renderer->render_buffer(render_data->buffer_id);
+      renderer->disable_2d_rendering();
+
       renderer->draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r, 1, RED);
     }
   }
@@ -1141,6 +1144,7 @@ int main()
   Shader map_shader = *renderer.get_shader_by_name("model");
   Mat44  ident      = {};
   ident.identity();
+  ident = ident.rotate_x(-30.0f);
   map_shader.use();
   map_shader.set_mat4("view", ident);
 
@@ -1271,7 +1275,7 @@ int main()
 
         Mat44 m            = {};
         m.identity();
-        m = m.translate(camera.translation);
+        m = m.rotate_x(-30.0f).translate(camera.translation);
         map_shader.use();
         map_shader.set_mat4("view", m);
 
