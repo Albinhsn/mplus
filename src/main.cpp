@@ -77,12 +77,12 @@ struct Hero
 
 struct EntityRenderData
 {
-  Model* model;
-  Color  color;
-  Shader shader;
-  f32    scale;
-  u32    buffer_id;
-  i32    animation_tick_start;
+  AnimationData* model;
+  Color          color;
+  Shader         shader;
+  f32            scale;
+  u32            buffer_id;
+  i32            animation_tick_start;
 };
 
 enum EntityType
@@ -94,7 +94,6 @@ enum EntityType
 
 struct Entity
 {
-  // position + r is sphere bb
   Vector2           position;
   f32               r;
   f32               angle;
@@ -123,19 +122,30 @@ u32              get_new_entity()
 
 const static u32 tile_count = 64;
 const static f32 tile_size  = 1.0f / tile_count;
+
 struct Map
 {
 public:
   Map()
   {
-    model = 0;
   }
-  void init_map()
+  u32*     indices;
+  Vector2* vertices;
+  u32      index_count;
+  u32      vertex_count;
+  void     init_map(Model* model)
   {
-    assert(model && "Can't init map without model");
-    u32         vertex_count = model->vertex_count;
-    VertexData* vertices     = (VertexData*)model->vertex_data;
-    u32*        indices      = model->indices;
+    this->index_count    = model->vertex_count;
+    this->vertex_count   = model->vertex_count;
+    this->indices        = model->indices;
+    VertexData* vertices = (VertexData*)model->vertex_data;
+    this->vertices       = sta_allocate_struct(Vector2, vertex_count);
+    for (u32 i = 0; i < vertex_count; i++)
+    {
+      Vector3 v         = vertices[i].vertex;
+      this->vertices[i] = Vector2(v.x, v.y);
+    }
+
     for (u32 x = 0; x < tile_count; x++)
     {
       f32 x0 = x * tile_size * 2.0f - 1.0f, x1 = x0 + tile_size * 2.0f;
@@ -145,7 +155,7 @@ public:
         f32 x_middle = x0 + (x1 - x0) / 2.0f;
         f32 y_middle = y0 + (y1 - y0) / 2.0f;
 
-        for (u32 i = 0; i < vertex_count; i += 3)
+        for (u32 i = 0; i < index_count; i += 3)
         {
           Triangle t;
           t.points[0].x = vertices[indices[i]].vertex.x;
@@ -163,9 +173,8 @@ public:
       }
     }
   }
-  Model* model;
-  bool   tiles[tile_count][tile_count];
-  void   get_tile_position(u8& tile_x, u8& tile_y, Vector2 position)
+  bool tiles[tile_count][tile_count];
+  void get_tile_position(u8& tile_x, u8& tile_y, Vector2 position)
   {
     for (u32 y = 0; y < tile_count; y++)
     {
@@ -554,8 +563,8 @@ void   handle_player_movement(Camera& camera, Hero* player, Shader* char_shader,
   entity->angle  = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
 
   char_shader->use();
-  EntityRenderData* render_data = entity->render_data;
-  Model*            model       = render_data->model;
+  EntityRenderData* render_data    = entity->render_data;
+  AnimationData*    animation_data = render_data->model;
   if (entity->velocity.x != 0 || entity->velocity.y != 0)
   {
     if (render_data->animation_tick_start == -1)
@@ -563,16 +572,16 @@ void   handle_player_movement(Camera& camera, Hero* player, Shader* char_shader,
       render_data->animation_tick_start = tick;
     }
     tick -= render_data->animation_tick_start;
-    update_animation(&model->animation_data->skeleton, &model->animation_data->animations[0], *char_shader, tick);
+    update_animation(&animation_data->skeleton, &animation_data->animations[0], *char_shader, tick);
   }
   else
   {
-    Mat44 joint_transforms[model->animation_data->skeleton.joint_count];
-    for (u32 i = 0; i < model->animation_data->skeleton.joint_count; i++)
+    Mat44 joint_transforms[animation_data->skeleton.joint_count];
+    for (u32 i = 0; i < animation_data->skeleton.joint_count; i++)
     {
       joint_transforms[i].identity();
     }
-    char_shader->set_mat4("jointTransforms", joint_transforms, model->animation_data->skeleton.joint_count);
+    char_shader->set_mat4("jointTransforms", joint_transforms, animation_data->skeleton.joint_count);
     render_data->animation_tick_start = -1;
   }
 
@@ -645,21 +654,18 @@ Vector2 closest_point_triangle(Triangle triangle, Vector2 p)
   return Vector2(x, y);
 }
 
-bool out_of_map(Vector2* closest_point, Map* map, Vector2 position)
+bool is_out_of_map_bounds(Vector2* closest_point, Map* map, Vector2 position)
 {
-  Model*      map_data = map->model;
-  VertexData* vertices = (VertexData*)map_data->vertex_data;
-  u32*        indices  = map_data->indices;
-  f32         distance = FLT_MAX;
-  for (u32 i = 0; i < map_data->vertex_count - 2; i += 3)
+  f32 distance = FLT_MAX;
+  for (u32 i = 0; i < map->vertex_count - 2; i += 3)
   {
     Triangle t;
-    t.points[0].x = vertices[indices[i]].vertex.x;
-    t.points[0].y = vertices[indices[i]].vertex.y;
-    t.points[1].x = vertices[indices[i + 1]].vertex.x;
-    t.points[1].y = vertices[indices[i + 1]].vertex.y;
-    t.points[2].x = vertices[indices[i + 2]].vertex.x;
-    t.points[2].y = vertices[indices[i + 2]].vertex.y;
+    t.points[0].x = map->vertices[map->indices[i]].x;
+    t.points[0].y = map->vertices[map->indices[i]].y;
+    t.points[1].x = map->vertices[map->indices[i + 1]].x;
+    t.points[1].y = map->vertices[map->indices[i + 1]].y;
+    t.points[2].x = map->vertices[map->indices[i + 2]].x;
+    t.points[2].y = map->vertices[map->indices[i + 2]].y;
     if (point_in_triangle_2d(t, position))
     {
       return false;
@@ -680,7 +686,7 @@ bool out_of_map(Vector2* closest_point, Map* map, Vector2 position)
 void detect_collision_out_of_bounds(Map* map, Vector2& position)
 {
   Vector2 closest_point = {};
-  if (out_of_map(&closest_point, map, position))
+  if (is_out_of_map_bounds(&closest_point, map, position))
   {
     position = closest_point;
   }
@@ -890,7 +896,7 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
       entity->position.x += entity->velocity.x * diff;
       entity->position.y += entity->velocity.y * diff;
       Vector2 closest_point = {};
-      if (out_of_map(&closest_point, &map, entity->position))
+      if (is_out_of_map_bounds(&closest_point, &map, entity->position))
       {
         if (entity->type == ENTITY_PLAYER_PROJECTILE)
         {
@@ -1050,20 +1056,19 @@ int main()
     return 1;
   }
 
-  InputState input_state(renderer.window);
-  u32        ticks = 0;
-
-  // ToDo make this work when game over is implemented
-  score = 0;
-
-  init_imgui(renderer.window, renderer.context);
-
   const static char* noise_locations = "./data/noise01.tga";
   if (!sta_targa_read_from_file_rgba(&noise, noise_locations))
   {
     logger.error("Failed to read noise from '%s'", noise_locations);
     return 1;
   }
+
+  InputState input_state(renderer.window);
+
+  // ToDo make this work when game over is implemented
+  score = 0;
+
+  init_imgui(renderer.window, renderer.context);
 
   fireball_id     = renderer.get_buffer_by_filename("./data/fireball.obj");
   fireball_shader = *renderer.get_shader_by_name("model2");
@@ -1109,7 +1114,7 @@ int main()
   player.entity                             = entity_index;
   entity->type                              = ENTITY_PLAYER;
   entity->render_data                       = sta_allocate_struct(EntityRenderData, 1);
-  entity->render_data->model                = model;
+  entity->render_data->model                = model->animation_data;
   entity->render_data->color                = BLACK;
   entity->render_data->shader               = char_shader;
   entity->render_data->buffer_id            = entity_buffer;
@@ -1127,9 +1132,10 @@ int main()
 
   Wave   wave   = {};
   parse_wave_from_file(&wave, "./data/wave01.txt");
-  map.model = renderer.get_model_by_filename("./data/map_with_hole.obj");
-  map.init_map();
 
+  map.init_map(renderer.get_model_by_filename("./data/map_with_hole.obj"));
+
+  u32      ticks        = 0;
   u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0, last_tick = 0;
   f32      fps      = 0.0f;
 

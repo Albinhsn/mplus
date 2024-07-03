@@ -479,7 +479,7 @@ bool Renderer::load_shaders_from_files(const char* file_location)
   assert(lines.count > 0 && "No lines in shader file?");
 
   u32 count = parse_int_from_string(lines.strings[0]);
-  logger->info("Found %d shaders at '%s'\n", count, file_location);
+  logger->info("Found %d shaders at '%s'", count, file_location);
 
   Shader* shaders = sta_allocate_struct(Shader, count);
 
@@ -490,7 +490,7 @@ bool Renderer::load_shaders_from_files(const char* file_location)
     ShaderType  types[shader_count];
     char*       shader_locations[shader_count];
 
-    logger->info("Found shader %s\n", name);
+    logger->info("Found shader %s", name);
     for (u32 j = 0; j < shader_count; j++)
     {
       char*      line = lines.strings[string_index++];
@@ -510,7 +510,7 @@ bool Renderer::load_shaders_from_files(const char* file_location)
       file_location[buffer.len - buffer.index] = '\0';
       strncpy(file_location, buffer.current_address(), buffer.len - buffer.index);
 
-      logger->info("Found shader %d: %d %s\n", j, type, file_location);
+      logger->info("Found shader %d: %d %s", j, type, file_location);
       shader_locations[j] = file_location;
       types[j]            = type;
     }
@@ -558,7 +558,7 @@ bool Renderer::load_models_from_files(const char* file_location)
     ModelFileExtensions extension           = get_model_file_extension(model_file_location);
     Model*              model               = &this->models[i];
     model->name                             = model_file_location;
-    logger->info("Reading model %s\n", model_file_location);
+    logger->info("Reading model %s", model_file_location);
     switch (extension)
     {
     case MODEL_FILE_OBJ:
@@ -625,7 +625,7 @@ bool Renderer::load_buffers_from_files(const char* file_location)
     BufferAttributes attributes[buffer_attribute_count];
     for (u32 j = 0; j < buffer_attribute_count; j++)
     {
-      char*  line = lines.strings[string_index];
+      char* line = lines.strings[string_index];
       string_index++;
       Buffer buffer(line, strlen(line));
       attributes[j].count = buffer.parse_int();
@@ -636,7 +636,7 @@ bool Renderer::load_buffers_from_files(const char* file_location)
     }
     this->buffers[i].model_name = model_name;
     this->buffers[i].buffer_id  = this->create_buffer_from_model(model, attributes, buffer_attribute_count);
-    this->logger->info("Found buffer '%s': %d\n", model_name, buffers[i].buffer_id);
+    this->logger->info("Found buffer '%s': %d", model_name, buffers[i].buffer_id);
   }
   return true;
 }
@@ -701,11 +701,11 @@ bool Renderer::load_textures_from_files(const char* file_location)
     this->textures[this->texture_count++] = texture;
   }
 
-  printf("Found %d textures\n", this->texture_count);
+  logger->info("Found %d textures\n", this->texture_count);
   for (u32 i = 0; i < this->texture_count; i++)
   {
     Texture texture = this->textures[i];
-    printf("%s: %d, %d\n", texture.name, texture.id, texture.unit);
+    logger->info("Got texture: '%s' %d, %d\n", texture.name, texture.id, texture.unit);
   }
 
   // ToDo free the line memory
