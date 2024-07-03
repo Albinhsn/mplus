@@ -41,8 +41,6 @@ Logger logger;
 #include "ui.cpp"
 #include "gltf.cpp"
 
-u32 score;
-
 enum ModelType
 {
   MODEL_TYPE_ANIMATION_MODEL,
@@ -73,35 +71,68 @@ struct Camera
 };
 
 struct Entity;
-struct Entities;
+struct Hero;
 
 struct Ability
 {
   const char* name;
-  void (*use_ability)(Camera* camera, Entities* entities, InputState* input, Entity* entity);
+  void (*use_ability)(Camera* camera, InputState* input, Hero* player);
   u32 cooldown_ticks;
   u32 cooldown;
 };
 
-struct Entity
+struct Hero
 {
-  Model*  model;
-  Shader  shader;
   Ability abilities[5];
-  // position + r is sphere bb
-  Vector2 position;
-  f32     r;
-  Vector2 velocity;
-  u32     flags;
-  f32     scale;
-  i32     animation_tick_start;
-  u32     buffer_id;
   u32     can_take_damage_tick;
   u32     damage_taken_cd;
-  u32     id;
-  u32     parent_id;
-  u32     hp;
+  u32     entity;
 };
+
+struct EntityRenderData
+{
+  Model* model;
+  Color  color;
+  Shader shader;
+  f32    scale;
+  u32    buffer_id;
+  i32    animation_tick_start;
+};
+
+enum EntityType
+{
+  ENTITY_PLAYER,
+  ENTITY_ENEMY,
+  ENTITY_PLAYER_PROJECTILE,
+};
+
+struct Entity
+{
+  // position + r is sphere bb
+  Vector2           position;
+  f32               r;
+  f32               angle;
+  Vector2           velocity;
+  u32               hp;
+  EntityRenderData* render_data;
+  EntityType        type;
+};
+
+u32              score;
+EntityRenderData enemy_render_data;
+EntityRenderData fireball_render_data;
+Entity*          entities;
+u32              entity_capacity = 2;
+u32              entity_count    = 0;
+u32*             fireballs;
+u32              fireball_count    = 0;
+u32              fireball_capacity = 2;
+
+u32              get_new_entity()
+{
+  RESIZE_ARRAY(entities, Entity, entity_count, entity_capacity);
+  return entity_count++;
+}
 
 const static u32 tile_count = 64;
 const static f32 tile_size  = 1.0f / tile_count;
@@ -420,20 +451,9 @@ void find_path(Path* path, Map* map, Vector2 needle, Vector2 source)
   }
   assert(!"Didn't find a path to player!");
 }
-struct Enemy
-{
-  Entity entity;
-  Path   path;
-};
 
-Shader enemy_shader;
-u32    enemy_buffer_id;
-
-struct EnemyNode
-{
-  Enemy      enemy;
-  EnemyNode* next;
-};
+Shader     enemy_shader;
+u32        enemy_buffer_id;
 
 TargaImage noise;
 
@@ -479,65 +499,41 @@ Vector2 get_random_position(Map* map, u32 tick, u32 enemy_counter)
   return position;
 }
 
-struct Enemies
+enum EnemyType
 {
-public:
-  Enemies()
-  {
-    head          = 0;
-    enemy_counter = 0;
-  }
-  void spawn(Map* map, u32 tick)
-  {
-    EnemyNode* en    = (EnemyNode*)sta_pool_alloc(&pool);
-    Entity*    enemy = &en->enemy.entity;
-    enemy->velocity  = Vector2(0, 0);
-    // randomize position, make sure it is valid
-    enemy->position  = get_random_position(map, tick, ++enemy_counter);
-    enemy->scale     = 0.05;
-    enemy->shader    = enemy_shader;
-    enemy->buffer_id = enemy_buffer_id;
-    enemy->hp        = 1;
-    enemy->r         = 0.04f;
-
-    en->next         = head;
-    head             = en;
-  }
-  u32           enemy_counter;
-  EnemyNode*    head;
-  PoolAllocator pool;
+  ENEMY_MELEE,
+  ENEMY_FLYING,
+  ENEMY_RANGED,
 };
 
-struct EntityNode
+struct Enemy
 {
-  Entity      entity;
-  EntityNode* next;
+  u32       entity;
+  Path      path;
+  EnemyType type;
 };
 
-struct Entities
+void spawn(Enemy* enemy, Map* map, u32 tick, u32 enemy_index)
 {
-public:
-  Entities()
-  {
-    head           = 0;
-    entity_counter = 0;
-  }
-  u32 add(EntityNode* entity)
-  {
-    entity->next = head;
-    head         = entity;
-    return entity_counter++;
-  }
-  PoolAllocator pool;
-  u32           entity_counter;
-  EntityNode*   head;
-};
+  Entity*           entity      = &entities[enemy->entity];
+  EntityRenderData* render_data = entity->render_data;
+  entity->velocity              = Vector2(0, 0);
+  // randomize position, make sure it is valid
+  entity->position           = get_random_position(map, tick, enemy_index);
+  entity->render_data->scale = 0.05;
+  entity->hp                 = 1;
+  render_data->shader        = enemy_shader;
+  render_data->buffer_id     = enemy_buffer_id;
+  entity->r                  = 0.04f;
+}
 
 struct Wave
 {
-  u32* spawn_times;
-  u32  enemy_count;
-  u64  spawn_count;
+  u32*   spawn_times;
+  u64    spawn_count;
+  u32    enemy_count;
+  u64    enemies_alive;
+  Enemy* enemies;
 };
 
 Model* fireball;
@@ -545,8 +541,9 @@ Shader fireball_shader;
 u32    fireball_id;
 Map    map;
 
-void   handle_movement(Camera& camera, Entity* entity, Shader* char_shader, InputState* input, u32 tick, u32 tick_difference)
+void   handle_player_movement(Camera& camera, Hero* player, Shader* char_shader, InputState* input, u32 tick, u32 tick_difference)
 {
+  Entity* entity   = &entities[player->entity];
   entity->velocity = {};
   f32 MS           = 0.01f * ((f32)tick_difference / 16.0f);
 
@@ -568,20 +565,18 @@ void   handle_movement(Camera& camera, Entity* entity, Shader* char_shader, Inpu
   }
 
   f32* mouse_pos = input->mouse_position;
-  f32  angle     = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
-
-  entity->position.x += entity->velocity.x;
-  entity->position.y += entity->velocity.y;
+  entity->angle  = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
 
   char_shader->use();
-  Model* model = entity->model;
+  EntityRenderData* render_data = entity->render_data;
+  Model*            model       = render_data->model;
   if (entity->velocity.x != 0 || entity->velocity.y != 0)
   {
-    if (entity->animation_tick_start == -1)
+    if (render_data->animation_tick_start == -1)
     {
-      entity->animation_tick_start = tick;
+      render_data->animation_tick_start = tick;
     }
-    tick -= entity->animation_tick_start;
+    tick -= render_data->animation_tick_start;
     update_animation(&model->animation_data->skeleton, &model->animation_data->animations[0], *char_shader, tick);
   }
   else
@@ -592,14 +587,12 @@ void   handle_movement(Camera& camera, Entity* entity, Shader* char_shader, Inpu
       joint_transforms[i].identity();
     }
     char_shader->set_mat4("jointTransforms", joint_transforms, model->animation_data->skeleton.joint_count);
-    entity->animation_tick_start = -1;
+    render_data->animation_tick_start = -1;
   }
 
-  Mat44 a = {};
-  a.identity();
-  a                  = a.scale(0.03f).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(angle) - 90);
-  camera.translation = Vector3(-entity->position.x, -entity->position.y, 0.0);
-  char_shader->set_mat4("view", a);
+  camera.translation                          = Vector3(-entity->position.x, -entity->position.y, 0.0);
+
+  entities[player->entity].render_data->color = player->can_take_damage_tick >= SDL_GetTicks() ? BLUE : BLACK;
 }
 
 Vector2 closest_point_triangle(Triangle triangle, Vector2 p)
@@ -698,7 +691,7 @@ bool out_of_map(Vector2* closest_point, Map* map, Vector2 position)
   return true;
 }
 
-void detect_collision(Map* map, Vector2& position)
+void detect_collision_out_of_bounds(Map* map, Vector2& position)
 {
   Vector2 closest_point = {};
   if (out_of_map(&closest_point, map, position))
@@ -712,31 +705,36 @@ static inline bool on_cooldown(Ability ability, u32 tick)
   return tick < ability.cooldown;
 }
 
-void handle_abilities(Camera camera, Entities* entities, InputState* input, Entity* entity, u32 tick)
+void handle_abilities(Camera camera, InputState* input, Hero* player, u32 tick)
 {
-  if (input->is_key_pressed('q') && !on_cooldown(entity->abilities[0], tick))
+  if (input->is_key_pressed('q') && !on_cooldown(player->abilities[0], tick))
   {
-    entity->abilities[0].use_ability(&camera, entities, input, entity);
-    entity->abilities[0].cooldown = tick + entity->abilities[0].cooldown_ticks;
-    logger.info("Using %s", entity->abilities[0].name);
+    Ability* ability = &player->abilities[0];
+    ability->use_ability(&camera, input, player);
+    ability->cooldown = tick + ability->cooldown_ticks;
+    logger.info("Using %s", ability->name);
   }
 }
 
-void use_ability_fireball(Camera* camera, Entities* entities, InputState* input, Entity* entity)
+void use_ability_fireball(Camera* camera, InputState* input, Hero* player)
 {
-  EntityNode* en        = (EntityNode*)sta_pool_alloc(&entities->pool);
-  Entity*     e         = &en->entity;
-  f32         ms        = 0.03;
+  // ToDo this can reuse dead fireballs?
+  RESIZE_ARRAY(fireballs, u32, fireball_count, fireball_capacity);
 
-  f32*        mouse_pos = input->mouse_position;
-  f32         angle     = atan2f(mouse_pos[1] - entity->position.y - camera->translation.y, mouse_pos[0] - entity->position.x - camera->translation.x);
-  e->id                 = entities->add(en);
-  e->position           = entity->position;
-  e->velocity           = Vector2(cosf(angle) * ms, sinf(angle) * ms);
-  e->buffer_id          = fireball_id;
-  e->shader             = fireball_shader;
-  e->scale              = 0.05f;
-  e->r                  = 0.03f;
+  u32 entity_index            = get_new_entity();
+  fireballs[fireball_count++] = entity_index;
+  Entity* e                   = &entities[entity_index];
+  e->type                     = ENTITY_PLAYER_PROJECTILE;
+
+  f32    ms                   = 0.03;
+
+  Entity player_entity        = entities[player->entity];
+  e->position                 = entities[player->entity].position;
+  e->velocity                 = Vector2(cosf(player_entity.angle) * ms, sinf(player_entity.angle) * ms);
+  e->angle                    = player_entity.angle;
+  e->r                        = 0.03f;
+  e->render_data              = &fireball_render_data;
+  e->hp                       = 1;
 }
 
 void read_abilities(Ability* abilities)
@@ -746,15 +744,17 @@ void read_abilities(Ability* abilities)
   abilities[0].cooldown       = 0;
   abilities[0].use_ability    = use_ability_fireball;
 }
-f32 tile_position_to_game_centered(u8 x)
+f32 tile_position_to_game(u8 x)
 {
   return (tile_size * (f32)x) * 2.0f - 1.0f;
 }
 
 void handle_enemy_movement(Map* map, Enemy* enemy, Vector2 target_position, u32 tick_difference)
 {
-  const static f32 ms = 0.005f * ((f32)tick_difference / 16.0f);
-  find_path(&enemy->path, map, target_position, enemy->entity.position);
+  const static f32 ms     = 0.005f * ((f32)tick_difference / 16.0f);
+  Entity*          entity = &entities[enemy->entity];
+  enemy->path.path_count  = 0;
+  find_path(&enemy->path, map, target_position, entity->position);
   Path path = enemy->path;
   if (path.path_count == 1)
   {
@@ -762,12 +762,13 @@ void handle_enemy_movement(Map* map, Enemy* enemy, Vector2 target_position, u32 
   }
 
   u32     path_idx           = 2;
-  Vector2 curr               = enemy->entity.position;
+  Vector2 prev_position      = entity->position;
+  Vector2 curr               = entity->position;
   f32     movement_remaining = ms;
   while (true)
   {
-    f32 x = tile_position_to_game_centered(path.path[path_idx][0]);
-    f32 y = tile_position_to_game_centered(path.path[path_idx][1]);
+    f32 x = tile_position_to_game(path.path[path_idx][0]);
+    f32 y = tile_position_to_game(path.path[path_idx][1]);
     path_idx++;
     if (compare_float(x, curr.x) && compare_float(y, curr.y))
     {
@@ -782,19 +783,20 @@ void handle_enemy_movement(Map* map, Enemy* enemy, Vector2 target_position, u32 
       Vector2 velocity(point.x - curr.x, point.y - curr.y);
       velocity.normalize();
       velocity.scale(movement_remaining);
-      curr.x                 = curr.x + velocity.x;
-      curr.y                 = curr.y + velocity.y;
-      enemy->entity.position = curr;
-      return;
+      entity->velocity.x = velocity.x;
+      entity->velocity.y = velocity.y;
+      break;
     }
     // convert current position to curr
     movement_remaining -= moved;
     curr = point;
     if (path_idx >= path.path_count)
     {
-      return;
+      break;
     }
   }
+  Vector2 v(curr.x - prev_position.x, curr.y - prev_position.y);
+  entity->angle = atan2f(v.y, v.x);
 }
 struct Sphere
 {
@@ -810,181 +812,158 @@ bool sphere_sphere_collision(Sphere s0, Sphere s1)
   return distance_between_centers_squared <= radii_diff;
 }
 
-void update_enemies(Map* map, Enemies* enemies, Entity* player, u32 tick_difference)
-{
-  EnemyNode* node = enemies->head;
-  EnemyNode* prev = 0;
-
-  Sphere     player_sphere;
-  player_sphere.r        = player->r;
-  player_sphere.position = player->position;
-
-  while (node)
-  {
-    if (node->enemy.entity.hp == 0)
-    {
-      if (prev)
-      {
-        prev->next = node->next;
-      }
-      else
-      {
-        enemies->head = node->next;
-      }
-      EnemyNode* new_node = node->next;
-      sta_pool_free(&enemies->pool, (u64)node);
-      node = new_node;
-      continue;
-    }
-
-    handle_enemy_movement(map, &node->enemy, player->position, tick_difference);
-
-    Sphere enemy_sphere;
-    enemy_sphere.r        = node->enemy.entity.r;
-    enemy_sphere.position = node->enemy.entity.position;
-
-    if (sphere_sphere_collision(player_sphere, enemy_sphere))
-    {
-      u32 tick = SDL_GetTicks();
-      if (tick >= player->can_take_damage_tick)
-      {
-        player->can_take_damage_tick = tick + player->damage_taken_cd;
-        player->hp -= 1;
-        logger.info("Took damage, hp: %d", player->hp);
-      }
-    }
-
-    prev = node;
-    node = node->next;
-  }
-}
-
-void render_enemies(Renderer* renderer, Enemies* enemies, Camera camera)
-{
-  EnemyNode* node = enemies->head;
-  while (node)
-  {
-
-    Entity* entity = &node->enemy.entity;
-    entity->shader.use();
-    Color green = BLUE;
-    entity->shader.set_float4f("color", (float*)&green);
-    Mat44 pos = {};
-    pos.identity();
-    entity->shader.set_mat4("projection", pos);
-    pos = pos.scale(entity->scale).rotate_x(90).translate(camera.translation).translate(Vector3(entity->position.x, entity->position.y, 0));
-    entity->shader.set_mat4("view", pos);
-    renderer->render_buffer(node->enemy.entity.buffer_id);
-
-    Color   red = RED;
-    Vector2 position(entity->position.x + camera.translation.x, entity->position.y + camera.translation.y);
-    renderer->draw_circle(position, entity->r, 1, red);
-
-#if DEBUG
-    Path path = node->enemy.path;
-    for (u32 i = 0; i < path.path_count - 1; i++)
-    {
-
-      f32 x0 = tile_position_to_game_centered(path.path[i][0]) + camera.translation.x;
-      f32 y0 = tile_position_to_game_centered(path.path[i][1]) + camera.translation.y;
-      f32 x1 = tile_position_to_game_centered(path.path[i + 1][0]) + camera.translation.x;
-      f32 y1 = tile_position_to_game_centered(path.path[i + 1][1]) + camera.translation.y;
-      renderer->draw_line(x0, y0, x1, y1, 4, RED);
-    }
-
-#endif
-
-    node = node->next;
-  }
-}
-
-bool handle_entity_collision(Entity* entity, Enemies* enemies)
-{
-  EnemyNode* enemy = enemies->head;
-  Sphere     entity_bb;
-  entity_bb.position = entity->position;
-  entity_bb.r        = entity->r;
-  while (enemy)
-  {
-
-    Sphere enemy_bb;
-    enemy_bb.position = enemy->enemy.entity.position;
-    enemy_bb.r        = enemy->enemy.entity.r;
-
-    if (sphere_sphere_collision(entity_bb, enemy_bb))
-    {
-      score += 100;
-      enemy->enemy.entity.hp = 0;
-      return true;
-    }
-    enemy = enemy->next;
-  }
-  return false;
-}
-
-void update_entities(Entities* entities, Enemies* enemies)
-{
-  EntityNode* node = entities->head;
-  EntityNode* prev = 0;
-  while (node)
-  {
-    Entity* entity = &node->entity;
-    entity->position.x += entity->velocity.x;
-    entity->position.y += entity->velocity.y;
-
-    Vector2 closest_point = {};
-    if (handle_entity_collision(entity, enemies) || out_of_map(&closest_point, &map, entity->position))
-    {
-      if (prev)
-      {
-        prev->next = node->next;
-      }
-      else
-      {
-        entities->head = 0;
-      }
-
-      sta_pool_free(&entities->pool, (u64)entity);
-    }
-
-    prev = node;
-    node = node->next;
-  }
-}
-
-void render_entities(Renderer* renderer, Entities* entities, Camera camera)
-{
-  EntityNode* node = entities->head;
-  while (node)
-  {
-    Entity entity = node->entity;
-    entity.shader.use();
-    Mat44 m = {};
-    m.identity();
-    entity.shader.set_mat4("projection", m);
-
-    m           = m.scale(entity.scale);
-    m           = m.translate(camera.translation).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
-    Color green = GREEN;
-    entity.shader.set_float4f("color", (float*)&green);
-    entity.shader.set_mat4("view", m);
-    renderer->render_buffer(entity.buffer_id);
-
-    renderer->draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r, 1, RED);
-
-    node = node->next;
-  }
-}
-
 #define SHOULD_SPAWN(times, count, tick) (times[count] <= tick)
 
-void spawn_enemies(Wave* wave, Map* map, Enemies* enemies, u32 tick)
+void spawn_enemies(Wave* wave, Map* map, u32 tick)
 {
   u32 spawn_count = __builtin_popcount(wave->spawn_count);
   while (wave->enemy_count > spawn_count && SHOULD_SPAWN(wave->spawn_times, spawn_count, tick))
   {
-    wave->spawn_count |= (1 << ++spawn_count);
-    enemies->spawn(map, wave->spawn_times[spawn_count - 1]);
+    wave->enemies_alive++;
+    wave->spawn_count |= spawn_count == 0 ? 1 : (1 << spawn_count);
+    spawn(&wave->enemies[spawn_count], map, wave->spawn_times[spawn_count], spawn_count);
+    Entity* e = &entities[wave->enemies[spawn_count].entity];
+    printf("Spawning %d at %f,%f\n", spawn_count, e->position.x, e->position.y);
+    spawn_count++;
+  }
+}
+
+void update_enemies(Map* map, Wave* wave, Hero* player, u32 tick_difference, u32 tick)
+{
+
+  Sphere player_sphere;
+
+  player_sphere.r        = entities[player->entity].r;
+  player_sphere.position = entities[player->entity].position;
+
+  // check if we spawn
+  spawn_enemies(wave, map, tick);
+
+  Vector2 player_position = entities[player->entity].position;
+  u32     spawn_count     = __builtin_popcount(wave->spawn_count);
+  for (u32 i = 0; i < spawn_count; i++)
+  {
+    Enemy*  enemy  = &wave->enemies[i];
+    Entity* entity = &entities[enemy->entity];
+    if (entity->hp > 0)
+    {
+      // if alive update path
+      // check attack
+      handle_enemy_movement(map, enemy, player_position, tick_difference);
+      Sphere enemy_sphere;
+      enemy_sphere.r        = entity->r;
+      enemy_sphere.position = entity->position;
+
+      if (sphere_sphere_collision(player_sphere, enemy_sphere))
+      {
+        u32 tick = SDL_GetTicks();
+        if (tick >= player->can_take_damage_tick)
+        {
+          player->can_take_damage_tick = tick + player->damage_taken_cd;
+          entities[player->entity].hp -= 1;
+          logger.info("Took damage, hp: %d %d", entities[player->entity].hp, enemy->entity);
+        }
+      }
+    }
+  }
+}
+
+void handle_collision(Entity* e1, Entity* e2, Wave* wave)
+{
+  if (e1->type == ENTITY_ENEMY && e2->type == ENTITY_PLAYER_PROJECTILE)
+  {
+    score += 100;
+    e1->hp = 0;
+    e2->hp = 0;
+    wave->enemies_alive -= 1;
+  }
+  if (e1->type == ENTITY_ENEMY && e2->type == ENTITY_ENEMY)
+  {
+    // get difference in position to get the vector from both centers
+    //  then normalize that vector and multiply it by the radii, then subtract half of it from both
+    Vector2 diff(e1->position.x - e2->position.x, e1->position.y - e2->position.y);
+    diff.normalize();
+    diff.scale((e1->r + e2->r + 0.001f) * 0.5f);
+    // e1->position.x += diff.x;
+    // e1->position.y += diff.y;
+    // e2->position.x -= diff.x;
+    // e2->position.y -= diff.y;
+  }
+}
+
+void update_entities(Entity* entities, u32 entity_count, Wave* wave)
+{
+
+  for (u32 i = 0; i < entity_count; i++)
+  {
+
+    Entity* entity = &entities[i];
+    if (entity->hp > 0)
+    {
+      entity->position.x += entity->velocity.x;
+      entity->position.y += entity->velocity.y;
+      Vector2 closest_point = {};
+      if (out_of_map(&closest_point, &map, entity->position))
+      {
+        if (entity->type == ENTITY_PLAYER_PROJECTILE)
+        {
+          entity->hp = 0;
+        }
+        entity->position = closest_point;
+      }
+    }
+  }
+  for (u32 i = 0; i < entity_count - 1; i++)
+  {
+    Entity* e1 = &entities[i];
+    if (e1->hp == 0)
+    {
+      continue;
+    }
+    Sphere e1_sphere;
+    e1_sphere.r        = e1->r;
+    e1_sphere.position = e1->position;
+    for (u32 j = i + 1; j < entity_count; j++)
+    {
+      Entity* e2 = &entities[j];
+      if (e2->hp == 0)
+      {
+        continue;
+      }
+      Sphere e2_sphere;
+      e2_sphere.r        = e2->r;
+      e2_sphere.position = e2->position;
+      if (sphere_sphere_collision(e1_sphere, e2_sphere))
+      {
+        handle_collision(e1, e2, wave);
+        if (e1->hp == 0)
+        {
+          break;
+        }
+      }
+    }
+  }
+}
+
+void render_entities(Renderer* renderer, Camera camera)
+{
+  for (u32 i = 0; i < entity_count; i++)
+  {
+    Entity entity = entities[i];
+    if (entity.hp > 0)
+    {
+      EntityRenderData* render_data = entity.render_data;
+      render_data->shader.use();
+      Mat44 m = {};
+      m.identity();
+
+      m = m.scale(render_data->scale).rotate_x(90).rotate_z(RADIANS_TO_DEGREES(entity.angle) - 90);
+      m = m.translate(camera.translation).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
+      render_data->shader.set_float4f("color", (float*)&render_data->color);
+      render_data->shader.set_mat4("view", m);
+      renderer->render_buffer(render_data->buffer_id);
+      renderer->draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r, 1, RED);
+    }
   }
 }
 
@@ -1025,11 +1004,19 @@ bool parse_wave_from_file(Wave* wave, const char* filename)
   assert(lines.count > 1 && "Only one line in wave file?");
   wave->enemy_count = parse_int_from_string(lines.strings[0]);
   assert(wave->enemy_count + 1 == lines.count && "Mismatch in wave file, expected x enemies in wave and got y");
-  wave->spawn_count = 0;
-  wave->spawn_times = sta_allocate_struct(u32, wave->enemy_count);
+  wave->spawn_count   = 0;
+  wave->enemies_alive = 0;
+  wave->spawn_times   = sta_allocate_struct(u32, wave->enemy_count);
+  wave->enemies       = sta_allocate_struct(Enemy, wave->enemy_count);
   for (u32 i = 0; i < wave->enemy_count; i++)
   {
-    wave->spawn_times[i] = parse_int_from_string(lines.strings[i + 1]);
+    wave->spawn_times[i]         = parse_int_from_string(lines.strings[i + 1]);
+    Enemy* enemy                 = &wave->enemies[i];
+    u32    entity                = get_new_entity();
+    entities[entity].render_data = &enemy_render_data;
+    entities[entity].type        = ENTITY_ENEMY;
+
+    enemy->entity                = entity;
   }
   logger.info("Read wave from '%s', got %d enemies", filename, wave->enemy_count);
 
@@ -1143,6 +1130,9 @@ int main()
   u32    model_count;
   parse_models_from_files(&models, model_count, "./data/models.txt");
 
+  entities  = (Entity*)sta_allocate_struct(Entity, entity_capacity);
+  fireballs = (u32*)sta_allocate_struct(u32, fireball_capacity);
+
   AFont font;
   font.parse_ttf("./data/fonts/OpenSans-Regular.ttf");
   const int          screen_width  = 620;
@@ -1189,6 +1179,18 @@ int main()
 
   enemy_buffer_id = renderer.create_buffer_indices(enemy_model->vertex_data_size * enemy_model->vertex_count, enemy_model->vertex_data, enemy_model->index_count, enemy_model->indices, map_attributes,
                                                    ArrayCount(map_attributes));
+  enemy_render_data.buffer_id            = enemy_buffer_id;
+  enemy_render_data.scale                = 0.02f;
+  enemy_render_data.model                = enemy_model;
+  enemy_render_data.shader               = enemy_shader;
+  enemy_render_data.color                = BLUE;
+  enemy_render_data.animation_tick_start = 0;
+
+  fireball_render_data.buffer_id         = fireball_id;
+  fireball_render_data.shader            = fireball_shader;
+  fireball_render_data.scale             = 0.05f;
+  fireball_render_data.color             = GREEN;
+  fireball_render_data.model             = fireball;
 
   Shader map_shader("./shaders/model.vert", "./shaders/model.frag");
   Mat44  ident = {};
@@ -1218,27 +1220,31 @@ int main()
       renderer.create_buffer_indices(model->vertex_data_size * model->vertex_count, model->vertex_data, model->index_count, model->indices, animated_attributes, ArrayCount(animated_attributes));
   Shader  char_shader("./shaders/animation.vert", "./shaders/animation.frag");
   Vector2 char_pos(0.5, 0.5);
-  Entity  entity              = {};
-  entity.model                = model;
-  entity.position             = char_pos;
-  entity.animation_tick_start = 0;
-  entity.id                   = 0;
-  entity.velocity             = Vector2(0, 0);
-  entity.can_take_damage_tick = 0;
-  entity.damage_taken_cd      = 500;
-  entity.r                    = 0.04f;
-  entity.hp                   = 3;
-  read_abilities(entity.abilities);
 
-  Camera   camera   = {};
-  Entities entities = {};
-  entities.head     = 0;
-  sta_pool_init(&entities.pool, sta_allocate(sizeof(EntityNode) * 100), sizeof(EntityNode), 100);
-  Enemies enemies = {};
-  enemies.head    = 0;
-  sta_pool_init(&enemies.pool, sta_allocate(sizeof(EnemyNode) * 100), sizeof(EnemyNode), 100);
+  Hero    player                            = {};
 
-  Wave wave = {};
+  u32     entity_index                      = get_new_entity();
+  Entity* entity                            = &entities[entity_index];
+  player.entity                             = entity_index;
+  entity->type                              = ENTITY_PLAYER;
+  entity->render_data                       = sta_allocate_struct(EntityRenderData, 1);
+  entity->render_data->model                = model;
+  entity->render_data->color                = BLACK;
+  entity->render_data->shader               = char_shader;
+  entity->render_data->buffer_id            = entity_buffer;
+  entity->render_data->scale                = 0.03f;
+  entity->position                          = char_pos;
+  entity->render_data->animation_tick_start = 0;
+  entity->velocity                          = Vector2(0, 0);
+  player.can_take_damage_tick               = 0;
+  player.damage_taken_cd                    = 500;
+  entity->r                                 = 0.04f;
+  entity->hp                                = 3;
+  read_abilities(player.abilities);
+
+  Camera camera = {};
+
+  Wave   wave   = {};
   parse_wave_from_file(&wave, "./data/wave01.txt");
   map.init_map();
 
@@ -1266,7 +1272,7 @@ int main()
         break;
       }
       renderer.clear_framebuffer();
-      if (entity.hp == 0)
+      if (entities[player.entity].hp == 0)
       {
         // ToDo Game over
         return 1;
@@ -1308,7 +1314,7 @@ int main()
 
         ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 0, 0, 255));
         ImGui::Text("TIMER: %d ", game_running_ticks);
-        ImGui::Text("HP: %d ", entity.hp);
+        ImGui::Text("HP: %d ", entities[player.entity].hp);
         ImGui::Text("Score:%d", (i32)score);
         ImGui::PopStyleColor();
 
@@ -1316,15 +1322,14 @@ int main()
         ImGui::PopFont();
         ImGui::End();
 
-        handle_abilities(camera, &entities, &input_state, &entity, ticks);
-        handle_movement(camera, &entity, &char_shader, &input_state, ticks, tick_difference);
-        update_entities(&entities, &enemies);
-        spawn_enemies(&wave, &map, &enemies, game_running_ticks);
+        handle_abilities(camera, &input_state, &player, ticks);
+        handle_player_movement(camera, &player, &char_shader, &input_state, ticks, tick_difference);
+        update_entities(entities, entity_count, &wave);
 
-        update_enemies(&map, &enemies, &entity, tick_difference);
-        detect_collision(&map, entity.position);
+        update_enemies(&map, &wave, &player, tick_difference, game_running_ticks);
+
         u32 spawn_count = __builtin_popcount(wave.spawn_count);
-        if (spawn_count == wave.enemy_count && enemies.head == 0)
+        if (spawn_count == wave.enemy_count && wave.enemies_alive == 0)
         {
           // ToDo this should get you back to main menu or game over screen or smth
           logger.info("Wave is over!");
@@ -1343,17 +1348,7 @@ int main()
         // render map
         renderer.bind_texture(map_shader, "texture1", texture);
         renderer.render_buffer(map_buffer);
-        render_entities(&renderer, &entities, camera);
-        render_enemies(&renderer, &enemies, camera);
-
-        // render entity
-
-        char_shader.use();
-        Color color = entity.can_take_damage_tick >= SDL_GetTicks() ? BLUE : BLACK;
-        char_shader.set_float4f("color", (float*)&color);
-        renderer.render_buffer(entity_buffer);
-
-        renderer.draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r * 2, 1, RED);
+        render_entities(&renderer, camera);
       }
       else if (ui_state == UI_STATE_MAIN_MENU)
       {
