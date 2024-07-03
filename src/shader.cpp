@@ -17,6 +17,18 @@ static bool test_shader_compilation(unsigned int id)
   return true;
 }
 
+static GLint get_location(GLuint id, const char* name, const char* shader_name)
+{
+
+  GLint location = sta_glGetUniformLocation(id, name);
+  if (location == -1)
+  {
+    logger.error("Couldn't find uniform '%s' in shader '%s'", name, shader_name);
+    assert(!"Couldn't find uniform!");
+  }
+  return location;
+}
+
 static bool test_program_linking(unsigned int id)
 {
   int  success;
@@ -35,21 +47,21 @@ static bool test_program_linking(unsigned int id)
 
 void Shader::set_bool(const char* name, bool value)
 {
-  sta_glUniform1i(sta_glGetUniformLocation(this->id, name), (int)value);
+  sta_glUniform1i(get_location(this->id, name, this->name), (int)value);
 }
 
 void Shader::set_float4f(const char* name, float f[4])
 {
-  sta_glUniform4fv(sta_glGetUniformLocation(this->id, name), 1, &f[0]);
+  sta_glUniform4fv(get_location(this->id, name, this->name), 1, &f[0]);
 }
 void Shader::set_int(const char* name, int value)
 {
-  sta_glUniform1i(sta_glGetUniformLocation(this->id, name), (int)value);
+  sta_glUniform1i(get_location(this->id, name, this->name), (int)value);
 }
 
 void Shader::set_float(const char* name, float value)
 {
-  sta_glUniform1f(sta_glGetUniformLocation(this->id, name), value);
+  sta_glUniform1f(get_location(this->id, name, this->name), value);
 }
 
 void Shader::set_mat4(const char* name, Mat44 m)
@@ -64,7 +76,7 @@ void Shader::set_mat4(const char* name, Mat44* v, int count)
 void Shader::set_mat4(const char* name, float* v, int count)
 {
 
-  sta_glUniformMatrix4fv(sta_glGetUniformLocation(this->id, name), count, GL_FALSE, v);
+  sta_glUniformMatrix4fv(get_location(this->id, name, this->name), count, GL_FALSE, v);
 }
 
 void Shader::use()

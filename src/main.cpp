@@ -829,7 +829,7 @@ void spawn_enemies(Wave* wave, Map* map, u32 tick)
     wave->spawn_count |= spawn_count == 0 ? 1 : (1 << spawn_count);
     spawn(&wave->enemies[spawn_count], map, wave->spawn_times[spawn_count], spawn_count);
     Entity* e = &entities[wave->enemies[spawn_count].entity];
-    printf("Spawning %d at %f,%f\n", spawn_count, e->position.x, e->position.y);
+    logger.info("Spawning enemy %d at (%f, %f)\n", spawn_count, e->position.x, e->position.y);
     spawn_count++;
   }
 }
