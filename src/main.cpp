@@ -602,7 +602,7 @@ void   handle_player_movement(Renderer* renderer, Camera& camera, Hero* player, 
 
   camera.translation                            = Vector3(-entity->position.x, -entity->position.y, 0.0);
 
-  entities[player->entity].render_data->texture = renderer->get_texture(player->can_take_damage_tick >= SDL_GetTicks() ? "./data/blue.tga" : "./data/black.tga");
+  entities[player->entity].render_data->texture = renderer->get_texture(player->can_take_damage_tick >= SDL_GetTicks() ? "blue" : "black");
 }
 
 Vector2 closest_point_triangle(Triangle triangle, Vector2 p)
@@ -1150,11 +1150,11 @@ int main()
 
   init_imgui(renderer.window, renderer.context);
 
-  fireball_id       = renderer.get_buffer_by_filename("./data/fireball.obj");
+  fireball_id       = renderer.get_buffer_by_filename("fireball");
   fireball_shader   = *renderer.get_shader_by_name("model");
 
   enemy_shader      = fireball_shader;
-  enemy_buffer_id   = renderer.get_buffer_by_filename("./data/enemy.obj");
+  enemy_buffer_id   = renderer.get_buffer_by_filename("enemy");
 
   Shader map_shader = *renderer.get_shader_by_name("model");
   Mat44  ident      = {};
@@ -1163,12 +1163,12 @@ int main()
   map_shader.set_mat4("view", ident);
 
   map                   = {};
-  u32     map_buffer    = renderer.get_buffer_by_filename("./data/map_with_hole.obj");
+  u32     map_buffer    = renderer.get_buffer_by_filename("map");
 
-  u32     texture       = renderer.get_texture("./data/blizzard.tga");
+  u32     texture       = renderer.get_texture("blizzard");
 
-  Model*  model         = renderer.get_model_by_filename("./data/model.glb");
-  u32     entity_buffer = renderer.get_buffer_by_filename("./data/model.glb");
+  Model*  model         = renderer.get_model_by_filename("model");
+  u32     entity_buffer = renderer.get_buffer_by_filename("model");
 
   Shader  char_shader   = *renderer.get_shader_by_name("animation");
   Vector2 char_pos(0.5, 0.5);
@@ -1194,7 +1194,7 @@ int main()
   Wave wave       = {};
   parse_wave_from_file(&wave, "./data/wave01.txt");
 
-  map.init_map(renderer.get_model_by_filename("./data/map_with_hole.obj"));
+  map.init_map(renderer.get_model_by_filename("map"));
 
   u32      ticks        = 0;
   u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0, last_tick = 0;

@@ -451,6 +451,7 @@ u32 Renderer::get_texture(const char* name)
       return i;
     }
   }
+  this->logger->error("Couldn't find texture '%s'", name);
   assert(!"Didn't find texture!");
 }
 
@@ -548,23 +549,27 @@ bool Renderer::load_models_from_files(const char* file_location)
   }
   split_buffer_by_newline(&lines, &buffer);
 
-  this->models      = sta_allocate_struct(Model, lines.count);
-  this->model_count = lines.count;
-  for (u32 i = 0; i < lines.count; i++)
+  this->model_count = parse_int_from_string(lines.strings[0]);
+
+  this->models      = sta_allocate_struct(Model, this->model_count);
+  for (u32 i = 0, string_index = 1; i < this->model_count; i++)
 
   {
     // ToDo free the loaded memory?
-    char*               model_file_location = lines.strings[i];
-    ModelFileExtensions extension           = get_model_file_extension(model_file_location);
-    Model*              model               = &this->models[i];
-    model->name                             = model_file_location;
-    logger->info("Reading model %s", model_file_location);
+    char*               model_name     = lines.strings[string_index++];
+    char*               model_location = lines.strings[string_index++];
+    ModelFileExtensions extension      = get_model_file_extension(model_location);
+    Model*              model          = &this->models[i];
+    model->name                        = model_name;
     switch (extension)
     {
     case MODEL_FILE_OBJ:
     {
       ModelData model_data = {};
-      sta_parse_wavefront_object_from_file(&model_data, model_file_location);
+      if (!sta_parse_wavefront_object_from_file(&model_data, model_location))
+      {
+        this->logger->error("Failed to parse obj from '%s'", model_location);
+      };
 
       model->index_count      = model_data.vertex_count;
       model->vertex_count     = model_data.vertex_count;
@@ -577,7 +582,10 @@ bool Renderer::load_models_from_files(const char* file_location)
     case MODEL_FILE_GLB:
     {
       AnimationModel model_data = {};
-      gltf_parse(&model_data, model_file_location);
+      if (!gltf_parse(&model_data, model_location))
+      {
+        this->logger->error("Failed to read glb from '%s'", model_location);
+      }
       model->indices                  = model_data.indices;
       model->index_count              = model_data.index_count;
       model->vertex_count             = model_data.vertex_count;
@@ -678,34 +686,28 @@ bool Renderer::load_textures_from_files(const char* file_location)
   }
   split_buffer_by_newline(&lines, &buffer);
 
-  // ToDo increase?
-  const u32 initial_texture_capacity = 4;
-  if (this->texture_capacity == 0)
-  {
-    this->texture_capacity = initial_texture_capacity;
-    this->textures         = sta_allocate_struct(Texture, initial_texture_capacity);
-  }
+  this->texture_count = parse_int_from_string(lines.strings[0]);
+  this->textures      = sta_allocate_struct(Texture, texture_count);
 
-  for (u32 i = 0; i < lines.count; i++)
+  for (u32 i = 0, string_index = 1; i < this->texture_count; i++)
   {
     Texture    texture = {};
     TargaImage image   = {};
-    texture.name       = lines.strings[i];
+    texture.name       = lines.strings[string_index++];
 
-    sta_targa_read_from_file_rgba(&image, texture.name);
+    sta_targa_read_from_file_rgba(&image, lines.strings[string_index++]);
     texture.id   = this->create_texture(image.width, image.height, image.data);
     texture.unit = this->get_free_texture_unit();
     sta_deallocate(image.data, image.width * image.height * 4);
 
-    RESIZE_ARRAY(this->textures, Texture, this->texture_count, this->texture_capacity);
-    this->textures[this->texture_count++] = texture;
+    this->textures[i] = texture;
   }
 
-  logger->info("Found %d textures\n", this->texture_count);
+  logger->info("Found %d textures", this->texture_count);
   for (u32 i = 0; i < this->texture_count; i++)
   {
     Texture texture = this->textures[i];
-    logger->info("Got texture: '%s' %d, %d\n", texture.name, texture.id, texture.unit);
+    logger->info("Got texture: '%s' %d, %d", texture.name, texture.id, texture.unit);
   }
 
   // ToDo free the line memory

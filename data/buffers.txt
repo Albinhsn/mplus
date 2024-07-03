@@ -1,27 +1,27 @@
 5
-./data/model.glb
+model
 5
 3 0
 2 0 
 3 0 
 4 0 
 4 1
-./data/fireball.obj
+fireball
 3
 3 0 
 2 0
 3 0
-./data/enemy.obj
+enemy
 3
 3 0
 2 0
 3 0 
-./data/map_with_hole.obj
+map
 3
 3 0
 2 0 
 3 0
-./data/pillar.obj
+pillar
 3
 3 0
 2 0 

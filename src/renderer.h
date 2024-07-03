@@ -62,7 +62,6 @@ public:
   Texture*       textures;
   u32            texture_count;
   u64            used_texture_units;
-  u32            texture_capacity;
   AFont*         font;
   Shader         text_shader;
   Shader         circle_shader;
@@ -96,9 +95,8 @@ public:
     this->init_circle_buffer();
     this->index_buffers_cap   = 0;
     this->index_buffers_count = 0;
-    texture_count             = 0;
-    used_texture_units        = 0;
-    texture_capacity          = 0;
+    this->texture_count             = 0;
+    this->used_texture_units        = 0;
   }
 
   void clear_framebuffer();

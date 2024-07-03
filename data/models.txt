@@ -1,5 +1,11 @@
+5
+map
 ./data/map_with_hole.obj
+fireball
 ./data/fireball.obj
+enemy
 ./data/enemy.obj
+model
 ./data/model.glb
+pillar
 ./data/pillar.obj
