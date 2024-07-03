@@ -326,6 +326,7 @@ bool  sta_append_to_file(const char* filename, const char* message);
 bool  sta_parse_wavefront_object_from_file(ModelData* model, const char* filename);
 bool  sta_convert_obj_to_model(const char* input_filename, const char* output_filename);
 
+int parse_int_from_string(const char* s);
 int   parse_int_from_string(Buffer* buffer);
 float parse_float_from_string(Buffer* buffer);
 void  skip_whitespace(Buffer* buffer);

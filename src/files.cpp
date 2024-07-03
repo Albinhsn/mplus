@@ -36,6 +36,14 @@ int Buffer::parse_int()
   return sign ? -value : value;
 }
 
+int parse_int_from_string(const char* s)
+{
+  Buffer buffer = {};
+  buffer.index  = 0;
+  buffer.len    = strlen(s);
+  buffer.buffer = (char*)s;
+  return parse_int_from_string(&buffer);
+}
 int parse_int_from_string(Buffer* buffer)
 {
   if (buffer->is_out_of_bounds())
@@ -364,6 +372,7 @@ bool sta_read_file(Buffer* buffer, const char* fileName)
   fileSize                 = fseek(filePtr, 0, SEEK_END);
   fileSize                 = ftell(filePtr);
 
+  buffer->index            = 0;
   buffer->len              = fileSize;
   buffer->buffer           = (char*)sta_allocate(fileSize + 1);
   buffer->buffer[fileSize] = '\0';
@@ -371,7 +380,7 @@ bool sta_read_file(Buffer* buffer, const char* fileName)
   count = fread(buffer->buffer, 1, fileSize, filePtr);
   if (count != fileSize)
   {
-    free(buffer->buffer);
+    sta_deallocate(buffer->buffer, buffer->len);
     return false;
   }
 
@@ -1457,7 +1466,7 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
 
       model->vertices[index].vertex = cast_vec4_to_vec3(obj.vertices[data.vertex_idx - 1]);
       model->vertices[index].uv     = cast_vec3_to_vec2(obj.texture_coordinates[data.texture_idx - 1]);
-      model->vertices[index].uv.y  = -model->vertices[index].uv.y;
+      model->vertices[index].uv.y   = -model->vertices[index].uv.y;
 
       model->vertices[index].normal = obj.normals[data.normal_idx - 1];
     }

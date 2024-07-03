@@ -1,3 +1,5 @@
+#include "common.h"
+#include "files.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <stdio.h>
@@ -985,6 +987,59 @@ void debug_render_map_grid(Renderer* renderer, Map* map, Camera camera)
   }
 }
 
+struct StringArray
+{
+  char** strings;
+  u32    count;
+  u32    capacity;
+};
+
+void split_buffer_by_newline(StringArray* array, Buffer* buffer)
+{
+  array->count    = 0;
+  array->capacity = 2;
+  array->strings  = sta_allocate_struct(char*, array->capacity);
+  while (!buffer->is_out_of_bounds())
+  {
+
+    u64 prev = buffer->index;
+    SKIP(buffer, buffer->current_char() != '\n' || buffer->current_char() == '\0');
+    RESIZE_ARRAY(array->strings, char*, array->count, array->capacity);
+    array->strings[array->count] = (char*)sta_allocate_struct(char, buffer->index - prev + 1);
+    strncpy(array->strings[array->count], &buffer->buffer[prev], buffer->index - prev);
+    array->strings[array->count][buffer->index - prev] = '\0';
+    array->count++;
+    buffer->advance();
+  }
+}
+
+bool parse_wave_from_file(Wave* wave, const char* filename)
+{
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, filename))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+  for (u32 i = 0; i < lines.count; i++)
+  {
+    printf("%s\n", lines.strings[i]);
+  }
+
+  assert(lines.count > 1 && "Only one line in wave file?");
+  wave->enemy_count = parse_int_from_string(lines.strings[0]);
+  assert(wave->enemy_count + 1 == lines.count && "Mismatch in wave file, expected x enemies in wave and got y");
+  wave->spawn_count = 0;
+  wave->spawn_times = sta_allocate_struct(u32, wave->enemy_count);
+  for (u32 i = 0; i < wave->enemy_count; i++)
+  {
+    wave->spawn_times[i] = parse_int_from_string(lines.strings[i + 1]);
+  }
+
+  return true;
+}
+
 int main()
 {
 
@@ -1077,11 +1132,8 @@ int main()
   enemies.head    = 0;
   sta_pool_init(&enemies.pool, sta_allocate(sizeof(EnemyNode) * 100), sizeof(EnemyNode), 100);
 
-  Wave wave                 = {};
-  u32  wave_spawn_times[10] = {100, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000};
-  wave.spawn_times          = &wave_spawn_times[0];
-  wave.enemy_count          = ArrayCount(wave_spawn_times);
-  wave.spawn_count          = 0;
+  Wave wave = {};
+  parse_wave_from_file(&wave, "./data/wave01.txt");
   map.init_map();
 
   u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0;
@@ -1136,16 +1188,22 @@ int main()
         ImGui::Text("FPS: %f", fps * 1000);
         ImGui::End();
 
-        // ToDo render hp and score
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-        ImGui::SetNextWindowPos(ImVec2(center.x, center.y * 0.5f), 0, ImVec2(0.5f, 0.5f));
-        ImGui::Begin("Game ui!", 0, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
+        ImGui::SetNextWindowSize(ImVec2(center.x, center.y));
 
-        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
+        ImGui::Begin("Game ui!", 0, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
+        f32 old_size = ImGui::GetFont()->Scale;
+        ImGui::GetFont()->Scale *= 2;
+        ImGui::PushFont(ImGui::GetFont());
+
+        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 0, 0, 255));
+        ImGui::Text("TIMER: %d ", game_running_ticks);
         ImGui::Text("HP: %d ", entity.hp);
-        ImGui::Text("Score: %d", (i32)score);
+        ImGui::Text("Score:%d", (i32)score);
         ImGui::PopStyleColor();
 
+        ImGui::GetFont()->Scale = old_size;
+        ImGui::PopFont();
         ImGui::End();
 
         handle_abilities(camera, &entities, &input_state, &entity, ticks);
@@ -1189,6 +1247,9 @@ int main()
       }
       else if (ui_state == UI_STATE_MAIN_MENU)
       {
+
+        // ToDo render hp and score
+
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(ImVec2(center.x, center.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
