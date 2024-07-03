@@ -176,10 +176,14 @@ public:
   }
   bool init_log_to_file(const char* filename);
   bool destroy_log_to_file();
-  void log(LoggingLevel level, const char* msg);
+  void log(LoggingLevel level, const char* msg, ...);
+  void info(const char* msg, ...);
+  void warning(const char* msg, ...);
+  void error(const char* msg, ...);
+void log(LoggingLevel level, const char* msg, va_list args);
 
 private:
-  inline void send_log_message(const char* msg, const char* color);
+  inline void send_log_message(const char* msg, const char* color, va_list args);
 };
 typedef struct Logger Logger;
 

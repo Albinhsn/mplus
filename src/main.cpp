@@ -16,9 +16,11 @@
 
 #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
 #define IMGUI_DEFINE_MATH_OPERATORS
+#include "common.cpp"
+
+Logger logger;
 
 #include "platform.h"
-#include "common.cpp"
 #include "sdl.cpp"
 #include "vector.cpp"
 #include "shader.cpp"
@@ -317,7 +319,6 @@ void find_path(Path* path, Map* map, Vector2 needle, Vector2 source)
   path->path_count      = 0;
   while (heap.node_count != 0)
   {
-    // printf("Looking for path!\n");
     HeapNode curr = heap.remove();
     assert(curr.path_count <= curr.path_capacity && "How?");
     u16 curr_pos = curr.path[curr.path_count - 1];
@@ -692,7 +693,7 @@ void handle_abilities(Camera camera, Entities* entities, InputState* input, Enti
   {
     entity->abilities[0].use_ability(&camera, entities, input, entity);
     entity->abilities[0].cooldown = tick + entity->abilities[0].cooldown_ticks;
-    printf("Using %s\n", entity->abilities[0].name);
+    logger.info("Using %s", entity->abilities[0].name);
   }
 }
 
@@ -740,7 +741,6 @@ void handle_enemy_movement(Map* map, Enemy* enemy, Vector2 target_position)
   f32     movement_remaining = ms;
   while (true)
   {
-    // printf("Enemy movement!\n");
     f32 x = tile_position_to_game_centered(path.path[path_idx][0]);
     f32 y = tile_position_to_game_centered(path.path[path_idx][1]);
     path_idx++;
@@ -825,7 +825,7 @@ void update_enemies(Map* map, Enemies* enemies, Entity* player)
       {
         player->can_take_damage_tick = tick + player->damage_taken_cd;
         player->hp -= 1;
-        printf("Took damage! %d\n", player->hp);
+        logger.info("Took damage, hp: %d", player->hp);
       }
     }
 
@@ -996,10 +996,6 @@ bool parse_wave_from_file(Wave* wave, const char* filename)
     return false;
   }
   split_buffer_by_newline(&lines, &buffer);
-  for (u32 i = 0; i < lines.count; i++)
-  {
-    printf("%s\n", lines.strings[i]);
-  }
 
   assert(lines.count > 1 && "Only one line in wave file?");
   wave->enemy_count = parse_int_from_string(lines.strings[0]);
@@ -1010,6 +1006,7 @@ bool parse_wave_from_file(Wave* wave, const char* filename)
   {
     wave->spawn_times[i] = parse_int_from_string(lines.strings[i + 1]);
   }
+  logger.info("Read wave from '%s', got %d enemies", filename, wave->enemy_count);
 
   return true;
 }
@@ -1019,13 +1016,14 @@ int main()
 
   AFont font;
   font.parse_ttf("./data/fonts/OpenSans-Regular.ttf");
-  const int screen_width  = 620;
-  const int screen_height = 480;
-  Renderer  renderer(screen_width, screen_height, &font, 0);
+  const int          screen_width  = 620;
+  const int          screen_height = 480;
+  Renderer           renderer(screen_width, screen_height, &font, 0);
 
-  if (!renderer.load_textures_from_files("./data/textures.txt"))
+  const static char* texture_locations = "./data/textures.txt";
+  if (!renderer.load_textures_from_files(texture_locations))
   {
-    printf("Failed to read textures\n");
+    logger.error("Failed to read textures from '%s'", texture_locations);
     return 1;
   }
 
@@ -1037,9 +1035,10 @@ int main()
 
   init_imgui(renderer.window, renderer.context);
 
-  if (!sta_targa_read_from_file_rgba(&noise, "./data/noise01.tga"))
+  const static char* noise_locations = "./data/noise01.tga";
+  if (!sta_targa_read_from_file_rgba(&noise, noise_locations))
   {
-    printf("Failed to read noise!\n");
+    logger.error("Failed to read noise from '%s'", noise_locations);
     return 1;
   }
 
@@ -1057,6 +1056,7 @@ int main()
   fireball_shader = Shader("./shaders/model2.vert", "./shaders/model2.frag");
 
   enemy_shader    = fireball_shader;
+  // ToDo This should be hoisted
   ModelData enemy_model = {};
   if (!sta_parse_wavefront_object_from_file(&enemy_model, "./data/enemy.obj"))
   {
@@ -1116,16 +1116,14 @@ int main()
   parse_wave_from_file(&wave, "./data/wave01.txt");
   map.init_map();
 
-  u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0;
-  u32      game_running_ticks = 0;
+  u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0;
   f32      fps                = 0.0f;
 
   UI_State ui_state           = UI_STATE_MAIN_MENU;
-
   bool     console            = false;
-
   char     console_buf[1024];
   memset(console_buf, 0, ArrayCount(console_buf));
+
   while (true)
   {
 
@@ -1139,6 +1137,7 @@ int main()
       renderer.clear_framebuffer();
       if (entity.hp == 0)
       {
+        // ToDo Game over
         return 1;
       }
       if (input_state.is_key_pressed('c'))
@@ -1197,7 +1196,7 @@ int main()
         if (spawn_count == wave.enemy_count && enemies.head == 0)
         {
           // ToDo this should get you back to main menu or game over screen or smth
-          printf("YOU WON\n");
+          logger.info("Wave is over!");
           return 0;
         }
 
@@ -1262,7 +1261,7 @@ int main()
       {
         if (input_state.is_key_released(ASCII_RETURN))
         {
-          printf("%s\n", console_buf);
+          logger.info("Released buffer: %s", console_buf);
           memset(console_buf, 0, ArrayCount(console_buf));
         }
         ImGui::Begin("Console!", 0, ImGuiWindowFlags_NoDecoration);

@@ -1,4 +1,5 @@
 #include "common.h"
+#include <cstdarg>
 /*
  =========================================
  =========================================
@@ -256,13 +257,38 @@ void displayProfilingResult()
  =========================================
 */
 
-inline void Logger::send_log_message(const char* msg, const char* color)
+inline void Logger::send_log_message(const char* msg, const char* color, va_list args)
 {
-  fprintf(stderr, "%s%s\n", color, msg);
+  char buffer[512];
+  vsnprintf(buffer, ArrayCount(buffer), msg, args);
+  fprintf(stderr, "%s%s\n", color, buffer);
   if (this->file_ptr)
   {
-    fprintf(this->file_ptr, "%s\n", msg);
+
+    fprintf(this->file_ptr, "%s\n", buffer);
   }
+}
+void Logger::info(const char* msg, ...)
+{
+  va_list args;
+  va_start(args, msg);
+  this->log(LOGGING_LEVEL_INFO, msg, args);
+  va_end(args);
+}
+void Logger::warning(const char* msg, ...)
+{
+  va_list args;
+  va_start(args, msg);
+  this->log(LOGGING_LEVEL_WARNING, msg, args);
+  va_end(args);
+}
+void Logger::error(const char* msg, ...)
+{
+
+  va_list args;
+  va_start(args, msg);
+  this->log(LOGGING_LEVEL_ERROR, msg, args);
+  va_end(args);
 }
 
 bool Logger::init_log_to_file(const char* filename)
@@ -275,7 +301,7 @@ bool Logger::destroy_log_to_file()
 {
   return fclose(this->file_ptr);
 }
-void Logger::log(LoggingLevel level, const char* msg)
+void Logger::log(LoggingLevel level, const char* msg, va_list args)
 {
   const char* levels[LOGGING_LEVEL_COUNT] = {
       ANSI_COLOR_GREEN,
@@ -283,8 +309,15 @@ void Logger::log(LoggingLevel level, const char* msg)
       ANSI_COLOR_RED,
   };
   assert(LOGGING_LEVEL_COUNT == 3 && "Need to fill in the color for the logging level!");
-  this->send_log_message(msg, levels[level]);
+  this->send_log_message(msg, levels[level], args);
   printf(ANSI_COLOR_RESET);
+}
+void Logger::log(LoggingLevel level, const char* msg, ...)
+{
+  va_list args;
+  va_start(args, msg);
+  this->log(level, msg, args);
+  va_end(args);
 }
 
 bool compare_float(f32 a, f32 b)
@@ -304,5 +337,3 @@ u32 sta_hash_string_fnv(String* s)
 
   return hash;
 }
-
-
