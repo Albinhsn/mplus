@@ -1,1 +1,6 @@
 ./data/blizzard.tga
+./data/blue.tga
+./data/green.tga
+./data/black.tga
+./data/white.tga
+./data/red.tga

@@ -78,7 +78,7 @@ struct Hero
 struct EntityRenderData
 {
   AnimationData* model;
-  Color          color;
+  u32            texture;
   Shader         shader;
   f32            scale;
   u32            buffer_id;
@@ -536,7 +536,7 @@ Shader fireball_shader;
 u32    fireball_id;
 Map    map;
 
-void   handle_player_movement(Camera& camera, Hero* player, Shader* char_shader, InputState* input, u32 tick)
+void   handle_player_movement(Renderer* renderer, Camera& camera, Hero* player, Shader* char_shader, InputState* input, u32 tick)
 {
   Entity* entity   = &entities[player->entity];
   entity->velocity = {};
@@ -585,9 +585,9 @@ void   handle_player_movement(Camera& camera, Hero* player, Shader* char_shader,
     render_data->animation_tick_start = -1;
   }
 
-  camera.translation                          = Vector3(-entity->position.x, -entity->position.y, 0.0);
+  camera.translation                            = Vector3(-entity->position.x, -entity->position.y, 0.0);
 
-  entities[player->entity].render_data->color = player->can_take_damage_tick >= SDL_GetTicks() ? BLUE : BLACK;
+  entities[player->entity].render_data->texture = renderer->get_texture(player->can_take_damage_tick >= SDL_GetTicks() ? "./data/blue.tga" : "./data/black.tga");
 }
 
 Vector2 closest_point_triangle(Triangle triangle, Vector2 p)
@@ -952,7 +952,7 @@ void render_entities(Renderer* renderer, Camera camera)
 
       m = m.scale(render_data->scale).rotate_x(90).rotate_z(RADIANS_TO_DEGREES(entity.angle) - 90);
       m = m.translate(camera.translation).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
-      render_data->shader.set_float4f("color", (float*)&render_data->color);
+      renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
       render_data->shader.set_mat4("view", m);
       renderer->render_buffer(render_data->buffer_id);
       renderer->draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r, 1, RED);
@@ -1071,7 +1071,7 @@ int main()
   init_imgui(renderer.window, renderer.context);
 
   fireball_id     = renderer.get_buffer_by_filename("./data/fireball.obj");
-  fireball_shader = *renderer.get_shader_by_name("model2");
+  fireball_shader = *renderer.get_shader_by_name("model");
 
   enemy_shader    = fireball_shader;
   // ToDo This should be hoisted
@@ -1081,13 +1081,13 @@ int main()
   enemy_render_data.scale                = 0.02f;
   enemy_render_data.model                = 0;
   enemy_render_data.shader               = enemy_shader;
-  enemy_render_data.color                = BLUE;
+  enemy_render_data.texture              = renderer.get_texture("./data/blue.tga");
   enemy_render_data.animation_tick_start = 0;
 
   fireball_render_data.buffer_id         = fireball_id;
   fireball_render_data.shader            = fireball_shader;
   fireball_render_data.scale             = 0.05f;
-  fireball_render_data.color             = GREEN;
+  fireball_render_data.texture           = renderer.get_texture("./data/green.tga");
   fireball_render_data.model             = 0;
 
   Shader map_shader                      = *renderer.get_shader_by_name("model");
@@ -1115,7 +1115,7 @@ int main()
   entity->type                              = ENTITY_PLAYER;
   entity->render_data                       = sta_allocate_struct(EntityRenderData, 1);
   entity->render_data->model                = model->animation_data;
-  entity->render_data->color                = BLACK;
+  entity->render_data->texture              = renderer.get_texture("./data/black.tga");
   entity->render_data->shader               = char_shader;
   entity->render_data->buffer_id            = entity_buffer;
   entity->render_data->scale                = 0.03f;
@@ -1211,7 +1211,7 @@ int main()
         ImGui::End();
 
         handle_abilities(camera, &input_state, &player, ticks);
-        handle_player_movement(camera, &player, &char_shader, &input_state, ticks);
+        handle_player_movement(&renderer, camera, &player, &char_shader, &input_state, ticks);
         update_entities(entities, entity_count, &wave, tick_difference);
 
         update_enemies(&map, &wave, &player, tick_difference, game_running_ticks);

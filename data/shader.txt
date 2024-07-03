@@ -1,12 +1,8 @@
-3
+2
 model
 2
 0 ./shaders/model.vert
 1 ./shaders/model.frag
-model2
-2
-0 ./shaders/model2.vert
-1 ./shaders/model2.frag
 animation
 2
 0 ./shaders/animation.vert

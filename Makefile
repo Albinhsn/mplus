@@ -15,4 +15,4 @@ clean:
 .PHONY: all clean
 
 len:
-	find . -name '*.cpp' | xargs wc -l
+	find src/ -name '*.cpp' | xargs wc -l
