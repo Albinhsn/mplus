@@ -524,7 +524,7 @@ void spawn(Enemy* enemy, Map* map, u32 tick, u32 enemy_index)
   entity->hp                 = 1;
   render_data->shader        = enemy_shader;
   render_data->buffer_id     = enemy_buffer_id;
-  entity->r                  = 0.04f;
+  entity->r                  = 0.05f;
 }
 
 struct Wave
@@ -541,11 +541,11 @@ Shader fireball_shader;
 u32    fireball_id;
 Map    map;
 
-void   handle_player_movement(Camera& camera, Hero* player, Shader* char_shader, InputState* input, u32 tick, u32 tick_difference)
+void   handle_player_movement(Camera& camera, Hero* player, Shader* char_shader, InputState* input, u32 tick)
 {
   Entity* entity   = &entities[player->entity];
   entity->velocity = {};
-  f32 MS           = 0.01f * ((f32)tick_difference / 16.0f);
+  f32 MS           = 0.01f;
 
   if (input->is_key_pressed('w'))
   {
@@ -726,7 +726,7 @@ void use_ability_fireball(Camera* camera, InputState* input, Hero* player)
   Entity* e                   = &entities[entity_index];
   e->type                     = ENTITY_PLAYER_PROJECTILE;
 
-  f32    ms                   = 0.03;
+  f32    ms                   = 0.02;
 
   Entity player_entity        = entities[player->entity];
   e->position                 = entities[player->entity].position;
@@ -749,9 +749,9 @@ f32 tile_position_to_game(u8 x)
   return (tile_size * (f32)x) * 2.0f - 1.0f;
 }
 
-void handle_enemy_movement(Map* map, Enemy* enemy, Vector2 target_position, u32 tick_difference)
+void handle_enemy_movement(Map* map, Enemy* enemy, Vector2 target_position)
 {
-  const static f32 ms     = 0.005f * ((f32)tick_difference / 16.0f);
+  const static f32 ms     = 0.005f;
   Entity*          entity = &entities[enemy->entity];
   enemy->path.path_count  = 0;
   find_path(&enemy->path, map, target_position, entity->position);
@@ -849,7 +849,7 @@ void update_enemies(Map* map, Wave* wave, Hero* player, u32 tick_difference, u32
     {
       // if alive update path
       // check attack
-      handle_enemy_movement(map, enemy, player_position, tick_difference);
+      handle_enemy_movement(map, enemy, player_position);
       Sphere enemy_sphere;
       enemy_sphere.r        = entity->r;
       enemy_sphere.position = entity->position;
@@ -891,7 +891,7 @@ void handle_collision(Entity* e1, Entity* e2, Wave* wave)
   }
 }
 
-void update_entities(Entity* entities, u32 entity_count, Wave* wave)
+void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_difference)
 {
 
   for (u32 i = 0; i < entity_count; i++)
@@ -900,8 +900,9 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave)
     Entity* entity = &entities[i];
     if (entity->hp > 0)
     {
-      entity->position.x += entity->velocity.x;
-      entity->position.y += entity->velocity.y;
+      f32 diff = (f32)tick_difference / 16.0f;
+      entity->position.x += entity->velocity.x * diff;
+      entity->position.y += entity->velocity.y * diff;
       Vector2 closest_point = {};
       if (out_of_map(&closest_point, &map, entity->position))
       {
@@ -1238,7 +1239,7 @@ int main()
   entity->velocity                          = Vector2(0, 0);
   player.can_take_damage_tick               = 0;
   player.damage_taken_cd                    = 500;
-  entity->r                                 = 0.04f;
+  entity->r                                 = 0.05f;
   entity->hp                                = 3;
   read_abilities(player.abilities);
 
@@ -1263,7 +1264,8 @@ int main()
     // {
     // }
 
-    if (ticks + 16 < SDL_GetTicks())
+    bool test_uncapped = true;
+    if (ticks + 16 < SDL_GetTicks() || (test_uncapped && ticks + 1 < SDL_GetTicks()))
     {
       u32 tick_difference = SDL_GetTicks() - ticks;
       input_state.update();
@@ -1323,8 +1325,8 @@ int main()
         ImGui::End();
 
         handle_abilities(camera, &input_state, &player, ticks);
-        handle_player_movement(camera, &player, &char_shader, &input_state, ticks, tick_difference);
-        update_entities(entities, entity_count, &wave);
+        handle_player_movement(camera, &player, &char_shader, &input_state, ticks);
+        update_entities(entities, entity_count, &wave, tick_difference);
 
         update_enemies(&map, &wave, &player, tick_difference, game_running_ticks);
 
