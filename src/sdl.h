@@ -85,7 +85,7 @@ void      sta_glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, c
 void      sta_updateWindowSizeSDL(SDL_Window* window, i32 width, i32 height);
 void      sta_gl_draw_lines(GLuint vertex_array, u32 vertex_count, u32 width, Color color);
 void      sta_gl_render(SDL_Window* window);
-void      sta_init_sdl_gl(SDL_Window** window, SDL_GLContext* context, i32 screenWidth, i32 screenHeight);
+void sta_init_sdl_gl(SDL_Window** window, SDL_GLContext* context, int screenWidth, int screenHeight, bool vsync);
 void      sta_init_sdl_window(u8** buffer, SDL_Window** window, u64 screenWidth, u64 screenHeight);
 GLuint    sta_glCreateShader(GLenum type);
 void      sta_glCompileShader(GLuint shader);

@@ -407,7 +407,7 @@ void sta_gl_draw_lines(GLuint vertex_array, u32 vertex_count, u32 width, Color c
   glDrawArrays(GL_LINES, 0, vertex_count);
 }
 
-void sta_init_sdl_gl(SDL_Window** window, SDL_GLContext* context, int screenWidth, int screenHeight)
+void sta_init_sdl_gl(SDL_Window** window, SDL_GLContext* context, int screenWidth, int screenHeight, bool vsync)
 {
 
   SDL_Init(SDL_INIT_VIDEO);
@@ -415,7 +415,7 @@ void sta_init_sdl_gl(SDL_Window** window, SDL_GLContext* context, int screenWidt
   *context = SDL_GL_CreateContext(*window);
 
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-  SDL_GL_SetSwapInterval(0);
+  SDL_GL_SetSwapInterval(!vsync);
 
   loadExtensions();
 

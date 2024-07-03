@@ -5,6 +5,7 @@
 #include "sdl.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
+#include <SDL2/SDL_video.h>
 void Renderer::enable_2d_rendering()
 {
   glDisable(GL_DEPTH_TEST);
@@ -409,6 +410,11 @@ void Renderer::render_arrays(u32 buffer_id, GLenum type, u32 count)
   glDrawArrays(type, 0, count);
 }
 
+void Renderer::toggle_vsync()
+{
+  this->vsync = !this->vsync;
+  SDL_GL_SetSwapInterval(this->vsync);
+}
 u32 Renderer::get_free_texture_unit()
 {
   const static u32 MAX_UNITS = 38;

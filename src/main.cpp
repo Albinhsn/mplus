@@ -127,6 +127,7 @@ u32              entity_count    = 0;
 u32*             fireballs;
 u32              fireball_count    = 0;
 u32              fireball_capacity = 2;
+bool             god               = false;
 
 u32              get_new_entity()
 {
@@ -857,7 +858,7 @@ void update_enemies(Map* map, Wave* wave, Hero* player, u32 tick_difference, u32
       if (sphere_sphere_collision(player_sphere, enemy_sphere))
       {
         u32 tick = SDL_GetTicks();
-        if (tick >= player->can_take_damage_tick)
+        if (tick >= player->can_take_damage_tick && !god)
         {
           player->can_take_damage_tick = tick + player->damage_taken_cd;
           entities[player->entity].hp -= 1;
@@ -1138,7 +1139,7 @@ int main()
   font.parse_ttf("./data/fonts/OpenSans-Regular.ttf");
   const int          screen_width  = 620;
   const int          screen_height = 480;
-  Renderer           renderer(screen_width, screen_height, &font, 0);
+  Renderer           renderer(screen_width, screen_height, &font, 0, true);
 
   const static char* texture_locations = "./data/textures.txt";
   if (!renderer.load_textures_from_files(texture_locations))
@@ -1264,8 +1265,7 @@ int main()
     // {
     // }
 
-    bool test_uncapped = true;
-    if (ticks + 16 < SDL_GetTicks() || (test_uncapped && ticks + 1 < SDL_GetTicks()))
+    if (ticks + 1 < SDL_GetTicks())
     {
       u32 tick_difference = SDL_GetTicks() - ticks;
       input_state.update();
@@ -1277,6 +1277,7 @@ int main()
       if (entities[player.entity].hp == 0)
       {
         // ToDo Game over
+        logger.info("Game over player died");
         return 1;
       }
       if (input_state.is_key_pressed('c'))
@@ -1315,7 +1316,7 @@ int main()
         ImGui::PushFont(ImGui::GetFont());
 
         ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 0, 0, 255));
-        ImGui::Text("TIMER: %d ", game_running_ticks);
+        ImGui::Text("TIMER: %.2f", game_running_ticks / 1000.0f);
         ImGui::Text("HP: %d ", entities[player.entity].hp);
         ImGui::Text("Score:%d", (i32)score);
         ImGui::PopStyleColor();
@@ -1390,6 +1391,41 @@ int main()
         if (input_state.is_key_released(ASCII_RETURN))
         {
           logger.info("Released buffer: %s", console_buf);
+          if (compare_strings("restart", console_buf))
+          {
+            logger.info("Restarting wave");
+            wave.enemies_alive = 0;
+            u32 spawn_count    = __builtin_popcount(wave.spawn_count);
+            for (u32 i = 0; i < spawn_count; i++)
+            {
+              Entity* e = &entities[wave.enemies[i].entity];
+              e->hp     = 0;
+            }
+            wave.spawn_count           = 0;
+            game_running_ticks         = 0;
+            entities[player.entity].hp = 3;
+            score                      = 0;
+          }
+          else if (compare_strings("vsync", console_buf))
+          {
+            renderer.toggle_vsync();
+            logger.info("toggled vsync to %d!\n", renderer.vsync);
+          }
+          else if (compare_strings("god", console_buf))
+          {
+            god = !god;
+            logger.info("godmode toggled to %d!\n", god);
+          }
+          else if (compare_strings("debug", console_buf))
+          {
+#if DEBUG
+#undef DEBUG
+#else
+#define DEBUG
+#endif
+            printf("!\n");
+            logger.info("Debug on");
+          }
           memset(console_buf, 0, ArrayCount(console_buf));
         }
         ImGui::Begin("Console!", 0, ImGuiWindowFlags_NoDecoration);
@@ -1402,7 +1438,6 @@ int main()
 
       ImGui::Render();
       ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-      renderer.swap_buffers();
       render_ticks = SDL_GetTicks() - prior_render_ticks;
 
       // since last frame
@@ -1410,6 +1445,7 @@ int main()
       fps       = 1 / (f32)MAX(ms, 0.0001);
       ticks     = SDL_GetTicks();
       last_tick = SDL_GetTicks();
+      renderer.swap_buffers();
     }
   }
 }

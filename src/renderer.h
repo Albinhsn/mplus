@@ -42,6 +42,7 @@ struct Texture
 struct Renderer
 {
 public:
+  bool vsync;
   Texture*       textures;
   u32            texture_count;
   u64            used_texture_units;
@@ -61,9 +62,10 @@ public:
   u32            line_vbo;
   SDL_Window*    window;
   SDL_GLContext  context;
-  Renderer(u32 screen_width, u32 screen_height, AFont* font, Logger* logger)
+  Renderer(u32 screen_width, u32 screen_height, AFont* font, Logger* logger, bool vsync)
   {
-    sta_init_sdl_gl(&window, &context, screen_width, screen_height);
+    this->vsync = !vsync;
+    sta_init_sdl_gl(&window, &context, screen_width, screen_height, this->vsync);
     this->screen_width  = screen_width;
     this->screen_height = screen_height;
     this->font          = font;
@@ -95,6 +97,7 @@ public:
 
   // change some context
   void toggle_wireframe_on();
+  void toggle_vsync();
   void toggle_wireframe_off();
   void change_screen_size(u32 screen_width, u32 screen_height);
   void enable_2d_rendering();
