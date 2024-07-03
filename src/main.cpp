@@ -54,6 +54,7 @@ Logger logger;
 struct Camera
 {
   Vector3 translation;
+  f32     rotation;
 };
 
 struct Entity;
@@ -952,7 +953,7 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
   }
 }
 
-void render_entities(Renderer* renderer, Camera camera)
+void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m)
 {
   for (u32 i = 0; i < entity_count; i++)
   {
@@ -964,13 +965,11 @@ void render_entities(Renderer* renderer, Camera camera)
       Mat44 m = {};
       m.identity();
 
-      renderer->enable_2d_rendering();
-      m = m.scale(render_data->scale).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(entity.angle) - 90).rotate_x(-30.0f);
-      m = m.translate(camera.translation).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
+      m = m.scale(render_data->scale).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(entity.angle) - 90).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
+      m = m.mul(camera_m);
       renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
       render_data->shader.set_mat4("view", m);
       renderer->render_buffer(render_data->buffer_id);
-      renderer->disable_2d_rendering();
 
       renderer->draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r, 1, RED);
     }
@@ -1074,6 +1073,22 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
   return true;
 }
 
+void render_static_geometry(Renderer* renderer, Camera camera, EntityRenderData* render_data, u32 render_data_count)
+{
+  for (u32 i = 0; i < render_data_count; i++)
+  {
+    render_data->shader.use();
+    Mat44 m = {};
+    m.identity();
+
+    m = m.scale(render_data->scale).rotate_x(60);
+    m = m.translate(camera.translation).translate(Vector3(0.115f, 0.115f, 0.0f));
+    renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
+    render_data->shader.set_mat4("view", m);
+    renderer->render_buffer(render_data->buffer_id);
+  }
+}
+
 int main()
 {
 
@@ -1144,7 +1159,6 @@ int main()
   Shader map_shader = *renderer.get_shader_by_name("model");
   Mat44  ident      = {};
   ident.identity();
-  ident = ident.rotate_x(-30.0f);
   map_shader.use();
   map_shader.set_mat4("view", ident);
 
@@ -1174,9 +1188,10 @@ int main()
   entity->hp                  = 3;
   read_abilities(player.abilities);
 
-  Camera camera = {};
+  Camera camera   = {};
+  camera.rotation = -30.0f;
 
-  Wave   wave   = {};
+  Wave wave       = {};
   parse_wave_from_file(&wave, "./data/wave01.txt");
 
   map.init_map(renderer.get_model_by_filename("./data/map_with_hole.obj"));
@@ -1189,6 +1204,8 @@ int main()
   bool     console  = false;
   char     console_buf[1024];
   memset(console_buf, 0, ArrayCount(console_buf));
+
+  EntityRenderData pillar = *get_render_data_by_name("pillar");
 
   while (true)
   {
@@ -1269,20 +1286,22 @@ int main()
           logger.info("Wave is over!");
           return 0;
         }
+        Mat44 camera_m = {};
+        camera_m.identity();
+        camera_m           = camera_m.rotate_x(camera.rotation).translate(camera.translation);
 
         update_ticks       = SDL_GetTicks() - start_tick;
         prior_render_ticks = SDL_GetTicks();
 
-        Mat44 m            = {};
-        m.identity();
-        m = m.rotate_x(-30.0f).translate(camera.translation);
         map_shader.use();
-        map_shader.set_mat4("view", m);
+        map_shader.set_mat4("view", camera_m);
 
         // render map
         renderer.bind_texture(map_shader, "texture1", texture);
         renderer.render_buffer(map_buffer);
-        render_entities(&renderer, camera);
+        render_entities(&renderer, camera, camera_m);
+
+        render_static_geometry(&renderer, camera, &pillar, 1);
       }
       else if (ui_state == UI_STATE_MAIN_MENU)
       {

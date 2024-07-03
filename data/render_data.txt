@@ -1,4 +1,4 @@
-3
+4
 enemy
 0
 ./data/blue.tga
@@ -17,3 +17,9 @@ player
 animation
 0.03
 ./data/model.glb
+pillar
+0
+./data/blizzard.tga
+model
+0.35
+./data/pillar.obj

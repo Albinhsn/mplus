@@ -1,4 +1,4 @@
-4
+5
 ./data/model.glb
 5
 3 0
@@ -17,6 +17,11 @@
 2 0
 3 0 
 ./data/map_with_hole.obj
+3
+3 0
+2 0 
+3 0
+./data/pillar.obj
 3
 3 0
 2 0 
