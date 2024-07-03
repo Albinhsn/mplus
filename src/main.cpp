@@ -1273,7 +1273,24 @@ int main()
         ImGui::PopFont();
         ImGui::End();
 
-        handle_abilities(camera, &input_state, &player, ticks);
+        u64 width       = 40;
+        u64 height      = 40;
+        u64 total_width = ArrayCount(player.abilities) * width;
+        ImGui::SetNextWindowPos(ImVec2(center.x - (u64)(total_width / 2), screen_height - height), ImGuiCond_Appearing);
+        // ImGui::SetNextWindowSize(ImVec2(center.x, center.y));
+        ImGui::Begin("Abilities", 0, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground);
+        for (u32 i = 0; i < ArrayCount(player.abilities); i++)
+        {
+          char buf[64];
+          memset(buf, 0, ArrayCount(buf));
+          snprintf(buf, ArrayCount(buf), "%.1f", MAX(0, ((i32)player.abilities[i].cooldown - (i32)game_running_ticks) / 1000.0f));
+
+          ImGui::Button(buf, ImVec2(width, height));
+          ImGui::SameLine();
+        }
+        ImGui::End();
+
+        handle_abilities(camera, &input_state, &player, game_running_ticks);
         handle_player_movement(&renderer, camera, &player, &char_shader, &input_state, ticks);
         update_entities(entities, entity_count, &wave, tick_difference);
 
