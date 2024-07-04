@@ -1,10 +1,5 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
-#include <glm/ext/matrix_clip_space.hpp>
-#include <glm/ext/matrix_float4x4.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/string_cast.hpp>
-#include <iostream>
 #include <sys/time.h>
 #include <x86intrin.h>
 #include <sys/mman.h>
@@ -1127,10 +1122,6 @@ int main()
   const int   screen_width  = 620;
   const int   screen_height = 480;
   Renderer    renderer(screen_width, screen_height, &font, &logger, true);
-
-  glm::mat4x4 m = glm::perspective(100.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
-  std::cout << glm::to_string(m);
-  printf("\n");
 
   Mat44 projection;
   projection.identity();

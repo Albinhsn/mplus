@@ -222,6 +222,7 @@ struct WavefrontFace
 
 struct WavefrontObject
 {
+  char * name;
   u32            vertex_count;
   u32            vertex_capacity;
   Vector4*       vertices;

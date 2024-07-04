@@ -1,4 +1,8 @@
 #include "files.h"
+#include "common.h"
+#include "platform.h"
+#include <cassert>
+#include <cctype>
 
 static inline Vector2 cast_vec3_to_vec2(Vector3 v)
 {
@@ -1369,46 +1373,29 @@ static void parseWavefrontFace(WavefrontObject* obj, Buffer* buffer)
     skip_until_digit(buffer);
   }
 }
-static inline void parseWavefrontLine(WavefrontObject* obj, Buffer* buffer)
+
+void init_wavefront_object(WavefrontObject* obj)
 {
-  if (CURRENT_CHAR(buffer) == 'v' && NEXT_CHAR(buffer) == 't')
-  {
-    parse_wavefront_texture(obj, buffer);
-  }
-  else if (CURRENT_CHAR(buffer) == 'v' && NEXT_CHAR(buffer) == 'n')
-  {
-    parseWavefrontNormal(obj, buffer);
-  }
-  else if (CURRENT_CHAR(buffer) == 'v')
-  {
-    parseWavefrontVertex(obj, buffer);
-  }
-  else if (CURRENT_CHAR(buffer) == 'f')
-  {
-    parseWavefrontFace(obj, buffer);
-  }
+  u64 init_cap                     = 8;
+  obj->vertex_count                = 0;
+  obj->vertices                    = (Vector4*)sta_allocate(sizeof(struct Vector4) * init_cap);
+  obj->vertex_capacity             = init_cap;
+
+  obj->normal_count                = 0;
+  obj->normals                     = (Vector3*)sta_allocate(sizeof(struct Vector3) * init_cap);
+  obj->normal_capacity             = init_cap;
+
+  obj->texture_coordinate_count    = 0;
+  obj->texture_coordinates         = (Vector3*)sta_allocate(sizeof(Vector3) * init_cap);
+  obj->texture_coordinate_capacity = init_cap;
+
+  obj->face_count                  = 0;
+  obj->face_capacity               = init_cap;
+  obj->faces                       = (WavefrontFace*)sta_allocate(sizeof(WavefrontFace) * init_cap);
+  obj->name                        = 0;
 }
-
-bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename)
+bool parse_wavefront_objects(WavefrontObject** _objs, u32& obj_count, u32& obj_capacity, const char* filename)
 {
-  WavefrontObject obj             = {};
-  u64             init_cap        = 8;
-  obj.vertex_count                = 0;
-  obj.vertices                    = (Vector4*)sta_allocate(sizeof(struct Vector4) * init_cap);
-  obj.vertex_capacity             = init_cap;
-
-  obj.normal_count                = 0;
-  obj.normals                     = (Vector3*)sta_allocate(sizeof(struct Vector3) * init_cap);
-  obj.normal_capacity             = init_cap;
-
-  obj.texture_coordinate_count    = 0;
-  obj.texture_coordinates         = (Vector3*)sta_allocate(sizeof(Vector3) * init_cap);
-  obj.texture_coordinate_capacity = init_cap;
-
-  obj.face_count                  = 0;
-  obj.face_capacity               = init_cap;
-  obj.faces                       = (WavefrontFace*)sta_allocate(sizeof(WavefrontFace) * init_cap);
-
   FILE* filePtr;
   char* line = NULL;
   u64   len  = 0;
@@ -1419,71 +1406,111 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
   {
     return false;
   }
+  obj_count               = 0;
+  obj_capacity            = 1;
+  *_objs                  = sta_allocate_struct(WavefrontObject, 1);
+  WavefrontObject* obj    = 0;
 
-  Buffer buffer = {};
+  Buffer           buffer = {};
   while ((read = getline(&line, &len, filePtr)) != -1)
   {
     buffer.len           = strlen(line);
     line[buffer.len - 1] = '\0';
     buffer.buffer        = line;
     buffer.index         = 0;
-    parseWavefrontLine(&obj, &buffer);
+    if (buffer.current_char() == 'v' && buffer.buffer[buffer.index + 1] == 't')
+    {
+      assert(obj && "Can't parse obj without name!");
+      parse_wavefront_texture(obj, &buffer);
+    }
+    else if (buffer.current_char() == 'v' && buffer.buffer[buffer.index - 1] == 'n')
+    {
+      assert(obj && "Can't parse obj without name!");
+      parseWavefrontNormal(obj, &buffer);
+    }
+    else if (buffer.current_char() == 'v')
+    {
+      assert(obj && "Can't parse obj without name!");
+      parseWavefrontVertex(obj, &buffer);
+    }
+    else if (buffer.current_char() == 'f')
+    {
+      assert(obj && "Can't parse obj without name!");
+      parseWavefrontFace(obj, &buffer);
+    }
+    else if (buffer.current_char() == 'o')
+    {
+      RESIZE_ARRAY(*_objs, WavefrontObject, obj_count, obj_capacity);
+      obj = &(*_objs)[obj_count++];
+      buffer.advance();
+      buffer.skip_whitespace();
+      init_wavefront_object(obj);
+      obj->name                            = sta_allocate_struct(char, buffer.len - buffer.index + 1);
+      obj->name[buffer.len - buffer.index] = '\0';
+      strncpy(obj->name, buffer.current_address(), buffer.len - buffer.index);
+      printf("Parsing object %s\n", obj->name);
+    }
   }
+  return true;
+}
 
-  model->vertex_count = obj.face_count * obj.faces[0].count;
-  model->indices      = (u32*)sta_allocate(sizeof(u32) * model->vertex_count);
-  model->vertices     = (VertexData*)sta_allocate(sizeof(VertexData) * model->vertex_count);
+bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename)
+{
+  WavefrontObject* objs;
+  u32              obj_count, obj_capacity;
+
+  if (!parse_wavefront_objects(&objs, obj_count, obj_capacity, filename))
+  {
+    return false;
+  }
+  printf("Parsed data for %s %d\n", filename, obj_count);
 
   float low = FLT_MAX, high = -FLT_MAX;
-  for (u64 i = 0; i < obj.face_count; i++)
+  model->vertex_count = 0;
+  for (u32 i = 0; i < obj_count; i++)
   {
-    WavefrontFace* face = &obj.faces[i];
-    for (u64 j = 0; j < face->count; j++)
+    WavefrontObject obj        = objs[i];
+    u32             prev_count = model->vertex_count;
+    model->vertex_count += obj.face_count * obj.faces[0].count;
+    if (prev_count == 0)
     {
-      u64 index                = i * face->count + j;
-      model->indices[index]    = index;
-      WavefrontVertexData data = face->vertices[j];
-
-      Vector4             v    = obj.vertices[data.vertex_idx - 1];
-      if (low > v.x)
-      {
-        low = v.x;
-      }
-      if (low > v.y)
-      {
-        low = v.y;
-      }
-      if (low > v.z)
-      {
-        low = v.z;
-      }
-      if (high < v.x)
-      {
-        high = v.x;
-      }
-      if (high < v.y)
-      {
-        high = v.y;
-      }
-      if (high < v.z)
-      {
-        high = v.z;
-      }
-
-      model->vertices[index].vertex = cast_vec4_to_vec3(obj.vertices[data.vertex_idx - 1]);
-      model->vertices[index].uv     = cast_vec3_to_vec2(obj.texture_coordinates[data.texture_idx - 1]);
-      model->vertices[index].uv.y   = -model->vertices[index].uv.y;
-
-      model->vertices[index].normal = obj.normals[data.normal_idx - 1];
+      model->indices  = (u32*)sta_allocate(sizeof(u32) * model->vertex_count);
+      model->vertices = (VertexData*)sta_allocate(sizeof(VertexData) * model->vertex_count);
     }
-    // printf("\n");
-    sta_deallocate(obj.faces[i].vertices, sizeof(WavefrontVertexData) * obj.faces[i].count);
-  }
+    else
+    {
+      model->indices  = (u32*)sta_reallocate(model->indices, sizeof(u32) * prev_count, sizeof(u32) * model->vertex_count);
+      model->vertices = (VertexData*)sta_reallocate(model->vertices, sizeof(VertexData) * prev_count, sizeof(VertexData) * model->vertex_count);
+    }
 
-  sta_deallocate(obj.texture_coordinates, sizeof(Vector2) * obj.texture_coordinate_capacity);
-  sta_deallocate(obj.vertices, sizeof(Vector4) * obj.vertex_capacity);
-  sta_deallocate(obj.faces, sizeof(WavefrontFace) * obj.face_capacity);
-  sta_deallocate(obj.normals, sizeof(Vector3) * obj.normal_capacity);
+    for (u64 i = 0; i < obj.face_count; i++)
+    {
+      WavefrontFace* face = &obj.faces[i];
+      for (u64 j = 0; j < face->count; j++)
+      {
+        u64 index                     = i * face->count + j + (prev_count == 0 ? 0 : prev_count - 1);
+        model->indices[index]         = index;
+        WavefrontVertexData data      = face->vertices[j];
+
+        Vector4             v         = obj.vertices[data.vertex_idx - 1];
+        low                           = MIN(MIN(MIN(low, v.x), v.y), v.z);
+        high                          = MAX(MAX(MAX(high, v.x), v.y), v.z);
+
+        model->vertices[index].vertex = cast_vec4_to_vec3(obj.vertices[data.vertex_idx - 1]);
+        model->vertices[index].uv     = cast_vec3_to_vec2(obj.texture_coordinates[data.texture_idx - 1]);
+        model->vertices[index].uv.y   = -model->vertices[index].uv.y;
+
+        model->vertices[index].normal = obj.normals[data.normal_idx - 1];
+      }
+      // ToDo fix leak
+      // sta_deallocate(obj.faces[i].vertices, sizeof(WavefrontVertexData) * obj.faces[i].count);
+    }
+
+    sta_deallocate(obj.texture_coordinates, sizeof(Vector2) * obj.texture_coordinate_capacity);
+    sta_deallocate(obj.vertices, sizeof(Vector4) * obj.vertex_capacity);
+    sta_deallocate(obj.faces, sizeof(WavefrontFace) * obj.face_capacity);
+    sta_deallocate(obj.normals, sizeof(Vector3) * obj.normal_capacity);
+  }
 
   float diff = high - low;
   for (unsigned int i = 0; i < model->vertex_count; i++)
@@ -1503,6 +1530,7 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
       v->z = ((v->z + low) / diff) * 2.0f - 1.0f;
     }
   }
+  printf("Parsed %s\n", filename);
 
   return true;
 }
