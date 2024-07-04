@@ -1100,9 +1100,9 @@ void render_static_geometry(Renderer* renderer, Mat44 camera_m, EntityRenderData
     p = PI;
   }
   p -= 0.01f;
-  Vector3 light_direction(cosf(p) * 3, sinf(p) * 3, -0.5);
-
+  Vector3 light_position(cosf(p) * 3, sinf(p) * 3, -0.5);
   Vector3 ambient_lighting(0.05, 0.05, 0.05);
+
   for (u32 i = 0; i < render_data_count; i++)
   {
     render_data->shader.use();
@@ -1115,7 +1115,7 @@ void render_static_geometry(Renderer* renderer, Mat44 camera_m, EntityRenderData
     render_data->shader.set_mat4("view", camera_m);
     render_data->shader.set_mat4("projection", projection);
     render_data->shader.set_vec3("ambient_lighting", ambient_lighting);
-    render_data->shader.set_vec3("light_direction", light_direction);
+    render_data->shader.set_vec3("light_position", light_position);
 
     renderer->render_buffer(render_data->buffer_id);
   }
@@ -1197,7 +1197,7 @@ int main()
   enemy_shader      = fireball_shader;
   enemy_buffer_id   = renderer.get_buffer_by_filename("enemy");
 
-  Shader map_shader = *renderer.get_shader_by_name("model");
+  Shader map_shader = *renderer.get_shader_by_name("model2");
   Mat44  ident      = {};
   ident.identity();
   map_shader.use();
@@ -1353,8 +1353,18 @@ int main()
         prior_render_ticks = SDL_GetTicks();
 
         map_shader.use();
-        Mat44 m;
+        Mat44      m;
+        static f32 p = PI;
+        if (p < -PI)
+        {
+          p = PI;
+        }
+        p -= 0.01f;
+        Vector3 light_position(cosf(p) * 1, sinf(p) * 1, -0.5);
+        Vector3 ambient_lighting(0.05, 0.05, 0.05);
         m.identity();
+        map_shader.set_vec3("ambient_lighting", ambient_lighting);
+        map_shader.set_vec3("light_position", light_position);
         map_shader.set_mat4("model", m);
         map_shader.set_mat4("view", camera_m);
         map_shader.set_mat4("projection", projection);
