@@ -212,6 +212,10 @@ static void parse_skeleton(Skeleton* skeleton, JsonValue* skins, u32** node_inde
     }
   }
 }
+static Vector3 transform_vertex_to_y_up(Mat44 m, f32 x, f32 y, f32 z)
+{
+  return m.mul(Vector4(x, y, z, 1.0)).project();
+}
 
 static void parse_mesh(AnimationModel* model, GLTF_Accessor* accessors, JsonValue* meshes, GLTF_BufferView* buffer_views)
 {
@@ -248,6 +252,14 @@ static void parse_mesh(AnimationModel* model, GLTF_Accessor* accessors, JsonValu
   f32* weights_buffer  = (f32*)buffer_views[weights_accessor.buffer_view_index].buffer;
   model->vertex_count  = position_accessor.count;
   model->vertices      = (SkinnedVertex*)sta_allocate_struct(SkinnedVertex, model->vertex_count);
+
+  Mat44 m              = {};
+  m.identity();
+  m           = m.rotate_x(90);
+
+  Mat44 m_inv = m.inverse();
+  m_inv.transpose();
+
   for (u32 i = 0; i < model->vertex_count; i++)
   {
     SkinnedVertex* vertex   = &model->vertices[i];
@@ -256,7 +268,9 @@ static void parse_mesh(AnimationModel* model, GLTF_Accessor* accessors, JsonValu
     u32            v2_index = i * 2;
 
     vertex->position        = Vector3(position_buffer[v3_index], position_buffer[v3_index + 1], position_buffer[v3_index + 2]);
+    vertex->position        = transform_vertex_to_y_up(m, vertex->position.x, vertex->position.y, vertex->position.z);
     vertex->normal          = Vector3(normal_buffer[v3_index], normal_buffer[v3_index + 1], normal_buffer[v3_index + 2]);
+    vertex->normal          = transform_vertex_to_y_up(m_inv, vertex->normal.x, vertex->normal.y, vertex->normal.z);
     vertex->uv              = Vector2(uv_buffer[v2_index], -uv_buffer[v2_index + 1]);
     vertex->joint_index[0]  = joints_buffer[v4_index];
     vertex->joint_index[1]  = joints_buffer[v4_index + 1];
@@ -285,6 +299,9 @@ static void parse_animations(AnimationModel* model, Skeleton* skeleton, JsonValu
 
   GLTF_AnimationData* animation_data = (GLTF_AnimationData*)sta_allocate_struct(GLTF_AnimationData, animation->joint_count);
 
+  Mat44               m              = {};
+  m.identity();
+  m = m.rotate_x(90);
   for (u32 i = 0; i < channels->arraySize; i++)
   {
     JsonObject* channel       = channels->values[i].obj;
@@ -467,8 +484,8 @@ bool gltf_parse(AnimationModel* model, const char* filename)
   sta_read_file(&buffer, filename);
   (void)buffer.read(sizeof(GLTF_Header));
 
-  GLTF_Chunk  chunk0 = {};
-  GLTF_Chunk  chunk1 = {};
+  GLTF_Chunk chunk0 = {};
+  GLTF_Chunk chunk1 = {};
   read_chunk(&buffer, &chunk0);
   read_chunk(&buffer, &chunk1);
 

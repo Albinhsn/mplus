@@ -1449,10 +1449,6 @@ bool parse_wavefront_objects(WavefrontObject** _objs, u32& obj_count, u32& obj_c
       obj->name[buffer.len - buffer.index] = '\0';
       strncpy(obj->name, buffer.current_address(), buffer.len - buffer.index);
     }
-    else
-    {
-      printf("Couldn't prase %s\n", line);
-    }
   }
   return true;
 }
@@ -1516,7 +1512,6 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
   {
     return false;
   }
-  logger.info("Parsed data for %s %d\n", filename, obj_count);
 
   float low = FLT_MAX, high = -FLT_MAX;
   model->vertex_count  = 0;

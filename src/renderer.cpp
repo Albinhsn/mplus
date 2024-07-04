@@ -489,19 +489,21 @@ bool Renderer::load_shaders_from_files(const char* file_location)
   split_buffer_by_newline(&lines, &buffer);
   assert(lines.count > 0 && "No lines in shader file?");
 
-  u32 count = parse_int_from_string(lines.strings[0]);
-  logger->info("Found %d shaders at '%s'", count, file_location);
+  u32     count   = parse_int_from_string(lines.strings[0]);
 
   Shader* shaders = sta_allocate_struct(Shader, count);
 
   for (u32 i = 0, string_index = 1; i < count; i++)
   {
+    char log[256];
+    memset(log, 0, ArrayCount(log));
+    u64         log_index    = 0;
     const char* name         = lines.strings[string_index++];
     u32         shader_count = parse_int_from_string(lines.strings[string_index++]);
     ShaderType  types[shader_count];
     char*       shader_locations[shader_count];
 
-    logger->info("Found shader %s", name);
+    log_index = snprintf(log, ArrayCount(log), "Found shader '%s': ", name);
     for (u32 j = 0; j < shader_count; j++)
     {
       char*      line = lines.strings[string_index++];
@@ -521,10 +523,13 @@ bool Renderer::load_shaders_from_files(const char* file_location)
       file_location[buffer.len - buffer.index] = '\0';
       strncpy(file_location, buffer.current_address(), buffer.len - buffer.index);
 
-      logger->info("Found shader %d: %d %s", j, type, file_location);
+      log_index += snprintf(&log[log_index], ArrayCount(log) - log_index, "type: %d at '%s',\t", type, file_location);
+      assert(log_index < ArrayCount(log) && "Overflow in log msg!");
       shader_locations[j] = file_location;
       types[j]            = type;
     }
+
+    this->logger->info(log);
 
     shaders[i] = Shader(types, (const char**)shader_locations, shader_count, name);
   }
@@ -562,8 +567,8 @@ bool Renderer::load_models_from_files(const char* file_location)
   this->model_count = parse_int_from_string(lines.strings[0]);
 
   this->models      = sta_allocate_struct(Model, this->model_count);
+  this->logger->info("Found %d models", this->model_count);
   for (u32 i = 0, string_index = 1; i < this->model_count; i++)
-
   {
     // ToDo free the loaded memory?
     char*               model_name     = lines.strings[string_index++];
@@ -614,6 +619,7 @@ bool Renderer::load_models_from_files(const char* file_location)
       assert(!"Unknown model!");
     }
     }
+    logger->info("Loaded %s from '%s'", model_name, model_location);
   }
   return true;
 }
@@ -654,7 +660,7 @@ bool Renderer::load_buffers_from_files(const char* file_location)
     }
     this->buffers[i].model_name = model_name;
     this->buffers[i].buffer_id  = this->create_buffer_from_model(model, attributes, buffer_attribute_count);
-    this->logger->info("Found buffer '%s': %d", model_name, buffers[i].buffer_id);
+    this->logger->info("Loaded buffer '%s', id: %d", model_name, buffers[i].buffer_id);
   }
   return true;
 }
@@ -705,7 +711,12 @@ bool Renderer::load_textures_from_files(const char* file_location)
     TargaImage image   = {};
     texture.name       = lines.strings[string_index++];
 
-    sta_targa_read_from_file_rgba(&image, lines.strings[string_index++]);
+    char* targa_file   = lines.strings[string_index++];
+    if (!sta_targa_read_from_file_rgba(&image, targa_file))
+    {
+      // ToDo load token texture
+      this->logger->error("Failed to read targa from '%s'", targa_file);
+    }
     texture.id   = this->create_texture(image.width, image.height, image.data);
     texture.unit = this->get_free_texture_unit();
     sta_deallocate(image.data, image.width * image.height * 4);
@@ -717,10 +728,10 @@ bool Renderer::load_textures_from_files(const char* file_location)
   for (u32 i = 0; i < this->texture_count; i++)
   {
     Texture texture = this->textures[i];
-    logger->info("Got texture: '%s' %d, %d", texture.name, texture.id, texture.unit);
+    logger->info("texture: '%s' id:%d, unit:%d", texture.name, texture.id, texture.unit);
   }
 
-  // ToDo free the line memory
+  // ToDo free the line memory in every load x
   return true;
 }
 

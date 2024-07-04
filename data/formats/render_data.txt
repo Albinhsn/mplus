@@ -12,9 +12,9 @@ model
 0.05
 fireball
 player
-model
+0
 black
-animation
+model
 0.03
 model
 pillar

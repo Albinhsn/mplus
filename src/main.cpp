@@ -581,24 +581,27 @@ void   handle_player_movement(Renderer* renderer, Camera& camera, Hero* player, 
   char_shader->use();
   EntityRenderData* render_data    = entity->render_data;
   AnimationData*    animation_data = render_data->model;
-  if (entity->velocity.x != 0 || entity->velocity.y != 0)
+  if (animation_data)
   {
-    if (render_data->animation_tick_start == -1)
+    if (entity->velocity.x != 0 || entity->velocity.y != 0)
     {
-      render_data->animation_tick_start = tick;
+      if (render_data->animation_tick_start == -1)
+      {
+        render_data->animation_tick_start = tick;
+      }
+      tick -= render_data->animation_tick_start;
+      update_animation(&animation_data->skeleton, &animation_data->animations[0], *char_shader, tick);
     }
-    tick -= render_data->animation_tick_start;
-    update_animation(&animation_data->skeleton, &animation_data->animations[0], *char_shader, tick);
-  }
-  else
-  {
-    Mat44 joint_transforms[animation_data->skeleton.joint_count];
-    for (u32 i = 0; i < animation_data->skeleton.joint_count; i++)
+    else
     {
-      joint_transforms[i].identity();
+      Mat44 joint_transforms[animation_data->skeleton.joint_count];
+      for (u32 i = 0; i < animation_data->skeleton.joint_count; i++)
+      {
+        joint_transforms[i].identity();
+      }
+      char_shader->set_mat4("jointTransforms", joint_transforms, animation_data->skeleton.joint_count);
+      render_data->animation_tick_start = -1;
     }
-    char_shader->set_mat4("jointTransforms", joint_transforms, animation_data->skeleton.joint_count);
-    render_data->animation_tick_start = -1;
   }
 
   camera.translation                            = Vector3(-entity->position.x, -entity->position.y, 0.0);
@@ -965,7 +968,7 @@ void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m, Mat44 pr
       render_data->shader.use();
       Mat44 m = {};
       m.identity();
-      m = m.scale(render_data->scale).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(entity.angle) + 90).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
+      m = m.scale(render_data->scale).rotate_z(RADIANS_TO_DEGREES(entity.angle) + 90).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
 
       renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
       render_data->shader.set_mat4("model", m);
@@ -1080,7 +1083,7 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
     data->scale                = parse_float_from_string((char*)scale);
     data->buffer_id            = renderer->get_buffer_by_filename(buffer_id);
     data->animation_tick_start = 0;
-    logger.info("Entity render data : '%s': texture: %s, shader: %s, scale: %s,  buffer: %s", data->name, texture, shader, scale, buffer_id);
+    logger.info("Loaded render data for '%s': texture: %s, shader: %s, scale: %s,  buffer: %s", data->name, texture, shader, scale, buffer_id);
   }
 
   return true;
@@ -1098,7 +1101,7 @@ void       render_static_geometry(Renderer* renderer, Mat44 camera_m, EntityRend
     render_data->shader.use();
     Mat44 m = {};
     m.identity();
-    m = m.scale(render_data->scale).rotate_x(90).translate(Vector3(0.1f, -0.1f, 0));
+    m = m.scale(render_data->scale).translate(Vector3(0.1f, -0.1f, 0));
 
     renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
     render_data->shader.set_mat4("model", m);
@@ -1128,42 +1131,42 @@ int main()
   projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
   projection.debug();
 
-  const static char* model_locations = "./data/models.txt";
+  const static char* model_locations = "./data/formats/models.txt";
   if (!renderer.load_models_from_files(model_locations))
   {
     logger.error("Failed to read models from '%s'", model_locations);
     return 1;
   }
 
-  const static char* texture_locations = "./data/textures.txt";
+  const static char* texture_locations = "./data/formats/textures.txt";
   if (!renderer.load_textures_from_files(texture_locations))
   {
     logger.error("Failed to read textures from '%s'", texture_locations);
     return 1;
   }
 
-  const static char* shader_locations = "./data/shader.txt";
+  const static char* shader_locations = "./data/formats/shader.txt";
   if (!renderer.load_shaders_from_files(shader_locations))
   {
     logger.error("Failed to read shaders from '%s'", shader_locations);
     return 1;
   }
 
-  const static char* buffer_locations = "./data/buffers.txt";
+  const static char* buffer_locations = "./data/formats/buffers.txt";
   if (!renderer.load_buffers_from_files(buffer_locations))
   {
     logger.error("Failed to read buffers from '%s'", buffer_locations);
     return 1;
   }
 
-  const static char* noise_locations = "./data/noise01.tga";
+  const static char* noise_locations = "./data/textures/noise01.tga";
   if (!sta_targa_read_from_file_rgba(&noise, noise_locations))
   {
     logger.error("Failed to read noise from '%s'", noise_locations);
     return 1;
   }
 
-  const static char* render_data_location = "./data/render_data.txt";
+  const static char* render_data_location = "./data/formats/render_data.txt";
   if (!load_entity_render_data_from_file(&renderer, render_data_location))
   {
     logger.error("Failed to read render data from '%s'", render_data_location);
@@ -1217,7 +1220,11 @@ int main()
   camera.z        = -3.0f;
 
   Wave wave       = {};
-  parse_wave_from_file(&wave, "./data/wave01.txt");
+  if (!parse_wave_from_file(&wave, "./data/waves/wave01.txt"))
+  {
+    logger.error("Failed to parse wave!");
+    return 1;
+  }
 
   map.init_map(renderer.get_model_by_filename("map"));
 
@@ -1236,7 +1243,7 @@ int main()
 
   EntityRenderData pillar = *get_render_data_by_name("pillar");
 
-  // change_obj_to_y_up("./data/map_with_pillar.obj", "./data/map_with_pillar2.obj");
+  // change_obj_to_y_up("./data/enemy.obj", "./data/enemy2.obj");
   // return 1;
 
   while (true)

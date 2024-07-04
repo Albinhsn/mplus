@@ -45,10 +45,10 @@ void calculate_new_pose(Mat44* poses, u32 count, Animation* animation, u32 ticks
   }
 }
 
-void update_animation(Skeleton * skeleton, Animation * animation, Shader shader, u32 ticks)
+void update_animation(Skeleton* skeleton, Animation* animation, Shader shader, u32 ticks)
 {
-  Mat44     transforms[skeleton->joint_count];
-  Mat44     current_poses[skeleton->joint_count];
+  Mat44 transforms[skeleton->joint_count];
+  Mat44 current_poses[skeleton->joint_count];
   calculate_new_pose(current_poses, skeleton->joint_count, animation, ticks);
 
   Mat44 parent_transforms[skeleton->joint_count];
@@ -56,6 +56,7 @@ void update_animation(Skeleton * skeleton, Animation * animation, Shader shader,
   {
     parent_transforms[i].identity();
   }
+
   for (u32 i = 0; i < skeleton->joint_count; i++)
   {
     Joint* joint             = &skeleton->joints[i];
@@ -108,7 +109,6 @@ static u8 get_joint_index_from_id(Skeleton* skeleton, char* name, u64 length)
   }
   assert(0 && "Couldn't find joint by this name?");
 }
-
 
 static int cmp_vertex_skin_data(const void* _a, const void* _b)
 {
@@ -513,7 +513,7 @@ static void load_joint_transforms(Skeleton* skeleton, ColladaAnimationData* anim
 static void load_animation_data(Skeleton* skeleton, ColladaModelData* model_data, XML_Node* head)
 {
 
-  XML_Node*      animation_node = head->find_key("library_animations");
+  XML_Node*             animation_node = head->find_key("library_animations");
   ColladaAnimationData* animation_data = &model_data->animation_data;
   get_key_times(animation_node, &animation_data->timesteps, animation_data->count);
   animation_data->duration   = animation_data->timesteps[animation_data->count - 1];

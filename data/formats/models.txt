@@ -1,0 +1,15 @@
+7
+map
+./data/models/map_with_hole.obj
+map2
+./data/models/map_with_pillar2.obj
+fireball
+./data/models/fireball2.obj
+enemy
+./data/models/enemy2.obj
+model
+./data/models/model.glb
+pillar
+./data/models/pillar.obj
+unarmed_man
+./data/models/unarmed.glb
