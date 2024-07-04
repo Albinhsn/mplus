@@ -970,15 +970,15 @@ void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m, Mat44 pr
       render_data->shader.use();
       Mat44 m = {};
       m.identity();
-
       m = m.scale(render_data->scale).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(entity.angle) - 90).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
+
       renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
       render_data->shader.set_mat4("model", m);
       render_data->shader.set_mat4("view", camera_m);
       render_data->shader.set_mat4("projection", projection);
       renderer->render_buffer(render_data->buffer_id);
 
-      renderer->draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r, 1, RED);
+      renderer->draw_circle(entity.position, entity.r, 1, RED, camera_m, projection);
     }
   }
 }

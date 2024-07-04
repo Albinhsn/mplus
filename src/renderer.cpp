@@ -64,12 +64,14 @@ void Renderer::init_circle_buffer()
   this->circle_shader  = Shader(types, names, ArrayCount(types), "circle");
 }
 
-void Renderer::draw_circle(Vector2 position, f32 radius, f32 thickness, Color color)
+void Renderer::draw_circle(Vector2 position, f32 radius, f32 thickness, Color color, Mat44 view, Mat44 projection)
 {
   this->enable_2d_rendering();
   this->circle_shader.use();
   this->circle_shader.set_float("thickness", thickness);
   this->circle_shader.set_float4f("color", (float*)&color);
+  this->circle_shader.set_mat4("view", view);
+  this->circle_shader.set_mat4("projection", projection);
   sta_glBindVertexArray(this->circle_buffer.vao);
   sta_glBindBuffer(GL_ARRAY_BUFFER, this->circle_buffer.vbo);
   const int vertices_in_a_quad = 16;

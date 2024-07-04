@@ -95,8 +95,8 @@ public:
     this->init_circle_buffer();
     this->index_buffers_cap   = 0;
     this->index_buffers_count = 0;
-    this->texture_count             = 0;
-    this->used_texture_units        = 0;
+    this->texture_count       = 0;
+    this->used_texture_units  = 0;
   }
 
   void clear_framebuffer();
@@ -131,7 +131,7 @@ public:
   void disable_2d_rendering();
 
   // draw basic primitives
-  void draw_circle(Vector2 position, f32 radius, f32 thickness, Color color);
+  void draw_circle(Vector2 position, f32 radius, f32 thickness, Color color, Mat44 view, Mat44 projection);
   void draw_line(f32 x1, f32 y1, f32 x2, f32 y2, u32 line_width, Color color);
 
 private:
