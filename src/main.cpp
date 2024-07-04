@@ -1200,13 +1200,6 @@ int main()
 
   Model* map_model = renderer.get_model_by_filename("map2");
 
-  for (u32 i = 0; i < map_model->vertex_count; i++)
-  {
-    VertexData* vertex_data = (VertexData*)map_model->vertex_data;
-    printf("%d: ", i);
-    vertex_data[i].normal.debug();
-  }
-
   map                   = {};
   u32     map_buffer    = renderer.get_buffer_by_filename("map2");
 
@@ -1369,10 +1362,10 @@ int main()
 
         map_shader.use();
         Mat44   m;
-        Vector3 light_position(cosf(p) * 1, sinf(p) * 1, -5.0);
+        Vector3 light_position(cosf(p) * 1, sinf(p) * 1, -1.0);
         Vector3 ambient_lighting(0.25, 0.25, 0.25);
         m.identity();
-        m = m.rotate_x(180);
+        m = m.rotate_x(90);
         map_shader.set_vec3("ambient_lighting", ambient_lighting);
         map_shader.set_vec3("light_position", light_position);
         map_shader.set_mat4("model", m);
