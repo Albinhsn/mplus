@@ -63,6 +63,10 @@ void Shader::set_float(const char* name, float value)
 {
   sta_glUniform1f(get_location(this->id, name, this->name), value);
 }
+void Shader::set_vec3(const char* name, Vector3 v)
+{
+  sta_glUniform3fv(get_location(this->id, name, this->name),1, (float*)&v);
+}
 
 void Shader::set_mat4(const char* name, Mat44 m)
 {

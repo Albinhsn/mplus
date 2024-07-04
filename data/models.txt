@@ -1,4 +1,4 @@
-5
+6
 map
 ./data/map_with_hole.obj
 fireball
@@ -9,3 +9,5 @@ model
 ./data/model.glb
 pillar
 ./data/pillar.obj
+unarmed_man
+./data/unarmed_man/unarmed.glb

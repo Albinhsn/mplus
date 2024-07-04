@@ -1,4 +1,5 @@
 #include "vector.h"
+#include "common.h"
 
 Quaternion Quaternion::from_mat(Mat44 m)
 {
@@ -432,7 +433,7 @@ Mat44 Mat44::mul(Mat44 m)
 Mat44 Mat44::rotate_z(f32 degrees)
 {
 
-  float r    = degrees * PI / 180.0f;
+  float r    = DEGREES_TO_RADIANS(degrees);
   Mat44 m    = {};
 
   m.rc[0][0] = cosf(r);

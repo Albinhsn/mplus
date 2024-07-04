@@ -836,7 +836,7 @@ void spawn_enemies(Wave* wave, Map* map, u32 tick)
     wave->spawn_count |= spawn_count == 0 ? 1 : (1 << spawn_count);
     spawn(&wave->enemies[spawn_count], map, wave->spawn_times[spawn_count], spawn_count);
     Entity* e = &entities[wave->enemies[spawn_count].entity];
-    logger.info("Spawning enemy %d at (%f, %f)\n", spawn_count, e->position.x, e->position.y);
+    logger.info("Spawning enemy %d at (%f, %f)", spawn_count, e->position.x, e->position.y);
     spawn_count++;
   }
 }
@@ -1057,7 +1057,13 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
   for (u32 i = 0, string_index = 1; i < count; i++)
   {
     EntityRenderData* data = &render_data[i];
-    data->name             = lines.strings[string_index++];
+    // name
+    // animation
+    // texture
+    // shader
+    // scale
+    // buffer
+    data->name = lines.strings[string_index++];
     if (lines.strings[string_index][0] == '0')
     {
       data->model = 0;
@@ -1070,11 +1076,16 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
     }
     string_index++;
 
-    data->texture              = renderer->get_texture(lines.strings[string_index++]);
-    data->shader               = *renderer->get_shader_by_name(lines.strings[string_index++]);
-    data->scale                = parse_float_from_string(lines.strings[string_index++]);
-    data->buffer_id            = renderer->get_buffer_by_filename(lines.strings[string_index++]);
+    const char* texture        = lines.strings[string_index++];
+    const char* shader         = lines.strings[string_index++];
+    const char* scale          = lines.strings[string_index++];
+    const char* buffer_id      = lines.strings[string_index++];
+    data->texture              = renderer->get_texture(texture);
+    data->shader               = *renderer->get_shader_by_name(shader);
+    data->scale                = parse_float_from_string((char*)scale);
+    data->buffer_id            = renderer->get_buffer_by_filename(buffer_id);
     data->animation_tick_start = 0;
+    logger.info("Entity render data : '%s': texture: %s, shader: %s, scale: %s,  buffer: %s", data->name, texture, shader, scale, buffer_id);
   }
 
   return true;
@@ -1082,6 +1093,16 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
 
 void render_static_geometry(Renderer* renderer, Mat44 camera_m, EntityRenderData* render_data, u32 render_data_count, Mat44 projection)
 {
+
+  static f32 p = PI;
+  if (p < -PI)
+  {
+    p = PI;
+  }
+  p -= 0.01f;
+  Vector3 light_direction(cosf(p) * 3, sinf(p) * 3, -0.5);
+
+  Vector3 ambient_lighting(0.05, 0.05, 0.05);
   for (u32 i = 0; i < render_data_count; i++)
   {
     render_data->shader.use();
@@ -1093,6 +1114,8 @@ void render_static_geometry(Renderer* renderer, Mat44 camera_m, EntityRenderData
     render_data->shader.set_mat4("model", m);
     render_data->shader.set_mat4("view", camera_m);
     render_data->shader.set_mat4("projection", projection);
+    render_data->shader.set_vec3("ambient_lighting", ambient_lighting);
+    render_data->shader.set_vec3("light_direction", light_direction);
 
     renderer->render_buffer(render_data->buffer_id);
   }

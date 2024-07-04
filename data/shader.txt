@@ -1,4 +1,4 @@
-2
+3
 model
 2
 0 ./shaders/model.vert
@@ -7,3 +7,7 @@ animation
 2
 0 ./shaders/animation.vert
 1 ./shaders/animation.frag
+model2
+2
+0 ./shaders/model2.vert
+1 ./shaders/model2.frag

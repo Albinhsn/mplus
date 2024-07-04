@@ -20,6 +20,6 @@ model
 pillar
 0
 stone
-model
+model2
 0.35
 pillar

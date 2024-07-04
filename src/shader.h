@@ -23,7 +23,7 @@ public:
   Shader(ShaderType* types, const char** file_locations, u32 count, const char* name);
 
   void use();
-
+void set_vec3(const char* name, Vector3 v);
   void set_bool(const char* name, bool value);
   void set_int(const char* name, int value);
   void set_float(const char* name, float value);
