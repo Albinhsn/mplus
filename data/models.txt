@@ -1,6 +1,8 @@
-6
+7
 map
 ./data/map_with_hole.obj
+map2
+./data/map_with_pillar.obj
 fireball
 ./data/fireball.obj
 enemy

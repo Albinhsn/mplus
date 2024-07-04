@@ -873,8 +873,8 @@ void update_enemies(Map* map, Wave* wave, Hero* player, u32 tick_difference, u32
         if (tick >= player->can_take_damage_tick && !god)
         {
           player->can_take_damage_tick = tick + player->damage_taken_cd;
-          entities[player->entity].hp -= 1;
-          logger.info("Took damage, hp: %d %d", entities[player->entity].hp, enemy->entity);
+          // entities[player->entity].hp -= 1;
+          // logger.info("Took damage, hp: %d %d", entities[player->entity].hp, enemy->entity);
         }
       }
     }
@@ -1091,15 +1091,10 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
   return true;
 }
 
-void render_static_geometry(Renderer* renderer, Mat44 camera_m, EntityRenderData* render_data, u32 render_data_count, Mat44 projection)
+static f32 p = PI;
+void       render_static_geometry(Renderer* renderer, Mat44 camera_m, EntityRenderData* render_data, u32 render_data_count, Mat44 projection)
 {
 
-  static f32 p = PI;
-  if (p < -PI)
-  {
-    p = PI;
-  }
-  p -= 0.01f;
   Vector3 light_position(cosf(p) * 3, sinf(p) * 3, -0.5);
   Vector3 ambient_lighting(0.05, 0.05, 0.05);
 
@@ -1203,8 +1198,17 @@ int main()
   map_shader.use();
   map_shader.set_mat4("view", ident);
 
+  Model* map_model = renderer.get_model_by_filename("map2");
+
+  for (u32 i = 0; i < map_model->vertex_count; i++)
+  {
+    VertexData* vertex_data = (VertexData*)map_model->vertex_data;
+    printf("%d: ", i);
+    vertex_data[i].normal.debug();
+  }
+
   map                   = {};
-  u32     map_buffer    = renderer.get_buffer_by_filename("map");
+  u32     map_buffer    = renderer.get_buffer_by_filename("map2");
 
   u32     texture       = renderer.get_texture("dirt");
 
@@ -1257,6 +1261,7 @@ int main()
 
     if (ticks + 1 < SDL_GetTicks())
     {
+
       u32 tick_difference = SDL_GetTicks() - ticks;
       input_state.update();
       if (input_state.should_quit())
@@ -1289,6 +1294,16 @@ int main()
       u32 prior_render_ticks = 0;
       if (ui_state == UI_STATE_GAME_RUNNING)
       {
+
+        if (p < -PI)
+        {
+          p = PI;
+        }
+        p -= 0.01f;
+        // p = DEGREES_TO_RADIANS(90);
+
+        // printf("%.1f\n", RADIANS_TO_DEGREES(p));
+
         game_running_ticks += SDL_GetTicks() - ticks;
         ImGui::Begin("Frame times");
         ImGui::Text("Update:     %d", update_ticks);
@@ -1353,16 +1368,11 @@ int main()
         prior_render_ticks = SDL_GetTicks();
 
         map_shader.use();
-        Mat44      m;
-        static f32 p = PI;
-        if (p < -PI)
-        {
-          p = PI;
-        }
-        p -= 0.01f;
-        Vector3 light_position(cosf(p) * 1, sinf(p) * 1, -0.5);
-        Vector3 ambient_lighting(0.05, 0.05, 0.05);
+        Mat44   m;
+        Vector3 light_position(cosf(p) * 1, sinf(p) * 1, -5.0);
+        Vector3 ambient_lighting(0.25, 0.25, 0.25);
         m.identity();
+        m = m.rotate_x(180);
         map_shader.set_vec3("ambient_lighting", ambient_lighting);
         map_shader.set_vec3("light_position", light_position);
         map_shader.set_mat4("model", m);
@@ -1374,7 +1384,7 @@ int main()
         renderer.render_buffer(map_buffer);
         render_entities(&renderer, camera, camera_m, projection);
 
-        render_static_geometry(&renderer, camera_m, &pillar, 1, projection);
+        // render_static_geometry(&renderer, camera_m, &pillar, 1, projection);
       }
       else if (ui_state == UI_STATE_MAIN_MENU)
       {
