@@ -1448,7 +1448,6 @@ bool parse_wavefront_objects(WavefrontObject** _objs, u32& obj_count, u32& obj_c
       obj->name                            = sta_allocate_struct(char, buffer.len - buffer.index + 1);
       obj->name[buffer.len - buffer.index] = '\0';
       strncpy(obj->name, buffer.current_address(), buffer.len - buffer.index);
-      printf("Parsing object %s\n", obj->name);
     }
   }
   return true;
@@ -1466,21 +1465,22 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
   printf("Parsed data for %s %d\n", filename, obj_count);
 
   float low = FLT_MAX, high = -FLT_MAX;
-  model->vertex_count = 0;
+  model->vertex_count  = 0;
+  u32 prev_index_count = 0, prev_vertex_count = 0, prev_normal_count = 0, prev_uv_count = 0;
   for (u32 i = 0; i < obj_count; i++)
   {
-    WavefrontObject obj        = objs[i];
-    u32             prev_count = model->vertex_count;
+    WavefrontObject obj = objs[i];
+    prev_index_count += model->vertex_count;
     model->vertex_count += obj.face_count * obj.faces[0].count;
-    if (prev_count == 0)
+    if (prev_index_count == 0)
     {
       model->indices  = (u32*)sta_allocate(sizeof(u32) * model->vertex_count);
       model->vertices = (VertexData*)sta_allocate(sizeof(VertexData) * model->vertex_count);
     }
     else
     {
-      model->indices  = (u32*)sta_reallocate(model->indices, sizeof(u32) * prev_count, sizeof(u32) * model->vertex_count);
-      model->vertices = (VertexData*)sta_reallocate(model->vertices, sizeof(VertexData) * prev_count, sizeof(VertexData) * model->vertex_count);
+      model->indices  = (u32*)sta_reallocate(model->indices, sizeof(u32) * prev_index_count, sizeof(u32) * model->vertex_count);
+      model->vertices = (VertexData*)sta_reallocate(model->vertices, sizeof(VertexData) * prev_index_count, sizeof(VertexData) * model->vertex_count);
     }
 
     for (u64 i = 0; i < obj.face_count; i++)
@@ -1488,23 +1488,27 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
       WavefrontFace* face = &obj.faces[i];
       for (u64 j = 0; j < face->count; j++)
       {
-        u64 index                     = i * face->count + j + (prev_count == 0 ? 0 : prev_count - 1);
-        model->indices[index]         = index;
+        u64 index             = i * face->count + j + prev_index_count;
+        model->indices[index] = index;
+        // printf("%d\n", index);
         WavefrontVertexData data      = face->vertices[j];
 
-        Vector4             v         = obj.vertices[data.vertex_idx - 1];
+        Vector4             v         = obj.vertices[data.vertex_idx - 1 - prev_vertex_count];
         low                           = MIN(MIN(MIN(low, v.x), v.y), v.z);
         high                          = MAX(MAX(MAX(high, v.x), v.y), v.z);
 
-        model->vertices[index].vertex = cast_vec4_to_vec3(obj.vertices[data.vertex_idx - 1]);
-        model->vertices[index].uv     = cast_vec3_to_vec2(obj.texture_coordinates[data.texture_idx - 1]);
+        model->vertices[index].vertex = cast_vec4_to_vec3(obj.vertices[data.vertex_idx - 1 - prev_vertex_count]);
+        model->vertices[index].uv     = cast_vec3_to_vec2(obj.texture_coordinates[data.texture_idx - 1 - prev_uv_count]);
         model->vertices[index].uv.y   = -model->vertices[index].uv.y;
 
-        model->vertices[index].normal = obj.normals[data.normal_idx - 1];
+        model->vertices[index].normal = obj.normals[data.normal_idx - 1 - prev_normal_count];
       }
       // ToDo fix leak
       // sta_deallocate(obj.faces[i].vertices, sizeof(WavefrontVertexData) * obj.faces[i].count);
     }
+    prev_normal_count += obj.normal_count - 1;
+    prev_vertex_count += obj.vertex_count - 1;
+    prev_uv_count += obj.texture_coordinate_count - 1;
 
     sta_deallocate(obj.texture_coordinates, sizeof(Vector2) * obj.texture_coordinate_capacity);
     sta_deallocate(obj.vertices, sizeof(Vector4) * obj.vertex_capacity);
