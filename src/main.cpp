@@ -23,7 +23,6 @@
 #include "input.h"
 #include "font.h"
 #include "renderer.h"
-#include "ui.h"
 
 #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
 #define IMGUI_DEFINE_MATH_OPERATORS
@@ -37,7 +36,6 @@ Logger logger;
 #include "collision.cpp"
 
 #include "../libs/imgui/backends/imgui_impl_opengl3.cpp"
-#include <glm/gtc/matrix_transform.hpp>
 #include "../libs/imgui/backends/imgui_impl_sdl2.cpp"
 #include "../libs/imgui/imgui.cpp"
 #include "../libs/imgui/imgui_draw.cpp"
@@ -48,11 +46,20 @@ Logger logger;
 #include "animation.cpp"
 #include "input.cpp"
 #include "renderer.cpp"
-#include "ui.cpp"
 #include "gltf.cpp"
 
 struct Camera
 {
+public:
+  Camera()
+  {
+  }
+  Camera(Vector3 t, f32 r, f32 _z)
+  {
+    translation = t;
+    rotation    = r;
+    z           = _z;
+  }
   Vector3 translation;
   f32     rotation;
   f32     z;
@@ -116,6 +123,9 @@ u32*              fireballs;
 u32               fireball_count    = 0;
 u32               fireball_capacity = 2;
 bool              god               = false;
+
+#include "ui.cpp"
+#include "ui.h"
 
 EntityRenderData* get_render_data_by_name(const char* name)
 {
@@ -552,7 +562,7 @@ Shader fireball_shader;
 u32    fireball_id;
 Map    map;
 
-void   handle_player_movement(Renderer* renderer, Camera& camera, Hero* player, Shader* char_shader, InputState* input, u32 tick)
+void   handle_player_movement(Renderer* renderer, Camera& camera, Hero* player, InputState* input, u32 tick)
 {
   Entity* entity   = &entities[player->entity];
   entity->velocity = {};
@@ -575,12 +585,12 @@ void   handle_player_movement(Renderer* renderer, Camera& camera, Hero* player, 
     entity->velocity.x += MS;
   }
 
-  f32* mouse_pos = input->mouse_position;
-  entity->angle  = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
+  f32* mouse_pos                = input->mouse_position;
+  entity->angle                 = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
 
-  char_shader->use();
-  EntityRenderData* render_data    = entity->render_data;
-  AnimationData*    animation_data = render_data->model;
+  EntityRenderData* render_data = entity->render_data;
+  render_data->shader.use();
+  AnimationData* animation_data = render_data->model;
   if (animation_data)
   {
     if (entity->velocity.x != 0 || entity->velocity.y != 0)
@@ -590,7 +600,7 @@ void   handle_player_movement(Renderer* renderer, Camera& camera, Hero* player, 
         render_data->animation_tick_start = tick;
       }
       tick -= render_data->animation_tick_start;
-      update_animation(&animation_data->skeleton, &animation_data->animations[0], *char_shader, tick);
+      update_animation(&animation_data->skeleton, &animation_data->animations[0], render_data->shader, tick);
     }
     else
     {
@@ -599,7 +609,7 @@ void   handle_player_movement(Renderer* renderer, Camera& camera, Hero* player, 
       {
         joint_transforms[i].identity();
       }
-      char_shader->set_mat4("jointTransforms", joint_transforms, animation_data->skeleton.joint_count);
+      render_data->shader.set_mat4("jointTransforms", joint_transforms, animation_data->skeleton.joint_count);
       render_data->animation_tick_start = -1;
     }
   }
@@ -888,17 +898,9 @@ void handle_collision(Entity* e1, Entity* e2, Wave* wave)
     e2->hp = 0;
     wave->enemies_alive -= 1;
   }
+  // ToDo physics sim?
   if (e1->type == ENTITY_ENEMY && e2->type == ENTITY_ENEMY)
   {
-    // get difference in position to get the vector from both centers
-    //  then normalize that vector and multiply it by the radii, then subtract half of it from both
-    Vector2 diff(e1->position.x - e2->position.x, e1->position.y - e2->position.y);
-    diff.normalize();
-    diff.scale((e1->r + e2->r + 0.001f) * 0.5f);
-    // e1->position.x += diff.x;
-    // e1->position.y += diff.y;
-    // e2->position.x -= diff.x;
-    // e2->position.y -= diff.y;
   }
 }
 
@@ -1090,136 +1092,192 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
 }
 
 static f32 p = PI;
-void       render_static_geometry(Renderer* renderer, Mat44 camera_m, EntityRenderData* render_data, u32 render_data_count, Mat44 projection)
+
+bool       load_data(Renderer* renderer)
 {
-
-  Vector3 light_position(cosf(p) * 3, sinf(p) * 3, -0.5);
-  Vector3 ambient_lighting(0.05, 0.05, 0.05);
-
-  for (u32 i = 0; i < render_data_count; i++)
-  {
-    render_data->shader.use();
-    Mat44 m = {};
-    m.identity();
-    m = m.scale(render_data->scale).translate(Vector3(0.1f, -0.1f, 0));
-
-    renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
-    render_data->shader.set_mat4("model", m);
-    render_data->shader.set_mat4("view", camera_m);
-    render_data->shader.set_mat4("projection", projection);
-    render_data->shader.set_vec3("ambient_lighting", ambient_lighting);
-    render_data->shader.set_vec3("light_position", light_position);
-
-    renderer->render_buffer(render_data->buffer_id);
-  }
-}
-
-int main()
-{
-
-  entities  = (Entity*)sta_allocate_struct(Entity, entity_capacity);
-  fireballs = (u32*)sta_allocate_struct(u32, fireball_capacity);
-
-  AFont font;
-  font.parse_ttf("./data/fonts/OpenSans-Regular.ttf");
-  const int screen_width  = 620;
-  const int screen_height = 480;
-  Renderer  renderer(screen_width, screen_height, &font, &logger, true);
-
-  Mat44     projection;
-  projection.identity();
-  projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
-  projection.debug();
-
   const static char* model_locations = "./data/formats/models.txt";
-  if (!renderer.load_models_from_files(model_locations))
+  if (!renderer->load_models_from_files(model_locations))
   {
     logger.error("Failed to read models from '%s'", model_locations);
-    return 1;
+    return false;
   }
 
   const static char* texture_locations = "./data/formats/textures.txt";
-  if (!renderer.load_textures_from_files(texture_locations))
+  if (!renderer->load_textures_from_files(texture_locations))
   {
     logger.error("Failed to read textures from '%s'", texture_locations);
-    return 1;
+    return false;
   }
 
   const static char* shader_locations = "./data/formats/shader.txt";
-  if (!renderer.load_shaders_from_files(shader_locations))
+  if (!renderer->load_shaders_from_files(shader_locations))
   {
     logger.error("Failed to read shaders from '%s'", shader_locations);
-    return 1;
+    return false;
   }
 
   const static char* buffer_locations = "./data/formats/buffers.txt";
-  if (!renderer.load_buffers_from_files(buffer_locations))
+  if (!renderer->load_buffers_from_files(buffer_locations))
   {
     logger.error("Failed to read buffers from '%s'", buffer_locations);
-    return 1;
+    return false;
   }
 
   const static char* noise_locations = "./data/textures/noise01.tga";
   if (!sta_targa_read_from_file_rgba(&noise, noise_locations))
   {
     logger.error("Failed to read noise from '%s'", noise_locations);
-    return 1;
+    return false;
   }
 
   const static char* render_data_location = "./data/formats/render_data.txt";
-  if (!load_entity_render_data_from_file(&renderer, render_data_location))
+  if (!load_entity_render_data_from_file(renderer, render_data_location))
   {
     logger.error("Failed to read render data from '%s'", render_data_location);
+    return false;
+  }
+  return true;
+}
+
+void init_player(Hero* player)
+{
+
+  u32     entity_index         = get_new_entity();
+  Entity* entity               = &entities[entity_index];
+  player->entity               = entity_index;
+  entity->type                 = ENTITY_PLAYER;
+  entity->render_data          = get_render_data_by_name("player");
+  entity->position             = Vector2(0.5, 0.5);
+  entity->velocity             = Vector2(0, 0);
+  player->can_take_damage_tick = 0;
+  player->damage_taken_cd      = 500;
+  entity->r                    = 0.05f;
+  entity->hp                   = 3;
+  read_abilities(player->abilities);
+}
+
+void render_map(Renderer* renderer, Shader* map_shader, Mat44 camera_m, Mat44 projection, u32 map_texture, u32 map_buffer)
+{
+
+  map_shader->use();
+  Mat44   m;
+  Vector3 light_position(cosf(p) * 1, sinf(p) * 1, 1.0);
+  Vector3 ambient_lighting(0.25, 0.25, 0.25);
+  m.identity();
+  map_shader->set_vec3("ambient_lighting", ambient_lighting);
+  map_shader->set_vec3("light_position", light_position);
+  map_shader->set_mat4("model", m);
+  map_shader->set_mat4("view", camera_m);
+  map_shader->set_mat4("projection", projection);
+
+  // render map
+  renderer->bind_texture(*map_shader, "texture1", map_texture);
+  renderer->render_buffer(map_buffer);
+}
+
+void render_console(Hero* player, Renderer* renderer, InputState* input_state, char* console_buf, u32 console_buf_size, Wave* wave, u32& game_running_ticks)
+{
+
+  if (input_state->is_key_released(ASCII_RETURN))
+  {
+    logger.info("Released buffer: %s", console_buf);
+    if (compare_strings("restart", console_buf))
+    {
+      logger.info("Restarting wave");
+      wave->enemies_alive = 0;
+      u32 spawn_count     = __builtin_popcount(wave->spawn_count);
+      for (u32 i = 0; i < spawn_count; i++)
+      {
+        Entity* e = &entities[wave->enemies[i].entity];
+        e->hp     = 0;
+      }
+      wave->spawn_count           = 0;
+      game_running_ticks          = 0;
+      entities[player->entity].hp = 3;
+      score                       = 0;
+    }
+    else if (compare_strings("vsync", console_buf))
+    {
+      renderer->toggle_vsync();
+      logger.info("toggled vsync to %d!\n", renderer->vsync);
+    }
+    else if (compare_strings("god", console_buf))
+    {
+      god = !god;
+      logger.info("godmode toggled to %d!\n", god);
+    }
+    else if (compare_strings("debug", console_buf))
+    {
+#if DEBUG
+#undef DEBUG
+#else
+#define DEBUG
+#endif
+      printf("!\n");
+      logger.info("Debug on");
+    }
+    memset(console_buf, 0, console_buf_size);
+  }
+  ImGui::Begin("Console!", 0, ImGuiWindowFlags_NoDecoration);
+  if (ImGui::InputText("Console input", console_buf, console_buf_size))
+  {
+  }
+
+  ImGui::End();
+}
+
+void update(Map* map, Wave* wave, Renderer* renderer, Camera& camera, InputState* input_state, Hero* player, u32& game_running_ticks, u32 ticks, u32 tick_difference)
+{
+
+  handle_abilities(camera, input_state, player, game_running_ticks);
+  handle_player_movement(renderer, camera, player, input_state, ticks);
+  update_entities(entities, entity_count, wave, tick_difference);
+  update_enemies(map, wave, player, tick_difference, game_running_ticks);
+}
+
+bool handle_wave_over(Wave* wave)
+{
+  u32 spawn_count = __builtin_popcount(wave->spawn_count);
+  return spawn_count == wave->enemy_count && wave->enemies_alive == 0;
+}
+
+int main()
+{
+
+  entities               = (Entity*)sta_allocate_struct(Entity, entity_capacity);
+  fireballs              = (u32*)sta_allocate_struct(u32, fireball_capacity);
+
+  const int screen_width = 620, screen_height = 480;
+  Renderer  renderer(screen_width, screen_height, 0, &logger, true);
+  if (!load_data(&renderer))
+  {
     return 1;
   }
 
+  Mat44 projection;
+  projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
+
   init_imgui(renderer.window, renderer.context);
 
-  fireball_id       = renderer.get_buffer_by_filename("fireball");
-  fireball_shader   = *renderer.get_shader_by_name("model");
+  fireball_id        = renderer.get_buffer_by_filename("fireball");
+  fireball_shader    = *renderer.get_shader_by_name("model");
 
-  enemy_shader      = fireball_shader;
-  enemy_buffer_id   = renderer.get_buffer_by_filename("enemy");
+  enemy_shader       = fireball_shader;
+  enemy_buffer_id    = renderer.get_buffer_by_filename("enemy");
 
-  Shader map_shader = *renderer.get_shader_by_name("model2");
-  Mat44  ident      = {};
-  ident.identity();
-  map_shader.use();
-  map_shader.set_mat4("view", ident);
+  Shader map_shader  = *renderer.get_shader_by_name("model2");
 
-  Model* map_model      = renderer.get_model_by_filename("map2");
+  Model* map_model   = renderer.get_model_by_filename("map2");
 
-  map                   = {};
-  u32     map_buffer    = renderer.get_buffer_by_filename("map2");
+  u32    map_buffer  = renderer.get_buffer_by_filename("map2");
+  u32    map_texture = renderer.get_texture("dirt");
 
-  u32     texture       = renderer.get_texture("dirt");
+  Hero   player      = {};
+  init_player(&player);
 
-  Model*  model         = renderer.get_model_by_filename("model");
-  u32     entity_buffer = renderer.get_buffer_by_filename("model");
+  Camera camera(Vector3(), -20.0f, -3.0f);
 
-  Shader  char_shader   = *renderer.get_shader_by_name("animation");
-  Vector2 char_pos(0.5, 0.5);
-
-  Hero    player              = {};
-
-  u32     entity_index        = get_new_entity();
-  Entity* entity              = &entities[entity_index];
-  player.entity               = entity_index;
-  entity->type                = ENTITY_PLAYER;
-  entity->render_data         = get_render_data_by_name("player");
-  entity->position            = char_pos;
-  entity->velocity            = Vector2(0, 0);
-  player.can_take_damage_tick = 0;
-  player.damage_taken_cd      = 500;
-  entity->r                   = 0.05f;
-  entity->hp                  = 3;
-  read_abilities(player.abilities);
-
-  Camera camera   = {};
-  camera.rotation = -20.0f;
-  camera.z        = -3.0f;
-
-  Wave wave       = {};
+  Wave   wave = {};
   if (!parse_wave_from_file(&wave, "./data/waves/wave01.txt"))
   {
     logger.error("Failed to parse wave!");
@@ -1229,7 +1287,7 @@ int main()
   map.init_map(renderer.get_model_by_filename("map"));
 
   u32      ticks        = 0;
-  u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0, last_tick = 0;
+  u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0;
   f32      fps      = 0.0f;
 
   UI_State ui_state = UI_STATE_MAIN_MENU;
@@ -1239,18 +1297,10 @@ int main()
   InputState input_state(renderer.window);
 
   // ToDo make this work when game over is implemented
-  score                   = 0;
-
-  EntityRenderData pillar = *get_render_data_by_name("pillar");
-
-  // change_obj_to_y_up("./data/enemy.obj", "./data/enemy2.obj");
-  // return 1;
+  score = 0;
 
   while (true)
   {
-    // while (ticks + 33 > SDL_GetTicks())
-    // {
-    // }
 
     if (ticks + 1 < SDL_GetTicks())
     {
@@ -1280,9 +1330,7 @@ int main()
         continue;
       }
 
-      ImGui_ImplOpenGL3_NewFrame();
-      ImGui_ImplSDL2_NewFrame();
-      ImGui::NewFrame();
+      ui_state               = render_ui(ui_state, &player, ms, fps, update_ticks, render_ticks, game_running_ticks, screen_height);
 
       u32 prior_render_ticks = 0;
       if (ui_state == UI_STATE_GAME_RUNNING)
@@ -1293,66 +1341,18 @@ int main()
           p = PI;
         }
         p -= 0.01f;
-        // p = DEGREES_TO_RADIANS(90);
-
-        // printf("%.1f\n", RADIANS_TO_DEGREES(p));
 
         game_running_ticks += SDL_GetTicks() - ticks;
-        ImGui::Begin("Frame times");
-        ImGui::Text("Update:     %d", update_ticks);
-        ImGui::Text("Rendering : %d", render_ticks);
-        ImGui::Text("MS: %d", ms);
-        ImGui::Text("FPS: %f", fps * 1000);
-        ImGui::End();
 
-        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-        ImGui::SetNextWindowSize(ImVec2(center.x, center.y));
+        update(&map, &wave, &renderer, camera, &input_state, &player, game_running_ticks, ticks, tick_difference);
 
-        ImGui::Begin("Game ui!", 0, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
-        f32 old_size = ImGui::GetFont()->Scale;
-        ImGui::GetFont()->Scale *= 2;
-        ImGui::PushFont(ImGui::GetFont());
-
-        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 0, 0, 255));
-        ImGui::Text("TIMER: %.2f", game_running_ticks / 1000.0f);
-        ImGui::Text("HP: %d ", entities[player.entity].hp);
-        ImGui::Text("Score:%d", (i32)score);
-        ImGui::PopStyleColor();
-
-        ImGui::GetFont()->Scale = old_size;
-        ImGui::PopFont();
-        ImGui::End();
-
-        u64 width       = 40;
-        u64 height      = 40;
-        u64 total_width = ArrayCount(player.abilities) * width;
-        ImGui::SetNextWindowPos(ImVec2(center.x - (u64)(total_width / 2), screen_height - height), ImGuiCond_Appearing);
-        // ImGui::SetNextWindowSize(ImVec2(center.x, center.y));
-        ImGui::Begin("Abilities", 0, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground);
-        for (u32 i = 0; i < ArrayCount(player.abilities); i++)
-        {
-          char buf[64];
-          memset(buf, 0, ArrayCount(buf));
-          snprintf(buf, ArrayCount(buf), "%.1f", MAX(0, ((i32)player.abilities[i].cooldown - (i32)game_running_ticks) / 1000.0f));
-
-          ImGui::Button(buf, ImVec2(width, height));
-          ImGui::SameLine();
-        }
-        ImGui::End();
-
-        handle_abilities(camera, &input_state, &player, game_running_ticks);
-        handle_player_movement(&renderer, camera, &player, &char_shader, &input_state, ticks);
-        update_entities(entities, entity_count, &wave, tick_difference);
-
-        update_enemies(&map, &wave, &player, tick_difference, game_running_ticks);
-
-        u32 spawn_count = __builtin_popcount(wave.spawn_count);
-        if (spawn_count == wave.enemy_count && wave.enemies_alive == 0)
+        if (handle_wave_over(&wave))
         {
           // ToDo this should get you back to main menu or game over screen or smth
           logger.info("Wave is over!");
           return 0;
         }
+
         Mat44 camera_m = {};
         camera_m.identity();
         camera_m           = camera_m.rotate_x(camera.rotation).translate(Vector3(camera.translation.x, camera.translation.y, camera.z));
@@ -1360,116 +1360,22 @@ int main()
         update_ticks       = SDL_GetTicks() - start_tick;
         prior_render_ticks = SDL_GetTicks();
 
-        map_shader.use();
-        Mat44   m;
-        Vector3 light_position(cosf(p) * 1, sinf(p) * 1, 1.0);
-        Vector3 ambient_lighting(0.25, 0.25, 0.25);
-        m.identity();
-        map_shader.set_vec3("ambient_lighting", ambient_lighting);
-        map_shader.set_vec3("light_position", light_position);
-        map_shader.set_mat4("model", m);
-        map_shader.set_mat4("view", camera_m);
-        map_shader.set_mat4("projection", projection);
-
-        // render map
-        renderer.bind_texture(map_shader, "texture1", texture);
-        renderer.render_buffer(map_buffer);
+        render_map(&renderer, &map_shader, camera_m, projection, map_texture, map_buffer);
         render_entities(&renderer, camera, camera_m, projection);
-
-        // render_static_geometry(&renderer, camera_m, &pillar, 1, projection);
-      }
-      else if (ui_state == UI_STATE_MAIN_MENU)
-      {
-
-        // ToDo render hp and score
-
-        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-        ImGui::SetNextWindowPos(ImVec2(center.x, center.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
-        ImGui::Begin("Main menu!", 0, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
-
-        ImGui::Text("MPLUS!");
-        if (ImGui::Button("Run game!"))
-        {
-          ui_state = UI_STATE_GAME_RUNNING;
-        }
-
-        ImGui::End();
-      }
-      else if (ui_state == UI_STATE_OPTIONS_MENU)
-      {
-        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-        ImGui::SetNextWindowPos(ImVec2(center.x, center.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
-        ImGui::Begin("Main menu!", 0, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
-
-        if (ImGui::Button("Return!"))
-        {
-          ui_state = UI_STATE_GAME_RUNNING;
-        }
-
-        ImGui::End();
       }
 
       if (console)
       {
-        if (input_state.is_key_released(ASCII_RETURN))
-        {
-          logger.info("Released buffer: %s", console_buf);
-          if (compare_strings("restart", console_buf))
-          {
-            logger.info("Restarting wave");
-            wave.enemies_alive = 0;
-            u32 spawn_count    = __builtin_popcount(wave.spawn_count);
-            for (u32 i = 0; i < spawn_count; i++)
-            {
-              Entity* e = &entities[wave.enemies[i].entity];
-              e->hp     = 0;
-            }
-            wave.spawn_count           = 0;
-            game_running_ticks         = 0;
-            entities[player.entity].hp = 3;
-            score                      = 0;
-          }
-          else if (compare_strings("vsync", console_buf))
-          {
-            renderer.toggle_vsync();
-            logger.info("toggled vsync to %d!\n", renderer.vsync);
-          }
-          else if (compare_strings("god", console_buf))
-          {
-            god = !god;
-            logger.info("godmode toggled to %d!\n", god);
-          }
-          else if (compare_strings("debug", console_buf))
-          {
-#if DEBUG
-#undef DEBUG
-#else
-#define DEBUG
-#endif
-            printf("!\n");
-            logger.info("Debug on");
-          }
-          memset(console_buf, 0, ArrayCount(console_buf));
-        }
-        ImGui::Begin("Console!", 0, ImGuiWindowFlags_NoDecoration);
-        if (ImGui::InputText("Console input", console_buf, ArrayCount(console_buf)))
-        {
-        }
-
-        ImGui::End();
+        render_console(&player, &renderer, &input_state, console_buf, ArrayCount(console_buf), &wave, game_running_ticks);
       }
 
-      ImGui::Render();
-      ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+      render_ui_frame();
       render_ticks = SDL_GetTicks() - prior_render_ticks;
 
       // since last frame
-      ms        = SDL_GetTicks() - last_tick;
-      fps       = 1 / (f32)MAX(ms, 0.0001);
-      ticks     = SDL_GetTicks();
-      last_tick = SDL_GetTicks();
+      ms    = SDL_GetTicks() - ticks;
+      fps   = 1 / (f32)MAX(ms, 0.0001);
+      ticks = SDL_GetTicks();
       renderer.swap_buffers();
     }
   }
