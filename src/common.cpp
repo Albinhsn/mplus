@@ -310,7 +310,7 @@ void Logger::log(LoggingLevel level, const char* msg, va_list args)
   };
   assert(LOGGING_LEVEL_COUNT == 3 && "Need to fill in the color for the logging level!");
   this->send_log_message(msg, levels[level], args);
-  printf(ANSI_COLOR_RESET);
+  fprintf(stderr, ANSI_COLOR_RESET);
 }
 void Logger::log(LoggingLevel level, const char* msg, ...)
 {

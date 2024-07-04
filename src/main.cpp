@@ -1,5 +1,10 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/string_cast.hpp>
+#include <iostream>
 #include <sys/time.h>
 #include <x86intrin.h>
 #include <sys/mman.h>
@@ -30,7 +35,6 @@
 #include "common.cpp"
 
 Logger logger;
-
 #include "sdl.cpp"
 #include "vector.cpp"
 #include "font.cpp"
@@ -38,6 +42,7 @@ Logger logger;
 #include "collision.cpp"
 
 #include "../libs/imgui/backends/imgui_impl_opengl3.cpp"
+#include <glm/gtc/matrix_transform.hpp>
 #include "../libs/imgui/backends/imgui_impl_sdl2.cpp"
 #include "../libs/imgui/imgui.cpp"
 #include "../libs/imgui/imgui_draw.cpp"
@@ -55,6 +60,7 @@ struct Camera
 {
   Vector3 translation;
   f32     rotation;
+  f32     z;
 };
 
 struct Entity;
@@ -953,7 +959,7 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
   }
 }
 
-void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m)
+void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m, Mat44 projection)
 {
   for (u32 i = 0; i < entity_count; i++)
   {
@@ -966,9 +972,10 @@ void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m)
       m.identity();
 
       m = m.scale(render_data->scale).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(entity.angle) - 90).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
-      m = m.mul(camera_m);
       renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
-      render_data->shader.set_mat4("view", m);
+      render_data->shader.set_mat4("model", m);
+      render_data->shader.set_mat4("view", camera_m);
+      render_data->shader.set_mat4("projection", projection);
       renderer->render_buffer(render_data->buffer_id);
 
       renderer->draw_circle(Vector2(entity.position.x + camera.translation.x, entity.position.y + camera.translation.y), entity.r, 1, RED);
@@ -1073,18 +1080,20 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
   return true;
 }
 
-void render_static_geometry(Renderer* renderer, Camera camera, EntityRenderData* render_data, u32 render_data_count)
+void render_static_geometry(Renderer* renderer, Mat44 camera_m, EntityRenderData* render_data, u32 render_data_count, Mat44 projection)
 {
   for (u32 i = 0; i < render_data_count; i++)
   {
     render_data->shader.use();
     Mat44 m = {};
     m.identity();
+    m = m.scale(render_data->scale).rotate_x(90).translate(Vector3(0.1f, -0.1f, 0));
 
-    m = m.scale(render_data->scale).rotate_x(60);
-    m = m.translate(camera.translation).translate(Vector3(0.115f, 0.115f, 0.0f));
     renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
-    render_data->shader.set_mat4("view", m);
+    render_data->shader.set_mat4("model", m);
+    render_data->shader.set_mat4("view", camera_m);
+    render_data->shader.set_mat4("projection", projection);
+
     renderer->render_buffer(render_data->buffer_id);
   }
 }
@@ -1097,9 +1106,18 @@ int main()
 
   AFont font;
   font.parse_ttf("./data/fonts/OpenSans-Regular.ttf");
-  const int          screen_width  = 620;
-  const int          screen_height = 480;
-  Renderer           renderer(screen_width, screen_height, &font, &logger, true);
+  const int   screen_width  = 620;
+  const int   screen_height = 480;
+  Renderer    renderer(screen_width, screen_height, &font, &logger, true);
+
+  glm::mat4x4 m = glm::perspective(100.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
+  std::cout << glm::to_string(m);
+  printf("\n");
+
+  Mat44 projection;
+  projection.identity();
+  projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
+  projection.debug();
 
   const static char* model_locations = "./data/models.txt";
   if (!renderer.load_models_from_files(model_locations))
@@ -1189,7 +1207,8 @@ int main()
   read_abilities(player.abilities);
 
   Camera camera   = {};
-  camera.rotation = -30.0f;
+  camera.rotation = -20.0f;
+  camera.z        = -3.0f;
 
   Wave wave       = {};
   parse_wave_from_file(&wave, "./data/wave01.txt");
@@ -1305,20 +1324,24 @@ int main()
         }
         Mat44 camera_m = {};
         camera_m.identity();
-        camera_m           = camera_m.rotate_x(camera.rotation).translate(camera.translation);
+        camera_m           = camera_m.rotate_x(camera.rotation).translate(Vector3(camera.translation.x, camera.translation.y, camera.z));
 
         update_ticks       = SDL_GetTicks() - start_tick;
         prior_render_ticks = SDL_GetTicks();
 
         map_shader.use();
+        Mat44 m;
+        m.identity();
+        map_shader.set_mat4("model", m);
         map_shader.set_mat4("view", camera_m);
+        map_shader.set_mat4("projection", projection);
 
         // render map
         renderer.bind_texture(map_shader, "texture1", texture);
         renderer.render_buffer(map_buffer);
-        render_entities(&renderer, camera, camera_m);
+        render_entities(&renderer, camera, camera_m, projection);
 
-        render_static_geometry(&renderer, camera, &pillar, 1);
+        render_static_geometry(&renderer, camera_m, &pillar, 1, projection);
       }
       else if (ui_state == UI_STATE_MAIN_MENU)
       {

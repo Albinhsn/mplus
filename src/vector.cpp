@@ -330,8 +330,8 @@ Mat44 Mat44::rotate_x(f32 degrees)
   Mat44 m = {};
   m.identity();
   m.rc[1][1] = cosf(r);
-  m.rc[1][2] = sinf(r);
-  m.rc[2][1] = -sinf(r);
+  m.rc[1][2] = -sinf(r);
+  m.rc[2][1] = sinf(r);
   m.rc[2][2] = cosf(r);
   return this->mul(m);
 }
@@ -360,8 +360,8 @@ Mat44 Mat44::rotate_y(f32 degrees)
   Mat44 m = {};
   m.identity();
   m.rc[0][0] = cosf(r);
-  m.rc[0][2] = -sinf(r);
-  m.rc[2][0] = sinf(r);
+  m.rc[0][2] = sinf(r);
+  m.rc[2][0] = -sinf(r);
   m.rc[2][2] = cosf(r);
   return this->mul(m);
 }
@@ -387,7 +387,7 @@ void Mat44::debug()
 void Mat44::perspective(f32 fov, f32 screen_aspect, f32 screen_near, f32 screen_depth)
 {
   fov            = DEGREES_TO_RADIANS(fov);
-  float c        = 1.0f / (tan(fov * 0.5f));
+  float c        = 1.0f / (tanf(fov * 0.5f));
   float a        = screen_aspect;
 
   float f        = screen_depth;
@@ -450,10 +450,10 @@ Vector4 Mat44::mul(Vector4 v)
   Vector4 res(0, 0, 0, 0);
   for (int i = 0; i < 4; i++)
   {
-    res.v[i] += this->rc[0][i] * v.x;
-    res.v[i] += this->rc[1][i] * v.y;
-    res.v[i] += this->rc[2][i] * v.z;
-    res.v[i] += this->rc[3][i] * v.w;
+    res.v[i] += this->rc[i][0] * v.x;
+    res.v[i] += this->rc[i][1] * v.y;
+    res.v[i] += this->rc[i][2] * v.z;
+    res.v[i] += this->rc[i][3] * v.w;
   }
 
   return res;

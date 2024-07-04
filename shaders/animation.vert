@@ -10,7 +10,9 @@ const int MAX_JOINTS = 50;
 
 out vec2 TexCoord;
 
+uniform mat4 model;
 uniform mat4 view;
+uniform mat4 projection;
 uniform mat4 jointTransforms[MAX_JOINTS];
 
 void main()
@@ -23,7 +25,7 @@ void main()
     local_pos            += pose_position * weight[i];
   }
 
-  gl_Position = local_pos * view;
+  gl_Position = local_pos * model * view * projection;
 
   TexCoord = aTexCoord;
 }
