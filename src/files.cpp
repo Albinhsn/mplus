@@ -1423,7 +1423,7 @@ bool parse_wavefront_objects(WavefrontObject** _objs, u32& obj_count, u32& obj_c
       assert(obj && "Can't parse obj without name!");
       parse_wavefront_texture(obj, &buffer);
     }
-    else if (buffer.current_char() == 'v' && buffer.buffer[buffer.index - 1] == 'n')
+    else if (buffer.current_char() == 'v' && buffer.buffer[buffer.index + 1] == 'n')
     {
       assert(obj && "Can't parse obj without name!");
       parseWavefrontNormal(obj, &buffer);
@@ -1448,6 +1448,8 @@ bool parse_wavefront_objects(WavefrontObject** _objs, u32& obj_count, u32& obj_c
       obj->name                            = sta_allocate_struct(char, buffer.len - buffer.index + 1);
       obj->name[buffer.len - buffer.index] = '\0';
       strncpy(obj->name, buffer.current_address(), buffer.len - buffer.index);
+    }else{
+      printf("Couldn't prase %s\n", line);
     }
   }
   return true;
@@ -1506,9 +1508,9 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
       // ToDo fix leak
       // sta_deallocate(obj.faces[i].vertices, sizeof(WavefrontVertexData) * obj.faces[i].count);
     }
-    prev_normal_count += obj.normal_count - 1;
-    prev_vertex_count += obj.vertex_count - 1;
-    prev_uv_count += obj.texture_coordinate_count - 1;
+    prev_normal_count += obj.normal_count;
+    prev_vertex_count += obj.vertex_count;
+    prev_uv_count += obj.texture_coordinate_count;
 
     sta_deallocate(obj.texture_coordinates, sizeof(Vector2) * obj.texture_coordinate_capacity);
     sta_deallocate(obj.vertices, sizeof(Vector4) * obj.vertex_capacity);

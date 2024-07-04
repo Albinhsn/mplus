@@ -1,7 +1,6 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <sys/time.h>
-#include <x86intrin.h>
 #include <sys/mman.h>
 #include <assert.h>
 #include <cfloat>
@@ -1353,7 +1352,7 @@ int main()
 
         map_shader.use();
         Mat44   m;
-        Vector3 light_position(cosf(p) * 1, sinf(p) * 1, -1.0);
+        Vector3 light_position(cosf(p) * 1, sinf(p) * 1, 1.0);
         Vector3 ambient_lighting(0.25, 0.25, 0.25);
         m.identity();
         m = m.rotate_x(90);
