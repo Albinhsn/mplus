@@ -1,4 +1,4 @@
-6
+8
 blizzard
 ./data/blizzard.tga
 blue
@@ -11,3 +11,7 @@ white
 ./data/white.tga
 red
 ./data/red.tga
+dirt
+./data/dirt01.tga
+stone
+./data/stone01.tga

@@ -970,7 +970,7 @@ void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m, Mat44 pr
       render_data->shader.use();
       Mat44 m = {};
       m.identity();
-      m = m.scale(render_data->scale).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(entity.angle) - 90).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
+      m = m.scale(render_data->scale).rotate_x(90.0f).rotate_z(RADIANS_TO_DEGREES(entity.angle) + 90).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
 
       renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
       render_data->shader.set_mat4("model", m);
@@ -1183,7 +1183,7 @@ int main()
   map                   = {};
   u32     map_buffer    = renderer.get_buffer_by_filename("map");
 
-  u32     texture       = renderer.get_texture("blizzard");
+  u32     texture       = renderer.get_texture("dirt");
 
   Model*  model         = renderer.get_model_by_filename("model");
   u32     entity_buffer = renderer.get_buffer_by_filename("model");

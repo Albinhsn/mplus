@@ -19,7 +19,7 @@ animation
 model
 pillar
 0
-blizzard
+stone
 model
 0.35
 pillar
