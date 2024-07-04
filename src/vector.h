@@ -86,7 +86,7 @@ public:
   {
     return sqrtf(this->x * this->x + this->y * this->y);
   }
-  void normalize();
+  void           normalize();
   float          dot(Vector2 v);
   float          dot_perp(Vector2 v);
   Vector2        cross(Vector2 v);
@@ -145,6 +145,12 @@ public:
     this->y = y;
     this->z = z;
     this->w = w;
+  }
+  Vector3 project()
+  {
+    Vector3 out = Vector3(this->x, this->y, this->z);
+    out.scale(1.0f / this->w);
+    return out;
   }
   void debug()
   {
@@ -236,7 +242,8 @@ public:
 struct ColorU8
 {
 public:
-  ColorU8(u8 r, u8 g, u8 b, u8 a){
+  ColorU8(u8 r, u8 g, u8 b, u8 a)
+  {
     this->r = r;
     this->g = g;
     this->b = b;

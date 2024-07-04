@@ -112,6 +112,8 @@ public:
   bool    load_textures_from_files(const char* file_location);
   bool    load_buffers_from_files(const char* file_location);
   bool    load_models_from_files(const char* file_location);
+  void    reset_viewport_to_screen_size();
+  void    change_viewport(u32 w, u32 h);
 
   u32     get_texture(const char* name);
   Shader* get_shader_by_name(const char* name);

@@ -14,6 +14,7 @@
 
 #include "platform.h"
 #include "common.h"
+#include "sdl.h"
 #include "vector.h"
 #include "files.h"
 #include "shader.h"
@@ -1118,11 +1119,11 @@ int main()
 
   AFont font;
   font.parse_ttf("./data/fonts/OpenSans-Regular.ttf");
-  const int   screen_width  = 620;
-  const int   screen_height = 480;
-  Renderer    renderer(screen_width, screen_height, &font, &logger, true);
+  const int screen_width  = 620;
+  const int screen_height = 480;
+  Renderer  renderer(screen_width, screen_height, &font, &logger, true);
 
-  Mat44 projection;
+  Mat44     projection;
   projection.identity();
   projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
   projection.debug();
@@ -1169,11 +1170,6 @@ int main()
     return 1;
   }
 
-  InputState input_state(renderer.window);
-
-  // ToDo make this work when game over is implemented
-  score = 0;
-
   init_imgui(renderer.window, renderer.context);
 
   fireball_id       = renderer.get_buffer_by_filename("fireball");
@@ -1188,7 +1184,7 @@ int main()
   map_shader.use();
   map_shader.set_mat4("view", ident);
 
-  Model* map_model = renderer.get_model_by_filename("map2");
+  Model* map_model      = renderer.get_model_by_filename("map2");
 
   map                   = {};
   u32     map_buffer    = renderer.get_buffer_by_filename("map2");
@@ -1233,8 +1229,15 @@ int main()
   bool     console  = false;
   char     console_buf[1024];
   memset(console_buf, 0, ArrayCount(console_buf));
+  InputState input_state(renderer.window);
+
+  // ToDo make this work when game over is implemented
+  score                   = 0;
 
   EntityRenderData pillar = *get_render_data_by_name("pillar");
+
+  // change_obj_to_y_up("./data/map_with_pillar.obj", "./data/map_with_pillar2.obj");
+  // return 1;
 
   while (true)
   {
@@ -1355,7 +1358,6 @@ int main()
         Vector3 light_position(cosf(p) * 1, sinf(p) * 1, 1.0);
         Vector3 ambient_lighting(0.25, 0.25, 0.25);
         m.identity();
-        m = m.rotate_x(90);
         map_shader.set_vec3("ambient_lighting", ambient_lighting);
         map_shader.set_vec3("light_position", light_position);
         map_shader.set_mat4("model", m);

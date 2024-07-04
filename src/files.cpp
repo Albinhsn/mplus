@@ -1448,11 +1448,63 @@ bool parse_wavefront_objects(WavefrontObject** _objs, u32& obj_count, u32& obj_c
       obj->name                            = sta_allocate_struct(char, buffer.len - buffer.index + 1);
       obj->name[buffer.len - buffer.index] = '\0';
       strncpy(obj->name, buffer.current_address(), buffer.len - buffer.index);
-    }else{
+    }
+    else
+    {
       printf("Couldn't prase %s\n", line);
     }
   }
   return true;
+}
+
+Vector3 transform_vertex(Mat44 m, f32 x, f32 y, f32 z)
+{
+  return m.mul(Vector4(x, y, z, 1.0)).project();
+}
+
+void change_obj_to_y_up(const char* filename, const char* outname)
+{
+  WavefrontObject* objs;
+  u32              obj_count, obj_capacity;
+  if (!parse_wavefront_objects(&objs, obj_count, obj_capacity, filename))
+  {
+    assert(!"Failed to parse the objects!");
+  }
+
+  Mat44 m;
+  m.identity();
+  m           = m.rotate_x(90);
+  Mat44 m_inv = m.inverse();
+  m_inv.transpose();
+
+  FILE* file_ptr = fopen(outname, "w");
+  for (u32 i = 0; i < obj_count; i++)
+  {
+    WavefrontObject obj = objs[i];
+    fprintf(file_ptr, "o %s\n", obj.name);
+    for (u32 i = 0; i < obj.vertex_count; i++)
+    {
+      Vector3 v = transform_vertex(m, obj.vertices[i].x, obj.vertices[i].y, obj.vertices[i].z);
+      fprintf(file_ptr, "v %f %f %f\n", v.x, v.y, v.z);
+    }
+    for (u32 i = 0; i < obj.normal_count; i++)
+    {
+      Vector3 v = transform_vertex(m_inv, obj.normals[i].x, obj.normals[i].y, obj.normals[i].z);
+      fprintf(file_ptr, "vn %f %f %f\n", v.x, v.y, v.z);
+    }
+    for (u32 i = 0; i < obj.texture_coordinate_count; i++)
+    {
+      fprintf(file_ptr, "vt %f %f\n", obj.texture_coordinates[i].x, obj.texture_coordinates[i].y);
+    }
+    for (u32 i = 0; i < obj.face_count; i++)
+    {
+      assert(obj.faces[i].count == 3 && "Not triangulated mesh?");
+      WavefrontVertexData f0 = obj.faces[i].vertices[0];
+      WavefrontVertexData f1 = obj.faces[i].vertices[2];
+      WavefrontVertexData f2 = obj.faces[i].vertices[1];
+      fprintf(file_ptr, "f %d/%d/%d %d/%d/%d %d/%d/%d\n", f0.vertex_idx, f0.texture_idx, f0.normal_idx, f1.vertex_idx, f1.texture_idx, f1.normal_idx, f2.vertex_idx, f2.texture_idx, f2.normal_idx);
+    }
+  }
 }
 
 bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename)
@@ -1464,7 +1516,7 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
   {
     return false;
   }
-  printf("Parsed data for %s %d\n", filename, obj_count);
+  logger.info("Parsed data for %s %d\n", filename, obj_count);
 
   float low = FLT_MAX, high = -FLT_MAX;
   model->vertex_count  = 0;
@@ -1490,9 +1542,8 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
       WavefrontFace* face = &obj.faces[i];
       for (u64 j = 0; j < face->count; j++)
       {
-        u64 index             = i * face->count + j + prev_index_count;
-        model->indices[index] = index;
-        // printf("%d\n", index);
+        u64 index                     = i * face->count + j + prev_index_count;
+        model->indices[index]         = index;
         WavefrontVertexData data      = face->vertices[j];
 
         Vector4             v         = obj.vertices[data.vertex_idx - 1 - prev_vertex_count];
@@ -1536,7 +1587,6 @@ bool sta_parse_wavefront_object_from_file(ModelData* model, const char* filename
       v->z = ((v->z + low) / diff) * 2.0f - 1.0f;
     }
   }
-  printf("Parsed %s\n", filename);
 
   return true;
 }

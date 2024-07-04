@@ -14,7 +14,6 @@ void Renderer::enable_2d_rendering()
 }
 void Renderer::disable_2d_rendering()
 {
-
   glEnable(GL_DEPTH_TEST);
 }
 
@@ -26,6 +25,15 @@ void Renderer::toggle_wireframe_off()
 {
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
+void Renderer::change_viewport(u32 w, u32 h)
+{
+  glViewport(0, 0, w, h);
+}
+void Renderer::reset_viewport_to_screen_size()
+{
+  glViewport(0, 0, screen_width, screen_height);
+}
+
 void Renderer::change_screen_size(u32 screen_width, u32 screen_height)
 {
   SDL_SetWindowSize(this->window, screen_width, screen_height);
