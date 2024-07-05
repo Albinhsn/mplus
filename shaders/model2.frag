@@ -24,7 +24,6 @@ float shadow_calc(vec4 pos){
 
   shadow = proj_coords.z > 1.0 ? 0 : shadow;
 
-
   return shadow;
 }
 
@@ -36,6 +35,6 @@ void main()
    vec3 diffuse = vec3(1.0, 1.0, 1.0) * diff;
 
    float shadow = shadow_calc(FragPosLightSpace);
-   vec3 c = (ambient_lighting + (1.0 - shadow )) * diffuse * texture(texture1, TexCoord).rgb;
+   vec3 c = ((ambient_lighting + (1.0 - shadow )) * diffuse) * texture(texture1, TexCoord).rgb;
    FragColor = vec4(c, 1.0);
 }

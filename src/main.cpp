@@ -85,7 +85,7 @@ struct Hero;
 struct Ability
 {
   const char* name;
-  void (*use_ability)(Camera* camera, InputState* input, Hero* player, u32 ticks);
+  bool (*use_ability)(Camera* camera, InputState* input, Hero* player, u32 ticks);
   u32 cooldown_ticks;
   u32 cooldown;
 };
@@ -515,7 +515,7 @@ bool       is_valid_tile(Vector2 position)
       }
     }
   }
-  assert(!"Shouldn't be able to get here?");
+  return false;
 }
 
 Vector2 get_random_position(u32 tick, u32 enemy_counter)
@@ -642,7 +642,7 @@ void run_command_explode_coc(void* data)
   CommandExplodeCoCData* coc_data = (CommandExplodeCoCData*)data;
   Sphere                 coc_sphere;
   coc_sphere.position = coc_data->position;
-  coc_sphere.r = 0.2f;
+  coc_sphere.r        = 0.2f;
   // iterate over the entities
   for (u32 i = 0; i < entity_count; i++)
   {
@@ -653,6 +653,7 @@ void run_command_explode_coc(void* data)
       enemy_sphere.r        = entities[i].r;
       if (sphere_sphere_collision(coc_sphere, enemy_sphere))
       {
+        score += 100;
         entities[i].hp = 0;
       }
     }
@@ -888,13 +889,15 @@ void handle_abilities(Camera camera, InputState* input, Hero* player, u32 tick)
     if (input->is_key_pressed(keybinds[i]) && !on_cooldown(player->abilities[i], tick))
     {
       Ability* ability = &player->abilities[i];
-      ability->use_ability(&camera, input, player, tick);
-      ability->cooldown = tick + ability->cooldown_ticks;
-      logger.info("Using %s", ability->name);
+      if (ability->use_ability(&camera, input, player, tick))
+      {
+        ability->cooldown = tick + ability->cooldown_ticks;
+        logger.info("Using %s", ability->name);
+      }
     }
   }
 }
-void use_ability_blink(Camera* camera, InputState* input, Hero* player, u32 ticks)
+bool use_ability_blink(Camera* camera, InputState* input, Hero* player, u32 ticks)
 {
 
   Entity    player_entity = entities[player->entity];
@@ -918,9 +921,10 @@ void use_ability_blink(Camera* camera, InputState* input, Hero* player, u32 tick
     }
   }
   entities[player->entity].position = position;
+  return true;
 }
 
-void use_ability_fireball(Camera* camera, InputState* input, Hero* player, u32 ticks)
+bool use_ability_fireball(Camera* camera, InputState* input, Hero* player, u32 ticks)
 {
   // ToDo this can reuse dead fireballs?
 
@@ -937,6 +941,7 @@ void use_ability_fireball(Camera* camera, InputState* input, Hero* player, u32 t
   e->r                 = 0.03f;
   e->render_data       = get_render_data_by_name("fireball");
   e->hp                = 1;
+  return true;
 }
 
 struct Effect
@@ -961,15 +966,25 @@ struct Effects
 
 Effects effects;
 
-void    use_ability_cone_of_cold(Camera* camera, InputState* input, Hero* player, u32 ticks)
+bool    use_ability_cone_of_cold(Camera* camera, InputState* input, Hero* player, u32 ticks)
 {
 
   Effect effect;
   effect.update_effect = 0;
   effect.render_data   = *get_render_data_by_name("cone of cold");
   Entity entity        = entities[player->entity];
-  // This should be mouse position, and also check if it's viable or not
-  effect.position       = entity.position;
+
+
+  // the ouse position is always relative to the center
+  // so find the center, then add the mouse position
+
+  f32    x             = input->mouse_position[0] + entity.position.x + camera->translation.x;
+  f32    y             = input->mouse_position[1] + entity.position.y + camera->translation.y;
+  if (!is_valid_tile(Vector2(x, y)))
+  {
+    return false;
+  }
+  effect.position       = Vector2(x, y);
   effect.angle          = entity.angle;
   effect.effect_ends_at = ticks + 500;
 
@@ -981,8 +996,9 @@ void    use_ability_cone_of_cold(Camera* camera, InputState* input, Hero* player
 
   // position
   CommandExplodeCoCData* data = sta_allocate_struct(CommandExplodeCoCData, 1);
-  data->position = effect.position;
+  data->position              = effect.position;
   add_command(CMD_EXPLODE_COC, (void*)data, effect.effect_ends_at);
+  return true;
 }
 
 void read_abilities(Ability* abilities)
@@ -1200,6 +1216,7 @@ void handle_collision(Entity* e1, Entity* e2, Wave* wave)
   if ((e1->type == ENTITY_PLAYER && e2->type == ENTITY_ENEMY_PROJECTILE) || (e1->type == ENTITY_ENEMY_PROJECTILE && e2->type == ENTITY_PLAYER))
   {
     e2->hp = 0;
+    wave->enemies_alive -= 1;
   }
 }
 
@@ -1561,7 +1578,7 @@ void    render_to_depth_buffer(Renderer* renderer, u32 shadow_width, u32 shadow_
   glCullFace(GL_BACK);
 }
 
-void render_map(Renderer* renderer, u32 map_shader_index, Mat44 camera_m, Mat44 projection, u32 map_texture, u32 map_buffer, u32 depth_texture)
+void render_map(Renderer* renderer, u32 map_shader_index, Mat44 camera_m, Mat44 projection, u32 map_texture, u32 map_buffer, u32 depth_texture, Vector3 view_position)
 {
 
   Shader* map_shader = renderer->get_shader_by_index(map_shader_index);
@@ -1580,6 +1597,7 @@ void render_map(Renderer* renderer, u32 map_shader_index, Mat44 camera_m, Mat44 
   // render map
   renderer->bind_texture(*map_shader, "texture1", map_texture);
   renderer->bind_texture(*map_shader, "shadow_map", depth_texture);
+  // map_shader->set_vec3("viewPos", view_position);
   renderer->render_buffer(map_buffer);
 }
 
@@ -1605,6 +1623,7 @@ void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m, Mat44 pr
       shader->set_mat4("view", camera_m);
       shader->set_mat4("projection", projection);
       shader->set_mat4("light_space_matrix", light_space_matrix);
+      // shader->set_vec3("viewPos", camera.translation);
       renderer->render_buffer(render_data->buffer_id);
 
       renderer->draw_circle(entity.position, entity.r, 1, RED, camera_m, projection);
@@ -1920,7 +1939,7 @@ int main()
 
         render_to_depth_buffer(&renderer, shadow_width, shadow_height, light_position, framebuffer);
 
-        render_map(&renderer, map_shader, camera_m, projection, map_texture, map_buffer, depth_texture);
+        render_map(&renderer, map_shader, camera_m, projection, map_texture, map_buffer, depth_texture, camera.translation);
         render_entities(&renderer, camera, camera_m, projection, depth_texture);
         render_effects(&renderer, camera, camera_m, projection, game_running_ticks, depth_texture);
         if (debug_render)
