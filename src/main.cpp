@@ -8,7 +8,6 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <strings.h>
 #define GLM_ENABLE_EXPERIMENTAL
-#include <iostream>
 #include <glm/gtx/string_cast.hpp>
 
 #include <sys/time.h>
@@ -32,7 +31,6 @@
 #include "animation.h"
 #include "collision.h"
 #include "input.h"
-#include "font.h"
 #include "renderer.h"
 
 #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
@@ -739,13 +737,46 @@ static inline bool on_cooldown(Ability ability, u32 tick)
 
 void handle_abilities(Camera camera, InputState* input, Hero* player, u32 tick)
 {
-  if (input->is_key_pressed('q') && !on_cooldown(player->abilities[0], tick))
+  const char keybinds[] = {'1', '2'};
+  for (u32 i = 0; i < ArrayCount(keybinds); i++)
   {
-    Ability* ability = &player->abilities[0];
-    ability->use_ability(&camera, input, player);
-    ability->cooldown = tick + ability->cooldown_ticks;
-    logger.info("Using %s", ability->name);
+    if (input->is_key_pressed(keybinds[i]) && !on_cooldown(player->abilities[i], tick))
+    {
+      Ability* ability = &player->abilities[i];
+      ability->use_ability(&camera, input, player);
+      ability->cooldown = tick + ability->cooldown_ticks;
+      logger.info("Using %s", ability->name);
+    }
   }
+}
+void use_ability_blink(Camera* camera, InputState* input, Hero* player)
+{
+
+  // figure out where we're aiming
+  // shoot a "ray" in that direction
+  // walk as far as you can in that direction
+
+  Entity    player_entity = entities[player->entity];
+  Vector2   position      = player_entity.position;
+  f32       angle         = player_entity.angle;
+
+  const f32 max_size      = 0.4f;
+  const f32 step_size     = 0.005f;
+  const u32 max_steps     = max_size / step_size;
+  Vector2   direction     = Vector2(cosf(angle) * step_size, sinf(angle) * step_size);
+  for (u32 i = 0; i < max_steps; i++)
+  {
+
+    position.x += direction.x;
+    position.y += direction.y;
+    Vector2 closest_point = {};
+    if (is_out_of_map_bounds(&closest_point, &map, position))
+    {
+      position = closest_point;
+      break;
+    }
+  }
+  entities[player->entity].position = position;
 }
 
 void use_ability_fireball(Camera* camera, InputState* input, Hero* player)
@@ -775,6 +806,11 @@ void read_abilities(Ability* abilities)
   abilities[0].cooldown_ticks = 1000;
   abilities[0].cooldown       = 0;
   abilities[0].use_ability    = use_ability_fireball;
+
+  abilities[1].name           = "Blink";
+  abilities[1].cooldown_ticks = 5000;
+  abilities[1].cooldown       = 0;
+  abilities[1].use_ability    = use_ability_blink;
 }
 f32 tile_position_to_game(u8 x)
 {
@@ -1409,7 +1445,7 @@ int main()
   u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0;
   f32      fps      = 0.0f;
 
-  UI_State ui_state = UI_STATE_MAIN_MENU;
+  UI_State ui_state = UI_STATE_GAME_RUNNING;
   bool     console  = false;
   char     console_buf[1024];
   memset(console_buf, 0, ArrayCount(console_buf));
@@ -1477,7 +1513,6 @@ int main()
       }
 
       ui_state               = render_ui(ui_state, &player, ms, fps, update_ticks, render_ticks, game_running_ticks, screen_height);
-      ui_state               = UI_STATE_GAME_RUNNING;
 
       u32 prior_render_ticks = 0;
       if (ui_state == UI_STATE_GAME_RUNNING)

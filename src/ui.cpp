@@ -65,7 +65,6 @@ void render_game_running_ui(Hero* player, u32 ms, f32 fps, u32 update_ticks, u32
 UI_State render_ui(UI_State state, Hero* player, u32 ms, f32 fps, u32 update_ticks, u32 render_ticks, u32 game_running_ticks, u32 screen_height)
 {
   init_new_ui_frame();
-  return UI_STATE_GAME_RUNNING;
   switch (state)
   {
   case UI_STATE_GAME_RUNNING:
