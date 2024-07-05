@@ -543,6 +543,7 @@ struct Enemy
   u32       cooldown_timer;
   Path      path;
   EnemyType type;
+  bool      can_move;
 };
 struct Wave
 {
@@ -601,6 +602,12 @@ struct CommandSpawnEnemyData
   u32   enemy_index;
 };
 
+struct CommandShootArrow
+{
+  Enemy* enemy;
+  f32    angle;
+};
+
 CommandQueue command_queue;
 
 void         add_command(CommandType type, void* data, u32 tick)
@@ -626,6 +633,22 @@ void run_command_spawn_enemy(void* data)
 
 void run_command_shoot_arrow(void* data)
 {
+  CommandShootArrow* arrow_data   = (CommandShootArrow*)data;
+  Enemy*             enemy        = arrow_data->enemy;
+  u32                entity_index = get_new_entity();
+  Entity*            entity       = &entities[enemy->entity];
+  Entity*            e            = &entities[entity_index];
+  e->type                         = ENTITY_ENEMY_PROJECTILE;
+
+  f32 ms                          = 0.01;
+
+  e->position                     = entity->position;
+  e->velocity                     = Vector2(cosf(arrow_data->angle) * ms, sinf(arrow_data->angle) * ms);
+  e->angle                        = entity->angle;
+  e->r                            = 0.03f;
+  e->render_data                  = get_render_data_by_name("arrow");
+  e->hp                           = 1;
+  enemy->can_move                 = true;
 }
 
 void run_commands(u32 ticks)
@@ -639,7 +662,6 @@ void run_commands(u32 ticks)
     {
       switch (node->command.type)
       {
-      // execute command
       case CMD_EXPLODE_COC:
       {
         run_command_explode_coc(node->command.data);
@@ -1081,7 +1103,15 @@ void update_enemies(Wave* wave, Hero* player, u32 tick_difference, u32 tick)
     Entity* entity = &entities[enemy->entity];
     if (entity->hp > 0)
     {
-      handle_enemy_movement(enemy, player_position);
+      if (enemy->can_move)
+      {
+        handle_enemy_movement(enemy, player_position);
+      }
+      else
+      {
+        entity->velocity.x = 0;
+        entity->velocity.y = 0;
+      }
       Sphere enemy_sphere;
       enemy_sphere.r        = entity->r;
       enemy_sphere.position = entity->position;
@@ -1112,19 +1142,13 @@ void update_enemies(Wave* wave, Hero* player, u32 tick_difference, u32 tick)
           f32 angle = 0.0f;
           if (player_is_visible(angle, entity->position, player))
           {
-            u32 entity_index      = get_new_entity();
-            entity                = &entities[enemy->entity];
-            Entity* e             = &entities[entity_index];
-            e->type               = ENTITY_ENEMY_PROJECTILE;
 
-            f32 ms                = 0.01;
+            enemy->can_move               = false;
 
-            e->position           = entity->position;
-            e->velocity           = Vector2(cosf(angle) * ms, sinf(angle) * ms);
-            e->angle              = entity->angle;
-            e->r                  = 0.03f;
-            e->render_data        = get_render_data_by_name("arrow");
-            e->hp                 = 1;
+            CommandShootArrow* arrow_data = sta_allocate_struct(CommandShootArrow, 1);
+            arrow_data->enemy             = enemy;
+            arrow_data->angle             = angle;
+            add_command(CMD_SHOOT_ARROW, (void*)arrow_data, tick + 200);
 
             enemy->cooldown_timer = tick + enemy->cooldown;
           }
@@ -1139,7 +1163,6 @@ void handle_collision(Entity* e1, Entity* e2, Wave* wave)
 {
   if ((e1->type == ENTITY_ENEMY && e2->type == ENTITY_PLAYER_PROJECTILE) || (e1->type == ENTITY_PLAYER_PROJECTILE && e2->type == ENTITY_ENEMY))
   {
-    printf("Killed enemy!\n");
     score += 100;
     e1->hp = 0;
     e2->hp = 0;
@@ -1603,7 +1626,6 @@ void render_console(Hero* player, Renderer* renderer, InputState* input_state, c
 #else
 #define DEBUG
 #endif
-      printf("!\n");
       logger.info("Debug on");
     }
     else if (compare_strings("reload", console_buf))
