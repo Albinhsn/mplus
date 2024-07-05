@@ -573,7 +573,7 @@ void spawn(Wave* wave, u32 enemy_index)
 enum CommandType
 {
   CMD_SPAWN_ENEMY,
-  CMD_SHOOT_ARROW,
+  CMD_LET_RANGED_MOVE_AFTER_SHOOTING,
   CMD_EXPLODE_COC
 };
 
@@ -602,10 +602,9 @@ struct CommandSpawnEnemyData
   u32   enemy_index;
 };
 
-struct CommandShootArrow
+struct CommandLetRangedMoveAfterShooting
 {
   Enemy* enemy;
-  f32    angle;
 };
 
 CommandQueue command_queue;
@@ -633,22 +632,9 @@ void run_command_spawn_enemy(void* data)
 
 void run_command_shoot_arrow(void* data)
 {
-  CommandShootArrow* arrow_data   = (CommandShootArrow*)data;
-  Enemy*             enemy        = arrow_data->enemy;
-  u32                entity_index = get_new_entity();
-  Entity*            entity       = &entities[enemy->entity];
-  Entity*            e            = &entities[entity_index];
-  e->type                         = ENTITY_ENEMY_PROJECTILE;
-
-  f32 ms                          = 0.01;
-
-  e->position                     = entity->position;
-  e->velocity                     = Vector2(cosf(arrow_data->angle) * ms, sinf(arrow_data->angle) * ms);
-  e->angle                        = entity->angle;
-  e->r                            = 0.03f;
-  e->render_data                  = get_render_data_by_name("arrow");
-  e->hp                           = 1;
-  enemy->can_move                 = true;
+  CommandLetRangedMoveAfterShooting* arrow_data   = (CommandLetRangedMoveAfterShooting*)data;
+  Enemy*                             enemy        = arrow_data->enemy;
+  enemy->can_move                                 = true;
 }
 
 void run_commands(u32 ticks)
@@ -672,7 +658,7 @@ void run_commands(u32 ticks)
         run_command_spawn_enemy(node->command.data);
         break;
       }
-      case CMD_SHOOT_ARROW:
+      case CMD_LET_RANGED_MOVE_AFTER_SHOOTING:
       {
         run_command_shoot_arrow(node->command.data);
         break;
@@ -1143,12 +1129,24 @@ void update_enemies(Wave* wave, Hero* player, u32 tick_difference, u32 tick)
           if (player_is_visible(angle, entity->position, player))
           {
 
-            enemy->can_move               = false;
+            enemy->can_move                               = false;
 
-            CommandShootArrow* arrow_data = sta_allocate_struct(CommandShootArrow, 1);
-            arrow_data->enemy             = enemy;
-            arrow_data->angle             = angle;
-            add_command(CMD_SHOOT_ARROW, (void*)arrow_data, tick + 200);
+            CommandLetRangedMoveAfterShooting* arrow_data = sta_allocate_struct(CommandLetRangedMoveAfterShooting, 1);
+            arrow_data->enemy                             = enemy;
+            add_command(CMD_LET_RANGED_MOVE_AFTER_SHOOTING, (void*)arrow_data, tick + 300);
+            u32     entity_index  = get_new_entity();
+            Entity* entity        = &entities[enemy->entity];
+            Entity* e             = &entities[entity_index];
+            e->type               = ENTITY_ENEMY_PROJECTILE;
+
+            f32 ms                = 0.01;
+
+            e->position           = entity->position;
+            e->velocity           = Vector2(cosf(angle) * ms, sinf(angle) * ms);
+            e->angle              = entity->angle;
+            e->r                  = 0.03f;
+            e->render_data        = get_render_data_by_name("arrow");
+            e->hp                 = 1;
 
             enemy->cooldown_timer = tick + enemy->cooldown;
           }
