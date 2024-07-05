@@ -483,9 +483,6 @@ void find_path(Path* path, Map* map, Vector2 needle, Vector2 source)
   assert(!"Didn't find a path to player!");
 }
 
-u32        enemy_shader;
-u32        enemy_buffer_id;
-
 TargaImage noise;
 
 bool       is_valid_tile(Map* map, Vector2 position)
@@ -533,13 +530,13 @@ Vector2 get_random_position(Map* map, u32 tick, u32 enemy_counter)
 enum EnemyType
 {
   ENEMY_MELEE,
-  ENEMY_FLYING,
   ENEMY_RANGED,
 };
 
 struct Enemy
 {
   u32       entity;
+  u32       initial_hp;
   Path      path;
   EnemyType type;
 };
@@ -548,14 +545,8 @@ void spawn(Enemy* enemy, Map* map, u32 tick, u32 enemy_index)
 {
   Entity*           entity      = &entities[enemy->entity];
   EntityRenderData* render_data = entity->render_data;
-  entity->velocity              = Vector2(0, 0);
-  // randomize position, make sure it is valid
-  entity->position           = get_random_position(map, tick, enemy_index);
-  entity->render_data->scale = 0.05;
-  entity->hp                 = 1;
-  render_data->shader        = enemy_shader;
-  render_data->buffer_id     = enemy_buffer_id;
-  entity->r                  = 0.05f;
+  entity->position              = get_random_position(map, tick, enemy_index);
+  entity->hp                    = enemy->initial_hp;
 }
 
 struct Wave
@@ -1079,7 +1070,58 @@ void debug_render_map_grid(Renderer* renderer, Map* map, Camera camera)
   }
 }
 
-bool parse_wave_from_file(Wave* wave, const char* filename)
+struct EnemyData
+{
+  EnemyType   type;
+  u32         hp;
+  f32         radius;
+  const char* render_data_name;
+};
+
+EnemyData* enemy_data;
+u32        enemy_data_count;
+
+EnemyData  get_enemy_data_from_type(EnemyType type)
+{
+  for (u32 i = 0; i < enemy_data_count; i++)
+  {
+    if (enemy_data[i].type == type)
+    {
+      return enemy_data[i];
+    }
+  }
+  logger.error("Couldn't find enemy with this type! %d", type);
+  assert(!"Couldn't find enemy with this type!");
+}
+
+bool load_enemies_from_file(const char* filename)
+{
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, filename))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+
+  u32 count        = parse_int_from_string(lines.strings[0]);
+  enemy_data_count = count;
+  enemy_data       = sta_allocate_struct(EnemyData, count);
+
+  for (u32 i = 0, string_index = 1; i < count; i++)
+  {
+    EnemyData* data        = &enemy_data[i];
+    data->type             = (EnemyType)parse_int_from_string(lines.strings[string_index++]);
+    data->hp               = parse_int_from_string(lines.strings[string_index++]);
+    data->radius           = parse_float_from_string(lines.strings[string_index++]);
+    data->render_data_name = lines.strings[string_index++];
+    logger.info("Found enemy %d: %d %f %s", data->type, data->hp, data->radius, data->render_data_name);
+  }
+
+  return true;
+}
+
+bool load_wave_from_file(Wave* wave, const char* filename)
 {
   Buffer      buffer = {};
   StringArray lines  = {};
@@ -1091,20 +1133,30 @@ bool parse_wave_from_file(Wave* wave, const char* filename)
 
   assert(lines.count > 1 && "Only one line in wave file?");
   wave->enemy_count = parse_int_from_string(lines.strings[0]);
-  assert(wave->enemy_count + 1 == lines.count && "Mismatch in wave file, expected x enemies in wave and got y");
+  assert(wave->enemy_count * 2 + 1 == lines.count && "Mismatch in wave file, expected x enemies in wave and got y");
   wave->spawn_count   = 0;
   wave->enemies_alive = 0;
   wave->spawn_times   = sta_allocate_struct(u32, wave->enemy_count);
   wave->enemies       = sta_allocate_struct(Enemy, wave->enemy_count);
-  for (u32 i = 0; i < wave->enemy_count; i++)
+  for (u32 i = 0, string_index = 1; i < wave->enemy_count; i++)
   {
-    wave->spawn_times[i]         = parse_int_from_string(lines.strings[i + 1]);
-    Enemy* enemy                 = &wave->enemies[i];
-    u32    entity                = get_new_entity();
-    entities[entity].render_data = get_render_data_by_name("enemy");
-    entities[entity].type        = ENTITY_ENEMY;
 
-    enemy->entity                = entity;
+    Enemy* enemy         = &wave->enemies[i];
+    enemy->type          = (EnemyType)parse_int_from_string(lines.strings[string_index++]);
+    EnemyData enemy_data = get_enemy_data_from_type(enemy->type);
+    enemy->initial_hp    = enemy_data.hp;
+
+    wave->spawn_times[i] = parse_int_from_string(lines.strings[string_index++]);
+    u32     entity_idx   = get_new_entity();
+
+    Entity* entity       = &entities[entity_idx];
+    entity->render_data  = get_render_data_by_name(enemy_data.render_data_name);
+    entity->type         = ENTITY_ENEMY;
+    entity->angle        = 0.0f;
+    entity->hp           = 0;
+    entity->r            = enemy_data.radius;
+    entity->velocity     = Vector2(0, 0);
+    enemy->entity        = entity_idx;
   }
   logger.info("Read wave from '%s', got %d enemies", filename, wave->enemy_count);
 
@@ -1167,6 +1219,14 @@ static f32 p = PI;
 
 bool       load_data(Renderer* renderer)
 {
+
+  const static char* enemy_data_location = "./data/formats/enemy.txt";
+  if (!load_enemies_from_file(enemy_data_location))
+  {
+    logger.error("Failed to read models from '%s'", enemy_data_location);
+    return false;
+  }
+
   const static char* model_locations = "./data/formats/models.txt";
   if (!renderer->load_models_from_files(model_locations))
   {
@@ -1485,7 +1545,6 @@ void render_effects(Renderer* renderer, Camera camera, Mat44 camera_m, Mat44 pro
     shader->set_mat4("view", camera_m);
     shader->set_mat4("projection", projection);
     renderer->render_buffer(render_data->buffer_id);
-    printf("Rendering effect!\n");
 
     node = node->next;
   }
@@ -1514,9 +1573,6 @@ int main()
   fireball_id        = renderer.get_buffer_by_name("fireball");
   fireball_shader    = renderer.get_shader_by_name("model2");
 
-  enemy_shader       = fireball_shader;
-  enemy_buffer_id    = renderer.get_buffer_by_name("enemy");
-
   u32    map_shader  = renderer.get_shader_by_name("model2");
 
   Model* map_model   = renderer.get_model_by_name("map2");
@@ -1530,7 +1586,7 @@ int main()
   Camera camera(Vector3(), -20.0f, -3.0f);
 
   Wave   wave = {};
-  if (!parse_wave_from_file(&wave, "./data/waves/wave01.txt"))
+  if (!load_wave_from_file(&wave, "./data/waves/wave01.txt"))
   {
     logger.error("Failed to parse wave!");
     return 1;

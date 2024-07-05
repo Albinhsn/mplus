@@ -3,8 +3,8 @@ enemy
 0
 blue
 model2
-0.02
-circle
+0.05
+enemy
 fireball
 0
 green

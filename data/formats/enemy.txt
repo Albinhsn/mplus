@@ -1,5 +1,5 @@
-type
-entity idx
-hp
-scale
-radius
+1
+0
+1
+0.05
+enemy
