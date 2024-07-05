@@ -22,6 +22,9 @@ float shadow_calc(vec4 pos){
   float bias = max(0.005 * (1.0 - dot(normal, -light_position)), 0.005);
   float shadow = current_depth - bias > closest_depth ? 1.0 : 0.0;
 
+  shadow = proj_coords.z > 1.0 ? 0 : shadow;
+
+
   return shadow;
 }
 

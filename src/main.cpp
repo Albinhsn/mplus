@@ -1148,6 +1148,7 @@ Vector3 light_position;
 void    render_to_depth_buffer(Renderer* renderer, u32 shadow_width, u32 shadow_height, Vector3 light_position, u32 framebuffer)
 {
 
+  glCullFace(GL_FRONT);
   renderer->change_viewport(shadow_width, shadow_height);
   glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
   glClear(GL_DEPTH_BUFFER_BIT);
@@ -1174,7 +1175,7 @@ void    render_to_depth_buffer(Renderer* renderer, u32 shadow_width, u32 shadow_
   Mat44  m            = {};
   m.identity();
   depth_shader.use();
-  light_position.debug();
+
   Mat44 l            = Mat44::look_at(light_position, Vector3(0, 0, 0), Vector3(0, 1, 0));
   Mat44 o            = Mat44::orthographic(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 7.5f);
   light_space_matrix = l.mul(o);
@@ -1195,6 +1196,7 @@ void    render_to_depth_buffer(Renderer* renderer, u32 shadow_width, u32 shadow_
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   renderer->reset_viewport_to_screen_size();
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glCullFace(GL_BACK);
 }
 
 void render_map(Renderer* renderer, Shader* map_shader, Mat44 camera_m, Mat44 projection, u32 map_texture, u32 map_buffer, u32 depth_texture)
