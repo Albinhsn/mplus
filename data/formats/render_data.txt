@@ -1,4 +1,4 @@
-5
+7
 enemy
 0
 blue
@@ -29,3 +29,15 @@ red
 model
 0.2
 circle
+arrow
+0
+white
+model2
+0.03
+fireball
+enemy_ranged
+0
+black
+model2
+0.05
+enemy

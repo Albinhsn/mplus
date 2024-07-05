@@ -109,6 +109,7 @@ enum EntityType
   ENTITY_PLAYER,
   ENTITY_ENEMY,
   ENTITY_PLAYER_PROJECTILE,
+  ENTITY_ENEMY_PROJECTILE,
 };
 
 struct Entity
@@ -128,10 +129,7 @@ u32               render_data_count;
 Entity*           entities;
 u32               entity_capacity = 2;
 u32               entity_count    = 0;
-u32*              fireballs;
-u32               fireball_count    = 0;
-u32               fireball_capacity = 2;
-bool              god               = false;
+bool              god             = false;
 
 #include "ui.cpp"
 #include "ui.h"
@@ -537,6 +535,8 @@ struct Enemy
 {
   u32       entity;
   u32       initial_hp;
+  u32       cooldown;
+  u32       cooldown_timer;
   Path      path;
   EnemyType type;
 };
@@ -547,6 +547,10 @@ void spawn(Enemy* enemy, Map* map, u32 tick, u32 enemy_index)
   EntityRenderData* render_data = entity->render_data;
   entity->position              = get_random_position(map, tick, enemy_index);
   entity->hp                    = enemy->initial_hp;
+  if (enemy->type == ENEMY_RANGED)
+  {
+    enemy->cooldown = 500;
+  }
 }
 
 struct Wave
@@ -706,8 +710,6 @@ bool is_out_of_map_bounds(Vector2* closest_point, Map* map, Vector2 position)
       *closest_point = v;
       distance       = len;
     }
-    // calculate distance to triangle
-    // if less update closest_point
   }
   return true;
 }
@@ -769,22 +771,20 @@ void use_ability_blink(Camera* camera, InputState* input, Hero* player, u32 tick
 void use_ability_fireball(Camera* camera, InputState* input, Hero* player, u32 ticks)
 {
   // ToDo this can reuse dead fireballs?
-  RESIZE_ARRAY(fireballs, u32, fireball_count, fireball_capacity);
 
-  u32 entity_index            = get_new_entity();
-  fireballs[fireball_count++] = entity_index;
-  Entity* e                   = &entities[entity_index];
-  e->type                     = ENTITY_PLAYER_PROJECTILE;
+  u32     entity_index = get_new_entity();
+  Entity* e            = &entities[entity_index];
+  e->type              = ENTITY_PLAYER_PROJECTILE;
 
-  f32    ms                   = 0.02;
+  f32    ms            = 0.02;
 
-  Entity player_entity        = entities[player->entity];
-  e->position                 = entities[player->entity].position;
-  e->velocity                 = Vector2(cosf(player_entity.angle) * ms, sinf(player_entity.angle) * ms);
-  e->angle                    = player_entity.angle;
-  e->r                        = 0.03f;
-  e->render_data              = get_render_data_by_name("fireball");
-  e->hp                       = 1;
+  Entity player_entity = entities[player->entity];
+  e->position          = entities[player->entity].position;
+  e->velocity          = Vector2(cosf(player_entity.angle) * ms, sinf(player_entity.angle) * ms);
+  e->angle             = player_entity.angle;
+  e->r                 = 0.03f;
+  e->render_data       = get_render_data_by_name("fireball");
+  e->hp                = 1;
 }
 
 struct Effect
@@ -826,13 +826,6 @@ void    use_ability_cone_of_cold(Camera* camera, InputState* input, Hero* player
   effects.head          = node;
 
   node->effect          = effect;
-
-  // The point is that you just need to queue something that checks some bounds after some time to see if it finds something there and we deal damage
-  //  this should just check the next frame if it hits or not
-  //  some may be after a timer, i.e we need a queue for this
-  // We also want to queue something that lives temporarily across some frames that is just render geometry
-  //  this should live for some amount of time
-  //    this can just be a pool of effects i.e just some geometry that can be updated
 }
 
 void read_abilities(Ability* abilities)
@@ -936,6 +929,47 @@ void spawn_enemies(Wave* wave, Map* map, u32 tick)
   }
 }
 
+inline bool point_in_sphere(Sphere sphere, Vector2 p)
+{
+
+  return sphere.position.sub(p).len() < sphere.r;
+}
+
+bool player_is_visible(f32& angle, Vector2 position, Hero* player)
+{
+
+  const f32 step_size     = 0.005f;
+  Entity    player_entity = entities[player->entity];
+  // ToDo this also just checks for the origin of the player and not the hitbox
+  Vector2 direction = player_entity.position.sub(position);
+
+  Vector2 orig_pos  = position;
+
+  Sphere  player_sphere;
+  player_sphere.position = player_entity.position;
+  player_sphere.r        = player_entity.r;
+  while (true)
+  {
+    position.x += direction.x * step_size;
+    position.y += direction.y * step_size;
+    Vector2 closest_point = {};
+    // ToDo this needs to change after geometry change
+    if (is_out_of_map_bounds(&closest_point, &map, position))
+    {
+      return false;
+    }
+    if (point_in_sphere(player_sphere, position))
+    {
+      f32 x = position.x - orig_pos.x;
+      f32 y = position.y - orig_pos.y;
+      angle = atan2(y, x);
+      return true;
+    }
+  }
+
+  return true;
+}
+
 void update_enemies(Map* map, Wave* wave, Hero* player, u32 tick_difference, u32 tick)
 {
 
@@ -955,22 +989,55 @@ void update_enemies(Map* map, Wave* wave, Hero* player, u32 tick_difference, u32
     Entity* entity = &entities[enemy->entity];
     if (entity->hp > 0)
     {
-      // if alive update path
-      // check attack
       handle_enemy_movement(map, enemy, player_position);
       Sphere enemy_sphere;
       enemy_sphere.r        = entity->r;
       enemy_sphere.position = entity->position;
 
-      if (sphere_sphere_collision(player_sphere, enemy_sphere))
+      switch (enemy->type)
       {
-        u32 tick = SDL_GetTicks();
-        if (tick >= player->can_take_damage_tick && !god)
+      case ENEMY_MELEE:
+      {
+        if (sphere_sphere_collision(player_sphere, enemy_sphere))
         {
-          player->can_take_damage_tick = tick + player->damage_taken_cd;
-          // entities[player->entity].hp -= 1;
-          // logger.info("Took damage, hp: %d %d", entities[player->entity].hp, enemy->entity);
+          u32 tick = SDL_GetTicks();
+          if (tick >= player->can_take_damage_tick && !god)
+          {
+            player->can_take_damage_tick = tick + player->damage_taken_cd;
+            // entities[player->entity].hp -= 1;
+            // logger.info("Took damage, hp: %d %d", entities[player->entity].hp, enemy->entity);
+          }
         }
+        break;
+      }
+      case ENEMY_RANGED:
+      {
+        // check cd
+        if (tick >= enemy->cooldown_timer)
+        {
+
+          // check if visible
+          f32 angle = 0.0f;
+          if (player_is_visible(angle, entity->position, player))
+          {
+            u32 entity_index      = get_new_entity();
+            entity                = &entities[enemy->entity];
+            Entity* e             = &entities[entity_index];
+            e->type               = ENTITY_ENEMY_PROJECTILE;
+
+            f32 ms                = 0.02;
+
+            e->position           = entity->position;
+            e->velocity           = Vector2(cosf(angle) * ms, sinf(angle) * ms);
+            e->angle              = entity->angle;
+            e->r                  = 0.03f;
+            e->render_data        = get_render_data_by_name("arrow");
+            e->hp                 = 1;
+
+            enemy->cooldown_timer = tick + enemy->cooldown;
+          }
+        }
+      }
       }
     }
   }
@@ -978,8 +1045,9 @@ void update_enemies(Map* map, Wave* wave, Hero* player, u32 tick_difference, u32
 
 void handle_collision(Entity* e1, Entity* e2, Wave* wave)
 {
-  if (e1->type == ENTITY_ENEMY && e2->type == ENTITY_PLAYER_PROJECTILE)
+  if ((e1->type == ENTITY_ENEMY && e2->type == ENTITY_PLAYER_PROJECTILE) || (e1->type == ENTITY_PLAYER_PROJECTILE && e2->type == ENTITY_ENEMY))
   {
+    printf("Killed enemy!\n");
     score += 100;
     e1->hp = 0;
     e2->hp = 0;
@@ -988,6 +1056,11 @@ void handle_collision(Entity* e1, Entity* e2, Wave* wave)
   // ToDo physics sim?
   if (e1->type == ENTITY_ENEMY && e2->type == ENTITY_ENEMY)
   {
+  }
+  if ((e1->type == ENTITY_PLAYER && e2->type == ENTITY_ENEMY_PROJECTILE) || (e1->type == ENTITY_ENEMY_PROJECTILE && e2->type == ENTITY_PLAYER))
+  {
+    logger.info("Got hit by projectile!");
+    e2->hp = 0;
   }
 }
 
@@ -1006,7 +1079,7 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
       Vector2 closest_point = {};
       if (is_out_of_map_bounds(&closest_point, &map, entity->position))
       {
-        if (entity->type == ENTITY_PLAYER_PROJECTILE)
+        if (entity->type == ENTITY_PLAYER_PROJECTILE || entity->type == ENTITY_ENEMY_PROJECTILE)
         {
           entity->hp = 0;
         }
@@ -1556,7 +1629,6 @@ int main()
   effects.pool.init(sta_allocate(sizeof(EffectNode) * 25), sizeof(EffectNode), 25);
 
   entities               = (Entity*)sta_allocate_struct(Entity, entity_capacity);
-  fireballs              = (u32*)sta_allocate_struct(u32, fireball_capacity);
 
   const int screen_width = 620, screen_height = 480;
   Renderer  renderer(screen_width, screen_height, 0, &logger, true);
