@@ -1,7 +1,9 @@
 #include "shader.h"
+#include "common.h"
+#include "sdl.h"
 #include <GL/glext.h>
 
-static bool test_shader_compilation(unsigned int id)
+bool test_shader_compilation(unsigned int id)
 {
   int  success;
   char info_log[512] = {};
@@ -23,13 +25,13 @@ static GLint get_location(GLuint id, const char* name, const char* shader_name)
   GLint location = sta_glGetUniformLocation(id, name);
   if (location == -1)
   {
-    logger.error("Couldn't find uniform '%s' in shader '%s'", name, shader_name);
+    logger.error("Couldn't find uniform '%s' in shader '%s' %d", name, shader_name, id);
     assert(!"Couldn't find uniform!");
   }
   return location;
 }
 
-static bool test_program_linking(unsigned int id)
+bool test_program_linking(unsigned int id)
 {
   int  success;
   char info_log[512] = {};
@@ -65,7 +67,7 @@ void Shader::set_float(const char* name, float value)
 }
 void Shader::set_vec3(const char* name, Vector3 v)
 {
-  sta_glUniform3fv(get_location(this->id, name, this->name),1, (float*)&v);
+  sta_glUniform3fv(get_location(this->id, name, this->name), 1, (float*)&v);
 }
 
 void Shader::set_mat4(const char* name, Mat44 m)
@@ -88,7 +90,7 @@ void Shader::use()
   sta_glUseProgram(this->id);
 }
 
-static GLuint compile_shader(const char* path, GLint shader_type)
+GLuint compile_shader(const char* path, GLint shader_type)
 {
 
   Buffer buffer = {};
@@ -97,15 +99,16 @@ static GLuint compile_shader(const char* path, GLint shader_type)
   unsigned int vertex         = sta_glCreateShader(shader_type);
   sta_glShaderSource(vertex, 1, &vertex_content, 0);
   sta_glCompileShader(vertex);
+
   if (!test_shader_compilation(vertex))
   {
-    printf("Failed shader compilation!\n");
+    logger.error("Failed shader compilation! for '%s' and type %d\n", path, shader_type);
     return -1;
   }
   return vertex;
 }
 
-static inline GLuint get_gl_shader_type(ShaderType type)
+inline GLuint get_gl_shader_type(ShaderType type)
 {
   switch (type)
   {
@@ -130,18 +133,57 @@ static inline GLuint get_gl_shader_type(ShaderType type)
     return GL_COMPUTE_SHADER;
   }
   }
+  logger.error("Unknown type %d", type);
   assert(!"Unknown shader type to gl conversion?");
+}
+
+bool recompile_shader(Shader* shader)
+{
+  Shader s;
+  s.name = shader->name;
+  s.id   = sta_glCreateProgram();
+
+  logger.info("Reloading shader '%s'", shader->name);
+  for (u32 i = 0; i < ArrayCount(shader->locations) && shader->locations[i] != 0; i++)
+  {
+    s.locations[i]   = shader->locations[i];
+    s.types[i]       = shader->types[i];
+    GLuint shader_id = compile_shader(s.locations[i], get_gl_shader_type(s.types[i]));
+    if ((i32)shader_id == -1)
+    {
+      logger.error("Failed to recompile shader '%s'", s.locations[i]);
+      return false;
+    }
+    sta_glAttachShader(s.id, shader_id);
+    logger.info("Compiled '%s' %d and attached it to %d", s.locations[i], s.types[i], s.id);
+  }
+
+  sta_glLinkProgram(s.id);
+  if (!test_program_linking(s.id))
+  {
+    logger.error("Failed to link program for shader '%s'", s.name);
+    return false;
+  }
+
+  // ToDo detach shaders?
+  sta_glDeleteProgram(shader->id);
+
+  *shader = s;
+  return true;
 }
 
 Shader::Shader(ShaderType* types, const char** names, u32 count, const char* name)
 {
   this->name = name;
   this->id   = sta_glCreateProgram();
+  memset(this->locations, 0, ArrayCount(this->locations) * sizeof(const char*));
 
   for (u32 i = 0; i < count; i++)
   {
+    this->types[i]     = types[i];
+    this->locations[i] = names[i];
 
-    GLuint shader_id = compile_shader(names[i], get_gl_shader_type(types[i]));
+    GLuint shader_id   = compile_shader(names[i], get_gl_shader_type(types[i]));
     if ((i32)shader_id == -1)
     {
       logger.error("Failed to compile shader '%s'", names[i]);
@@ -151,6 +193,5 @@ Shader::Shader(ShaderType* types, const char** names, u32 count, const char* nam
     sta_glAttachShader(this->id, shader_id);
   }
   sta_glLinkProgram(this->id);
-
   test_program_linking(this->id);
 }

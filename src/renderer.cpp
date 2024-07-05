@@ -475,14 +475,30 @@ u32 Renderer::get_texture(const char* name)
   this->logger->error("Couldn't find texture '%s'", name);
   assert(!"Didn't find texture!");
 }
+Shader* Renderer::get_shader_by_index(u32 index)
+{
+  return &this->shaders[index];
+}
 
-Shader* Renderer::get_shader_by_name(const char* name)
+void Renderer::reload_shaders()
+{
+  for (u32 i = 0; i < shader_count; i++)
+  {
+    Shader* shader = &shaders[i];
+    if (!recompile_shader(shader))
+    {
+      logger->error("Failed to recompile '%s'", shader->name);
+    }
+  }
+}
+
+u32 Renderer::get_shader_by_name(const char* name)
 {
   for (u32 i = 0; i < this->shader_count; i++)
   {
     if (compare_strings(name, this->shaders[i].name))
     {
-      return &this->shaders[i];
+      return i;
     }
   }
   logger->error("Didn't find shader '%s'", name);
@@ -602,7 +618,7 @@ bool Renderer::load_models_from_files(const char* file_location)
       model->vertices     = sta_allocate_struct(Vector3, model_data.vertex_count);
       for (u32 i = 0; i < model_data.vertex_count; i++)
       {
-        model->vertices[i]   = model_data.vertices[i].vertex;
+        model->vertices[i] = model_data.vertices[i].vertex;
       }
       model->indices          = model_data.indices;
       model->animation_data   = 0;
@@ -625,7 +641,7 @@ bool Renderer::load_models_from_files(const char* file_location)
       model->vertices         = sta_allocate_struct(Vector3, model_data.vertex_count);
       for (u32 i = 0; i < model_data.vertex_count; i++)
       {
-        model->vertices[i]   = model_data.vertices[i].position;
+        model->vertices[i] = model_data.vertices[i].position;
       }
       model->animation_data           = (AnimationData*)sta_allocate_struct(AnimationData, 1);
       model->animation_data->skeleton = model_data.skeleton;
