@@ -2,7 +2,7 @@
 0
 1
 0.05
-enemy
+enemy_melee
 1
 1
 0.05

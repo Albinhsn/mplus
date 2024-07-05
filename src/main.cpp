@@ -549,7 +549,7 @@ void spawn(Enemy* enemy, Map* map, u32 tick, u32 enemy_index)
   entity->hp                    = enemy->initial_hp;
   if (enemy->type == ENEMY_RANGED)
   {
-    enemy->cooldown = 500;
+    enemy->cooldown = 1000;
   }
 }
 
@@ -620,7 +620,7 @@ void handle_player_movement(Renderer* renderer, Camera& camera, Hero* player, In
 
   camera.translation                            = Vector3(-entity->position.x, -entity->position.y, 0.0);
 
-  entities[player->entity].render_data->texture = renderer->get_texture(player->can_take_damage_tick >= SDL_GetTicks() ? "blue" : "black");
+  entities[player->entity].render_data->texture = renderer->get_texture(player->can_take_damage_tick >= SDL_GetTicks() ? "blue_texture" : "black_texture");
 }
 
 Vector2 closest_point_triangle(Triangle triangle, Vector2 p)
@@ -1025,7 +1025,7 @@ void update_enemies(Map* map, Wave* wave, Hero* player, u32 tick_difference, u32
             Entity* e             = &entities[entity_index];
             e->type               = ENTITY_ENEMY_PROJECTILE;
 
-            f32 ms                = 0.02;
+            f32 ms                = 0.01;
 
             e->position           = entity->position;
             e->velocity           = Vector2(cosf(angle) * ms, sinf(angle) * ms);
@@ -1404,7 +1404,7 @@ void    render_to_depth_buffer(Renderer* renderer, u32 shadow_width, u32 shadow_
 
   sta_glBindVertexArray(vao);
 
-  Model* map_model = renderer->get_model_by_name("map2");
+  Model* map_model = renderer->get_model_by_name("model_map_with_pillar");
   sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
   sta_glBufferData(GL_ARRAY_BUFFER, sizeof(Vector3) * map_model->vertex_count, map_model->vertices, GL_DYNAMIC_DRAW);
   sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
@@ -1642,15 +1642,15 @@ int main()
 
   init_imgui(renderer.window, renderer.context);
 
-  fireball_id        = renderer.get_buffer_by_name("fireball");
+  fireball_id        = renderer.get_buffer_by_name("model_fireball");
   fireball_shader    = renderer.get_shader_by_name("model2");
 
   u32    map_shader  = renderer.get_shader_by_name("model2");
 
-  Model* map_model   = renderer.get_model_by_name("map2");
+  Model* map_model   = renderer.get_model_by_name("model_map_with_pillar");
 
-  u32    map_buffer  = renderer.get_buffer_by_name("map2");
-  u32    map_texture = renderer.get_texture("dirt");
+  u32    map_buffer  = renderer.get_buffer_by_name("model_map_with_pillar");
+  u32    map_texture = renderer.get_texture("dirt_texture");
 
   Hero   player      = {};
   init_player(&player);
@@ -1664,7 +1664,7 @@ int main()
     return 1;
   }
 
-  map.init_map(renderer.get_model_by_name("map"));
+  map.init_map(renderer.get_model_by_name("model_map_with_hole"));
 
   u32      ticks        = 0;
   u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0;

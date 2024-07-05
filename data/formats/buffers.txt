@@ -1,44 +1,44 @@
 8
-unarmed_man
+model_unarmed_man
 5
 3 0
 2 0 
 3 0 
 4 0 
 4 1
-model
+model_player
 5
 3 0
 2 0 
 3 0 
 4 0 
 4 1
-fireball
+model_fireball
 3
 3 0 
 2 0
 3 0
-enemy
+model_enemy
 3
 3 0
 2 0
 3 0 
-map
+model_map_with_hole
 3
 3 0
 2 0 
 3 0
-map2
+model_map_with_pillar
 3
 3 0
 2 0 
 3 0
-pillar
+model_pillar
 3
 3 0
 2 0 
 3 0
-circle
+model_circle
 3
 3 0
 2 0
