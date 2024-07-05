@@ -481,7 +481,10 @@ bool gltf_parse(AnimationModel* model, const char* filename)
 {
 
   Buffer buffer = {};
-  sta_read_file(&buffer, filename);
+  if(!sta_read_file(&buffer, filename)){
+    logger.error("Couldn't find file '%s'", filename);
+    return false;
+  }
   (void)buffer.read(sizeof(GLTF_Header));
 
   GLTF_Chunk chunk0 = {};

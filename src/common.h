@@ -52,6 +52,12 @@ struct PoolAllocator
   u64           chunk_size;
   u64           size;
   PoolFreeNode* head;
+
+public:
+  void  init(void* buffer, u64 chunk_size, u64 count);
+  void* alloc();
+  void  free(u64 ptr);
+  void free_all();
 };
 typedef struct PoolAllocator PoolAllocator;
 
@@ -180,7 +186,7 @@ public:
   void info(const char* msg, ...);
   void warning(const char* msg, ...);
   void error(const char* msg, ...);
-void log(LoggingLevel level, const char* msg, va_list args);
+  void log(LoggingLevel level, const char* msg, va_list args);
 
 private:
   inline void send_log_message(const char* msg, const char* color, va_list args);

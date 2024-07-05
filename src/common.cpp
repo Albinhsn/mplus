@@ -60,6 +60,19 @@ void sta_arena_pop(Arena* arena, u64 size)
  =========================================
  =========================================
 */
+void* PoolAllocator::alloc()
+{
+  PoolFreeNode* node = this->head;
+  if (node == 0)
+  {
+    assert(!"Pool allocator has no memory");
+    return 0;
+  }
+
+  this->head = node->next;
+
+  return memset(node, 0, this->chunk_size);
+}
 void* sta_pool_alloc(PoolAllocator* pool)
 {
   PoolFreeNode* node = pool->head;
@@ -72,6 +85,26 @@ void* sta_pool_alloc(PoolAllocator* pool)
   pool->head = node->next;
 
   return memset(node, 0, pool->chunk_size);
+}
+void PoolAllocator::free(u64 ptr)
+{
+  if (ptr == 0)
+  {
+    return;
+  }
+
+  u64 start = this->memory;
+  u64 end   = this->memory + this->size;
+
+  if (!(start <= ptr && ptr < end))
+  {
+    assert(0 && "Memory is out of bounds of the buffer in this pool");
+    return;
+  }
+
+  PoolFreeNode* node = (PoolFreeNode*)ptr;
+  node->next         = this->head;
+  this->head         = node;
 }
 void sta_pool_free(PoolAllocator* pool, u64 ptr)
 {
@@ -93,6 +126,18 @@ void sta_pool_free(PoolAllocator* pool, u64 ptr)
   node->next         = pool->head;
   pool->head         = node;
 }
+void PoolAllocator::free_all()
+{
+  u64 chunk_count = this->size / this->chunk_size;
+
+  for (u64 i = 0; i < chunk_count; i++)
+  {
+    u64           ptr  = this->memory + this->chunk_size * i;
+    PoolFreeNode* node = (PoolFreeNode*)ptr;
+    node->next         = this->head;
+    this->head         = node;
+  }
+}
 void sta_pool_free_all(PoolAllocator* pool)
 {
   u64 chunk_count = pool->size / pool->chunk_size;
@@ -104,6 +149,15 @@ void sta_pool_free_all(PoolAllocator* pool)
     node->next         = pool->head;
     pool->head         = node;
   }
+}
+void PoolAllocator::init(void* buffer, u64 chunk_size, u64 count)
+{
+  this->memory     = (u64)buffer;
+  this->chunk_size = align_offset(chunk_size, DEFAULT_ALIGNMENT);
+  this->head       = 0;
+  this->size       = chunk_size * count;
+
+  this->free_all();
 }
 
 void sta_pool_init(PoolAllocator* pool, void* buffer, u64 chunk_size, u64 count)

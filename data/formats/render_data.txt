@@ -1,10 +1,10 @@
-4
+5
 enemy
 0
 blue
 model2
 0.02
-enemy
+circle
 fireball
 0
 green
@@ -23,3 +23,9 @@ stone
 model2
 0.35
 pillar
+cone of cold
+0
+red
+model
+0.2
+circle

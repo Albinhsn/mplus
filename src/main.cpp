@@ -80,7 +80,7 @@ struct Hero;
 struct Ability
 {
   const char* name;
-  void (*use_ability)(Camera* camera, InputState* input, Hero* player);
+  void (*use_ability)(Camera* camera, InputState* input, Hero* player, u32 ticks);
   u32 cooldown_ticks;
   u32 cooldown;
 };
@@ -737,24 +737,20 @@ static inline bool on_cooldown(Ability ability, u32 tick)
 
 void handle_abilities(Camera camera, InputState* input, Hero* player, u32 tick)
 {
-  const char keybinds[] = {'1', '2'};
+  const char keybinds[] = {'1', '2', '3'};
   for (u32 i = 0; i < ArrayCount(keybinds); i++)
   {
     if (input->is_key_pressed(keybinds[i]) && !on_cooldown(player->abilities[i], tick))
     {
       Ability* ability = &player->abilities[i];
-      ability->use_ability(&camera, input, player);
+      ability->use_ability(&camera, input, player, tick);
       ability->cooldown = tick + ability->cooldown_ticks;
       logger.info("Using %s", ability->name);
     }
   }
 }
-void use_ability_blink(Camera* camera, InputState* input, Hero* player)
+void use_ability_blink(Camera* camera, InputState* input, Hero* player, u32 ticks)
 {
-
-  // figure out where we're aiming
-  // shoot a "ray" in that direction
-  // walk as far as you can in that direction
 
   Entity    player_entity = entities[player->entity];
   Vector2   position      = player_entity.position;
@@ -779,7 +775,7 @@ void use_ability_blink(Camera* camera, InputState* input, Hero* player)
   entities[player->entity].position = position;
 }
 
-void use_ability_fireball(Camera* camera, InputState* input, Hero* player)
+void use_ability_fireball(Camera* camera, InputState* input, Hero* player, u32 ticks)
 {
   // ToDo this can reuse dead fireballs?
   RESIZE_ARRAY(fireballs, u32, fireball_count, fireball_capacity);
@@ -800,6 +796,54 @@ void use_ability_fireball(Camera* camera, InputState* input, Hero* player)
   e->hp                       = 1;
 }
 
+struct Effect
+{
+  EntityRenderData render_data;
+  Vector2          position;
+  f32              angle;
+  u32              effect_ends_at;
+  void (*update_effect)(Effect* effect, u32 tick);
+};
+
+struct EffectNode
+{
+  Effect      effect;
+  EffectNode* next;
+};
+struct Effects
+{
+  PoolAllocator pool;
+  EffectNode*   head;
+};
+
+Effects effects;
+
+void    use_ability_cone_of_cold(Camera* camera, InputState* input, Hero* player, u32 ticks)
+{
+
+  Effect effect;
+  effect.update_effect = 0;
+  effect.render_data   = *get_render_data_by_name("cone of cold");
+  Entity entity        = entities[player->entity];
+  // This should be mouse position, and also check if it's viable or not
+  effect.position       = entity.position;
+  effect.angle          = entity.angle;
+  effect.effect_ends_at = ticks + 500;
+
+  EffectNode* node      = (EffectNode*)effects.pool.alloc();
+  node->next            = effects.head;
+  effects.head          = node;
+
+  node->effect          = effect;
+
+  // The point is that you just need to queue something that checks some bounds after some time to see if it finds something there and we deal damage
+  //  this should just check the next frame if it hits or not
+  //  some may be after a timer, i.e we need a queue for this
+  // We also want to queue something that lives temporarily across some frames that is just render geometry
+  //  this should live for some amount of time
+  //    this can just be a pool of effects i.e just some geometry that can be updated
+}
+
 void read_abilities(Ability* abilities)
 {
   abilities[0].name           = "Fireball";
@@ -811,6 +855,11 @@ void read_abilities(Ability* abilities)
   abilities[1].cooldown_ticks = 5000;
   abilities[1].cooldown       = 0;
   abilities[1].use_ability    = use_ability_blink;
+
+  abilities[2].name           = "Cone of Cold";
+  abilities[2].cooldown_ticks = 5000;
+  abilities[2].cooldown       = 0;
+  abilities[2].use_ability    = use_ability_cone_of_cold;
 }
 f32 tile_position_to_game(u8 x)
 {
@@ -1396,8 +1445,56 @@ void debug_render_depth_texture(Renderer* renderer, u32 depth_texture)
   renderer->disable_2d_rendering();
 }
 
+void render_effects(Renderer* renderer, Camera camera, Mat44 camera_m, Mat44 projection, u32 ticks, u32 depth_texture)
+{
+  EffectNode* node = effects.head;
+  EffectNode* prev = 0;
+  while (node)
+  {
+
+    Effect effect = node->effect;
+    if (ticks > effect.effect_ends_at)
+    {
+      if (prev)
+      {
+        prev->next = node->next;
+      }
+      else
+      {
+        effects.head = 0;
+      }
+      EffectNode* next = node->next;
+      effects.pool.free((u64)node);
+      node = next;
+      if (!node)
+      {
+        break;
+      }
+    }
+    EntityRenderData* render_data = &effect.render_data;
+    Shader*           shader      = renderer->get_shader_by_index(render_data->shader);
+    shader->use();
+    Mat44 m = {};
+    m.identity();
+    m = m.scale(render_data->scale);
+    m = m.rotate_z(RADIANS_TO_DEGREES(effect.angle) + 90);
+    m = m.translate(Vector3(effect.position.x, effect.position.y, 0.0f));
+
+    renderer->bind_texture(*shader, "texture1", render_data->texture);
+    shader->set_mat4("model", m);
+    shader->set_mat4("view", camera_m);
+    shader->set_mat4("projection", projection);
+    renderer->render_buffer(render_data->buffer_id);
+    printf("Rendering effect!\n");
+
+    node = node->next;
+  }
+}
+
 int main()
 {
+
+  effects.pool.init(sta_allocate(sizeof(EffectNode) * 25), sizeof(EffectNode), 25);
 
   entities               = (Entity*)sta_allocate_struct(Entity, entity_capacity);
   fireballs              = (u32*)sta_allocate_struct(u32, fireball_capacity);
@@ -1504,6 +1601,11 @@ int main()
       {
         debug_render = !debug_render;
       }
+      if (input_state.is_key_pressed('l'))
+      {
+        camera.rotation -= 1;
+        logger.info("New rotation %f", camera.rotation);
+      }
 
       u32 start_tick = SDL_GetTicks();
       if (ui_state == UI_STATE_GAME_RUNNING && input_state.is_key_pressed('p'))
@@ -1522,7 +1624,8 @@ int main()
         {
           p = PI;
         }
-        // p -= 0.01f;
+        p -= 0.01f;
+        light_position = Vector3(cosf(p) * 2, sinf(p) * 2, 1);
 
         game_running_ticks += SDL_GetTicks() - ticks;
 
@@ -1542,12 +1645,11 @@ int main()
         update_ticks       = SDL_GetTicks() - start_tick;
         prior_render_ticks = SDL_GetTicks();
 
-        p -= 0.01f;
-        light_position = Vector3(cosf(p) * 2, sinf(p) * 2, 1);
         render_to_depth_buffer(&renderer, shadow_width, shadow_height, light_position, framebuffer);
 
         render_map(&renderer, map_shader, camera_m, projection, map_texture, map_buffer, depth_texture);
         render_entities(&renderer, camera, camera_m, projection, depth_texture);
+        render_effects(&renderer, camera, camera_m, projection, game_running_ticks, depth_texture);
         if (debug_render)
         {
           debug_render_depth_texture(&renderer, depth_texture);

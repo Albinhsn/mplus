@@ -1,4 +1,4 @@
-7
+8
 map
 ./data/models/map_with_hole.obj
 map2
@@ -13,3 +13,5 @@ pillar
 ./data/models/pillar.obj
 unarmed_man
 ./data/models/unarmed.glb
+circle
+./data/models/circle.obj
