@@ -56,6 +56,11 @@ Logger logger;
 #include "input.cpp"
 #include "renderer.cpp"
 #include "gltf.cpp"
+struct Sphere
+{
+  Vector2 position;
+  f32     r;
+};
 
 struct Camera
 {
@@ -484,6 +489,14 @@ void find_path(Path* path, Vector2 needle, Vector2 source)
   assert(!"Didn't find a path to player!");
 }
 
+bool sphere_sphere_collision(Sphere s0, Sphere s1)
+{
+  f32 x_diff                           = ABS(s0.position.x - s1.position.x);
+  f32 y_diff                           = ABS(s0.position.y - s1.position.y);
+  f32 distance_between_centers_squared = x_diff * x_diff + y_diff * y_diff;
+  f32 radii_diff                       = (s0.r + s1.r) * (s0.r + s1.r);
+  return distance_between_centers_squared <= radii_diff;
+}
 TargaImage noise;
 
 bool       is_valid_tile(Vector2 position)
@@ -608,8 +621,12 @@ struct CommandLetRangedMoveAfterShooting
 };
 
 CommandQueue command_queue;
+struct CommandExplodeCoCData
+{
+  Vector2 position;
+};
 
-void         add_command(CommandType type, void* data, u32 tick)
+void add_command(CommandType type, void* data, u32 tick)
 {
   CommandNode* node          = (CommandNode*)command_queue.pool.alloc();
   node->command.type         = type;
@@ -622,6 +639,24 @@ void         add_command(CommandType type, void* data, u32 tick)
 
 void run_command_explode_coc(void* data)
 {
+  CommandExplodeCoCData* coc_data = (CommandExplodeCoCData*)data;
+  Sphere                 coc_sphere;
+  coc_sphere.position = coc_data->position;
+  coc_sphere.r = 0.2f;
+  // iterate over the entities
+  for (u32 i = 0; i < entity_count; i++)
+  {
+    if (entities[i].type == ENTITY_ENEMY && entities[i].hp > 0)
+    {
+      Sphere enemy_sphere;
+      enemy_sphere.position = entities[i].position;
+      enemy_sphere.r        = entities[i].r;
+      if (sphere_sphere_collision(coc_sphere, enemy_sphere))
+      {
+        entities[i].hp = 0;
+      }
+    }
+  }
 }
 
 void run_command_spawn_enemy(void* data)
@@ -632,9 +667,9 @@ void run_command_spawn_enemy(void* data)
 
 void run_command_shoot_arrow(void* data)
 {
-  CommandLetRangedMoveAfterShooting* arrow_data   = (CommandLetRangedMoveAfterShooting*)data;
-  Enemy*                             enemy        = arrow_data->enemy;
-  enemy->can_move                                 = true;
+  CommandLetRangedMoveAfterShooting* arrow_data = (CommandLetRangedMoveAfterShooting*)data;
+  Enemy*                             enemy      = arrow_data->enemy;
+  enemy->can_move                               = true;
 }
 
 void run_commands(u32 ticks)
@@ -943,6 +978,11 @@ void    use_ability_cone_of_cold(Camera* camera, InputState* input, Hero* player
   effects.head          = node;
 
   node->effect          = effect;
+
+  // position
+  CommandExplodeCoCData* data = sta_allocate_struct(CommandExplodeCoCData, 1);
+  data->position = effect.position;
+  add_command(CMD_EXPLODE_COC, (void*)data, effect.effect_ends_at);
 }
 
 void read_abilities(Ability* abilities)
@@ -1015,19 +1055,6 @@ void handle_enemy_movement(Enemy* enemy, Vector2 target_position)
   }
   Vector2 v(curr.x - prev_position.x, curr.y - prev_position.y);
   entity->angle = atan2f(v.y, v.x);
-}
-struct Sphere
-{
-  Vector2 position;
-  f32     r;
-};
-bool sphere_sphere_collision(Sphere s0, Sphere s1)
-{
-  f32 x_diff                           = ABS(s0.position.x - s1.position.x);
-  f32 y_diff                           = ABS(s0.position.y - s1.position.y);
-  f32 distance_between_centers_squared = x_diff * x_diff + y_diff * y_diff;
-  f32 radii_diff                       = (s0.r + s1.r) * (s0.r + s1.r);
-  return distance_between_centers_squared <= radii_diff;
 }
 
 inline bool point_in_sphere(Sphere sphere, Vector2 p)
@@ -1172,7 +1199,6 @@ void handle_collision(Entity* e1, Entity* e2, Wave* wave)
   }
   if ((e1->type == ENTITY_PLAYER && e2->type == ENTITY_ENEMY_PROJECTILE) || (e1->type == ENTITY_ENEMY_PROJECTILE && e2->type == ENTITY_PLAYER))
   {
-    logger.info("Got hit by projectile!");
     e2->hp = 0;
   }
 }
