@@ -1,5 +1,16 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <strings.h>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <iostream>
+#include <glm/gtx/string_cast.hpp>
+
 #include <sys/time.h>
 #include <sys/mman.h>
 #include <assert.h>
@@ -959,30 +970,6 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
   }
 }
 
-void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m, Mat44 projection)
-{
-  for (u32 i = 0; i < entity_count; i++)
-  {
-    Entity entity = entities[i];
-    if (entity.hp > 0)
-    {
-      EntityRenderData* render_data = entity.render_data;
-      render_data->shader.use();
-      Mat44 m = {};
-      m.identity();
-      m = m.scale(render_data->scale).rotate_z(RADIANS_TO_DEGREES(entity.angle) + 90).translate(Vector3(entity.position.x, entity.position.y, 0.0f));
-
-      renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
-      render_data->shader.set_mat4("model", m);
-      render_data->shader.set_mat4("view", camera_m);
-      render_data->shader.set_mat4("projection", projection);
-      renderer->render_buffer(render_data->buffer_id);
-
-      renderer->draw_circle(entity.position, entity.r, 1, RED, camera_m, projection);
-    }
-  }
-}
-
 void debug_render_map_grid(Renderer* renderer, Map* map, Camera camera)
 {
   f32 tile_size = 1 / (f32)tile_count;
@@ -1070,7 +1057,7 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
     }
     else
     {
-      Model* model = renderer->get_model_by_filename(lines.strings[string_index]);
+      Model* model = renderer->get_model_by_name(lines.strings[string_index]);
       assert(model->animation_data && "No animation data for the model!");
       data->model = model->animation_data;
     }
@@ -1083,7 +1070,7 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
     data->texture              = renderer->get_texture(texture);
     data->shader               = *renderer->get_shader_by_name(shader);
     data->scale                = parse_float_from_string((char*)scale);
-    data->buffer_id            = renderer->get_buffer_by_filename(buffer_id);
+    data->buffer_id            = renderer->get_buffer_by_name(buffer_id);
     data->animation_tick_start = 0;
     logger.info("Loaded render data for '%s': texture: %s, shader: %s, scale: %s,  buffer: %s", data->name, texture, shader, scale, buffer_id);
   }
@@ -1156,23 +1143,106 @@ void init_player(Hero* player)
   read_abilities(player->abilities);
 }
 
-void render_map(Renderer* renderer, Shader* map_shader, Mat44 camera_m, Mat44 projection, u32 map_texture, u32 map_buffer)
+Mat44   light_space_matrix;
+Vector3 light_position;
+void    render_to_depth_buffer(Renderer* renderer, u32 shadow_width, u32 shadow_height, Vector3 light_position, u32 framebuffer)
+{
+
+  renderer->change_viewport(shadow_width, shadow_height);
+  glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+  glClear(GL_DEPTH_BUFFER_BIT);
+
+  static u32 vao = 0, vbo = 0, ebo = 0;
+  if (vao == 0)
+  {
+    sta_glGenVertexArrays(1, &vao);
+    sta_glGenBuffers(1, &vbo);
+    sta_glGenBuffers(1, &ebo);
+    sta_glBindVertexArray(vao);
+    f32 a[5] = {};
+    sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * ArrayCount(a), a, GL_DYNAMIC_DRAW);
+    sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * ArrayCount(a), a, GL_DYNAMIC_DRAW);
+
+    sta_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(f32) * 3, (void*)(sizeof(f32) * 0));
+    sta_glEnableVertexAttribArray(0);
+
+    sta_glBindVertexArray(0);
+  }
+  Shader depth_shader = *renderer->get_shader_by_name("depth");
+  Mat44  m            = {};
+  m.identity();
+  depth_shader.use();
+  light_position.debug();
+  Mat44 l            = Mat44::look_at(light_position, Vector3(0, 0, 0), Vector3(0, 1, 0));
+  Mat44 o            = Mat44::orthographic(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 7.5f);
+  light_space_matrix = l.mul(o);
+
+  // bind the light space matrix
+  depth_shader.set_mat4("lightSpaceMatrix", light_space_matrix);
+  depth_shader.set_mat4("model", m);
+
+  sta_glBindVertexArray(vao);
+
+  Model* map_model = renderer->get_model_by_name("map2");
+  sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(Vector3) * map_model->vertex_count, map_model->vertices, GL_DYNAMIC_DRAW);
+  sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+  sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * map_model->index_count, map_model->indices, GL_DYNAMIC_DRAW);
+  glDrawElements(GL_TRIANGLES, map_model->index_count, GL_UNSIGNED_INT, 0);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  renderer->reset_viewport_to_screen_size();
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void render_map(Renderer* renderer, Shader* map_shader, Mat44 camera_m, Mat44 projection, u32 map_texture, u32 map_buffer, u32 depth_texture)
 {
 
   map_shader->use();
   Mat44   m;
-  Vector3 light_position(cosf(p) * 1, sinf(p) * 1, 1.0);
   Vector3 ambient_lighting(0.25, 0.25, 0.25);
   m.identity();
   map_shader->set_vec3("ambient_lighting", ambient_lighting);
   map_shader->set_vec3("light_position", light_position);
+  map_shader->set_mat4("light_space_matrix", light_space_matrix);
   map_shader->set_mat4("model", m);
   map_shader->set_mat4("view", camera_m);
   map_shader->set_mat4("projection", projection);
 
   // render map
   renderer->bind_texture(*map_shader, "texture1", map_texture);
+  renderer->bind_texture(*map_shader, "shadow_map", depth_texture);
   renderer->render_buffer(map_buffer);
+}
+
+void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m, Mat44 projection, u32 depth_texture)
+{
+  for (u32 i = 0; i < entity_count; i++)
+  {
+    Entity entity = entities[i];
+    if (entity.hp > 0)
+    {
+      EntityRenderData* render_data = entity.render_data;
+      render_data->shader.use();
+      Mat44 m = {};
+      m.identity();
+      m = m.scale(render_data->scale);
+      m = m.rotate_z(RADIANS_TO_DEGREES(entity.angle) + 90);
+      m = m.translate(Vector3(entity.position.x, entity.position.y, 0.0f));
+
+      renderer->bind_texture(render_data->shader, "texture1", render_data->texture);
+      renderer->bind_texture(render_data->shader, "shadow_map", depth_texture);
+      render_data->shader.set_mat4("model", m);
+      render_data->shader.set_mat4("view", camera_m);
+      render_data->shader.set_mat4("projection", projection);
+      render_data->shader.set_mat4("light_space_matrix", light_space_matrix);
+      renderer->render_buffer(render_data->buffer_id);
+
+      renderer->draw_circle(entity.position, entity.r, 1, RED, camera_m, projection);
+    }
+  }
 }
 
 void render_console(Hero* player, Renderer* renderer, InputState* input_state, char* console_buf, u32 console_buf_size, Wave* wave, u32& game_running_ticks)
@@ -1235,10 +1305,50 @@ void update(Map* map, Wave* wave, Renderer* renderer, Camera& camera, InputState
   update_enemies(map, wave, player, tick_difference, game_running_ticks);
 }
 
-bool handle_wave_over(Wave* wave)
+inline bool handle_wave_over(Wave* wave)
 {
   u32 spawn_count = __builtin_popcount(wave->spawn_count);
   return spawn_count == wave->enemy_count && wave->enemies_alive == 0;
+}
+
+void debug_render_depth_texture(Renderer* renderer, u32 depth_texture)
+{
+  Shader q_shader = *renderer->get_shader_by_name("quad");
+  q_shader.use();
+
+  renderer->bind_texture(q_shader, "texture1", depth_texture);
+  renderer->enable_2d_rendering();
+  static u32 vao = 0, vbo = 0, ebo = 0;
+
+  if (vao == 0)
+  {
+    sta_glGenVertexArrays(1, &vao);
+    sta_glGenBuffers(1, &vbo);
+    sta_glGenBuffers(1, &ebo);
+    sta_glBindVertexArray(vao);
+    f32 tot[20] = {
+        1.0f,  1.0f,  0, 1.0f, 1.0f, //
+        1.0f,  -1.0,  0, 1.0f, 0.0f, //
+        -1.0f, -1.0f, 0, 0.0f, 0.0f, //
+        -1.0f, 1.0,   0, 0.0f, 1.0f, //
+    };
+    u32 indices[6] = {1, 3, 0, 1, 2, 3};
+    sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * ArrayCount(tot), tot, GL_DYNAMIC_DRAW);
+    sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * ArrayCount(indices), indices, GL_DYNAMIC_DRAW);
+
+    sta_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(f32) * 5, (void*)(sizeof(f32) * 0));
+    sta_glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(f32) * 5, (void*)(sizeof(f32) * 3));
+    sta_glEnableVertexAttribArray(0);
+    sta_glEnableVertexAttribArray(1);
+
+    sta_glBindVertexArray(0);
+  }
+
+  sta_glBindVertexArray(vao);
+  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+  renderer->disable_2d_rendering();
 }
 
 int main()
@@ -1259,17 +1369,17 @@ int main()
 
   init_imgui(renderer.window, renderer.context);
 
-  fireball_id        = renderer.get_buffer_by_filename("fireball");
-  fireball_shader    = *renderer.get_shader_by_name("model");
+  fireball_id        = renderer.get_buffer_by_name("fireball");
+  fireball_shader    = *renderer.get_shader_by_name("model2");
 
   enemy_shader       = fireball_shader;
-  enemy_buffer_id    = renderer.get_buffer_by_filename("enemy");
+  enemy_buffer_id    = renderer.get_buffer_by_name("enemy");
 
   Shader map_shader  = *renderer.get_shader_by_name("model2");
 
-  Model* map_model   = renderer.get_model_by_filename("map2");
+  Model* map_model   = renderer.get_model_by_name("map2");
 
-  u32    map_buffer  = renderer.get_buffer_by_filename("map2");
+  u32    map_buffer  = renderer.get_buffer_by_name("map2");
   u32    map_texture = renderer.get_texture("dirt");
 
   Hero   player      = {};
@@ -1284,7 +1394,7 @@ int main()
     return 1;
   }
 
-  map.init_map(renderer.get_model_by_filename("map"));
+  map.init_map(renderer.get_model_by_name("map"));
 
   u32      ticks        = 0;
   u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0;
@@ -1298,6 +1408,29 @@ int main()
 
   // ToDo make this work when game over is implemented
   score = 0;
+
+  GLuint framebuffer;
+  u32    shadow_width = 1024, shadow_height = 1024;
+  u32    depth_texture;
+  glGenFramebuffers(1, &framebuffer);
+
+  glGenTextures(1, &depth_texture);
+  glBindTexture(GL_TEXTURE_2D, depth_texture);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadow_width, shadow_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+  float borderColor[] = {1.0, 1.0, 1.0, 1.0};
+  glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+  glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
+  glDrawBuffer(GL_NONE);
+  glReadBuffer(GL_NONE);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  depth_texture     = renderer.add_texture(depth_texture);
+
+  bool debug_render = false;
 
   while (true)
   {
@@ -1322,6 +1455,10 @@ int main()
       {
         console = true;
       }
+      if (input_state.is_key_released('b'))
+      {
+        debug_render = !debug_render;
+      }
 
       u32 start_tick = SDL_GetTicks();
       if (ui_state == UI_STATE_GAME_RUNNING && input_state.is_key_pressed('p'))
@@ -1331,6 +1468,7 @@ int main()
       }
 
       ui_state               = render_ui(ui_state, &player, ms, fps, update_ticks, render_ticks, game_running_ticks, screen_height);
+      ui_state               = UI_STATE_GAME_RUNNING;
 
       u32 prior_render_ticks = 0;
       if (ui_state == UI_STATE_GAME_RUNNING)
@@ -1340,7 +1478,7 @@ int main()
         {
           p = PI;
         }
-        p -= 0.01f;
+        // p -= 0.01f;
 
         game_running_ticks += SDL_GetTicks() - ticks;
 
@@ -1360,8 +1498,16 @@ int main()
         update_ticks       = SDL_GetTicks() - start_tick;
         prior_render_ticks = SDL_GetTicks();
 
-        render_map(&renderer, &map_shader, camera_m, projection, map_texture, map_buffer);
-        render_entities(&renderer, camera, camera_m, projection);
+        p -= 0.01f;
+        light_position = Vector3(cosf(p) * 4, sinf(p) * 4, 1);
+        render_to_depth_buffer(&renderer, shadow_width, shadow_height, light_position, framebuffer);
+
+        render_map(&renderer, &map_shader, camera_m, projection, map_texture, map_buffer, depth_texture);
+        render_entities(&renderer, camera, camera_m, projection, depth_texture);
+        if (debug_render)
+        {
+          debug_render_depth_texture(&renderer, depth_texture);
+        }
       }
 
       if (console)

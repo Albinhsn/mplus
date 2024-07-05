@@ -472,28 +472,69 @@ void Mat44::transpose()
   }
   *this = out;
 }
-
-Mat44 Mat44::look_at(Vector3 x, Vector3 y, Vector3 z)
+Mat44 Mat44::orthographic(f32 l, f32 r, f32 b, f32 t, f32 n, f32 f)
 {
-  Mat44 out    = {};
-  out.rc[0][0] = x.x;
-  out.rc[0][1] = x.y;
-  out.rc[0][2] = x.z;
-  out.rc[0][3] = 0.0f;
+  Mat44 m    = {};
 
-  out.rc[1][0] = y.x;
-  out.rc[1][1] = y.y;
-  out.rc[1][2] = y.z;
-  out.rc[1][3] = 0.0f;
+  m.rc[0][0] = 2 / (r - l);
+  m.rc[1][1] = 2 / (t - b);
+  m.rc[2][2] = -2 / (f - n);
+  m.rc[3][3] = 1;
 
-  out.rc[2][0] = z.x;
-  out.rc[2][1] = z.y;
-  out.rc[2][2] = z.z;
-  out.rc[2][3] = 0.0f;
+  m.rc[0][3] = -(r + l) / (r - l);
+  m.rc[1][3] = -(t + b) / (t - b);
+  m.rc[2][3] = -(f + n) / (f - n);
 
-  out.rc[0][3] = 0.0f;
-  out.rc[1][3] = 0.0f;
-  out.rc[2][3] = 0.0f;
+  return m;
+}
+
+void Vector3::normalize()
+{
+  f32 l = this->len();
+  this->x /= l;
+  this->y /= l;
+  this->z /= l;
+}
+
+Vector4 Vector4::mul(Mat44 m)
+{
+  Vector4 v;
+  v.x = this->x * m.rc[0][0] + this->y * m.rc[1][0] + this->z * m.rc[2][0] + this->w * m.rc[3][0];
+  v.y = this->x * m.rc[0][1] + this->y * m.rc[1][1] + this->z * m.rc[2][1] + this->w * m.rc[3][1];
+  v.z = this->x * m.rc[0][2] + this->y * m.rc[1][2] + this->z * m.rc[2][2] + this->w * m.rc[3][2];
+  v.w = this->x * m.rc[0][3] + this->y * m.rc[1][3] + this->z * m.rc[2][3] + this->w * m.rc[3][3];
+  return v;
+}
+
+Mat44 Mat44::look_at(Vector3 c, Vector3 l, Vector3 u_prime)
+{
+  Vector3 v = l.sub(c);
+  v.normalize();
+
+  Vector3 r = v.cross(u_prime);
+  r.normalize();
+
+  Vector3 u    = r.cross(v);
+
+  Mat44   out  = {};
+  out.rc[0][0] = r.x;
+  out.rc[0][1] = r.y;
+  out.rc[0][2] = r.z;
+  out.rc[0][3] = -(c.dot(r));
+
+  out.rc[1][0] = u.x;
+  out.rc[1][1] = u.y;
+  out.rc[1][2] = u.z;
+  out.rc[1][3] = -(c.dot(u));
+
+  out.rc[2][0] = -v.x;
+  out.rc[2][1] = -v.y;
+  out.rc[2][2] = -v.z;
+  out.rc[2][3] = (c.dot(v));
+
+  out.rc[3][0] = 0.0f;
+  out.rc[3][1] = 0.0f;
+  out.rc[3][2] = 0.0f;
   out.rc[3][3] = 1.0f;
 
   return out;

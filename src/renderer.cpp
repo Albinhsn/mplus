@@ -398,6 +398,17 @@ void Renderer::bind_texture(Shader shader, const char* uniform_name, u32 texture
   glActiveTexture(GL_TEXTURE0 + texture.unit);
   sta_glBindTexture(GL_TEXTURE_2D, texture.id);
 }
+
+u32 Renderer::add_texture(u32 texture_id)
+{
+  RESIZE_ARRAY(this->textures, Texture, texture_count, texture_capacity);
+  u32      out     = texture_count++;
+  Texture* texture = &this->textures[out];
+  texture->id      = texture_id;
+  texture->unit    = this->get_free_texture_unit();
+  return out;
+}
+
 u32 Renderer::create_texture(u32 width, u32 height, void* data)
 {
 
@@ -586,8 +597,13 @@ bool Renderer::load_models_from_files(const char* file_location)
         this->logger->error("Failed to parse obj from '%s'", model_location);
       };
 
-      model->index_count      = model_data.vertex_count;
-      model->vertex_count     = model_data.vertex_count;
+      model->index_count  = model_data.vertex_count;
+      model->vertex_count = model_data.vertex_count;
+      model->vertices     = sta_allocate_struct(Vector3, model_data.vertex_count);
+      for (u32 i = 0; i < model_data.vertex_count; i++)
+      {
+        model->vertices[i]   = model_data.vertices[i].vertex;
+      }
       model->indices          = model_data.indices;
       model->animation_data   = 0;
       model->vertex_data      = (void*)model_data.vertices;
@@ -601,11 +617,16 @@ bool Renderer::load_models_from_files(const char* file_location)
       {
         this->logger->error("Failed to read glb from '%s'", model_location);
       }
-      model->indices                  = model_data.indices;
-      model->index_count              = model_data.index_count;
-      model->vertex_count             = model_data.vertex_count;
-      model->vertex_data_size         = sizeof(SkinnedVertex);
-      model->vertex_data              = (void*)model_data.vertices;
+      model->indices          = model_data.indices;
+      model->index_count      = model_data.index_count;
+      model->vertex_count     = model_data.vertex_count;
+      model->vertex_data_size = sizeof(SkinnedVertex);
+      model->vertex_data      = (void*)model_data.vertices;
+      model->vertices         = sta_allocate_struct(Vector3, model_data.vertex_count);
+      for (u32 i = 0; i < model_data.vertex_count; i++)
+      {
+        model->vertices[i]   = model_data.vertices[i].position;
+      }
       model->animation_data           = (AnimationData*)sta_allocate_struct(AnimationData, 1);
       model->animation_data->skeleton = model_data.skeleton;
       // ToDo this should change once you fixed the parser
@@ -644,7 +665,7 @@ bool Renderer::load_buffers_from_files(const char* file_location)
   for (u32 i = 0, string_index = 1; i < count; i++)
   {
     char*            model_name             = lines.strings[string_index++];
-    Model*           model                  = this->get_model_by_filename(model_name);
+    Model*           model                  = this->get_model_by_name(model_name);
     u32              buffer_attribute_count = parse_int_from_string(lines.strings[string_index++]);
     BufferAttributes attributes[buffer_attribute_count];
     for (u32 j = 0; j < buffer_attribute_count; j++)
@@ -665,7 +686,7 @@ bool Renderer::load_buffers_from_files(const char* file_location)
   return true;
 }
 
-u32 Renderer::get_buffer_by_filename(const char* filename)
+u32 Renderer::get_buffer_by_name(const char* filename)
 {
   for (u32 i = 0; i < buffer_count; i++)
   {
@@ -678,7 +699,7 @@ u32 Renderer::get_buffer_by_filename(const char* filename)
   assert(!"Couldn't find the buffer!");
 }
 
-Model* Renderer::get_model_by_filename(const char* filename)
+Model* Renderer::get_model_by_name(const char* filename)
 {
   for (u32 i = 0; i < model_count; i++)
   {
@@ -688,7 +709,7 @@ Model* Renderer::get_model_by_filename(const char* filename)
     }
   }
   logger->error("Didn't find model '%s'", filename);
-  assert(!"Could find model!");
+  return 0;
 }
 
 bool Renderer::load_textures_from_files(const char* file_location)
@@ -702,8 +723,9 @@ bool Renderer::load_textures_from_files(const char* file_location)
   }
   split_buffer_by_newline(&lines, &buffer);
 
-  this->texture_count = parse_int_from_string(lines.strings[0]);
-  this->textures      = sta_allocate_struct(Texture, texture_count);
+  this->texture_count    = parse_int_from_string(lines.strings[0]);
+  this->textures         = sta_allocate_struct(Texture, texture_count);
+  this->texture_capacity = this->texture_count;
 
   for (u32 i = 0, string_index = 1; i < this->texture_count; i++)
   {

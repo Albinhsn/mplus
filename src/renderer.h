@@ -60,6 +60,7 @@ struct Renderer
 public:
   bool           vsync;
   Texture*       textures;
+  u32 texture_capacity;
   u32            texture_count;
   u64            used_texture_units;
   AFont*         font;
@@ -114,11 +115,12 @@ public:
   bool    load_models_from_files(const char* file_location);
   void    reset_viewport_to_screen_size();
   void    change_viewport(u32 w, u32 h);
+  u32 add_texture(u32 texture_id);
 
   u32     get_texture(const char* name);
   Shader* get_shader_by_name(const char* name);
-  Model*  get_model_by_filename(const char* filename);
-  u32     get_buffer_by_filename(const char* filename);
+  Model*  get_model_by_name(const char* filename);
+  u32     get_buffer_by_name(const char* filename);
   // render some buffer
   void render_arrays(u32 buffer_id, GLenum type, u32 count);
   void render_buffer(u32 buffer_id);

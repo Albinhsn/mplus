@@ -183,6 +183,7 @@ struct Model
   void*          vertex_data;
   u32*           indices;
   AnimationData* animation_data;
+  Vector3*       vertices;
   u32            vertex_data_size;
   u32            index_count;
   u32            vertex_count;

@@ -129,6 +129,7 @@ public:
   float          dot(Vector3 v);
   Vector3        cross(Vector3 v);
   void           scale(float s);
+  void           normalize();
   Vector3        sub(Vector3 v);
   static Vector3 cross(Vector3 v0, Vector3 v1);
 };
@@ -170,6 +171,7 @@ public:
 
   float          len();
   float          dot(Vector4 v);
+  Vector4 mul(Mat44 m);
   Vector4        cross(Vector4 v);
   void           scale(float s);
   Vector4        sub(Vector4 v);
@@ -194,7 +196,7 @@ public:
   }
   void         debug();
   float        determinant();
-  static Mat44 look_at(Vector3 x, Vector3 y, Vector3 z);
+  static Mat44 look_at(Vector3 c, Vector3 l, Vector3 u_prime);
   static Mat44 create_translation(Vector3 t);
   static Mat44 create_translation(f32 t[3]);
   static Mat44 create_rotation(Quaternion q);
@@ -202,6 +204,7 @@ public:
   static Mat44 create_rotation(f32 q[4]);
   static Mat44 create_scale(Vector3 s);
   static Mat44 create_scale(f32 s[3]);
+  static Mat44 orthographic(f32 left, f32 right, f32 bot, f32 top, f32 near, f32 far);
   void         transpose();
   Mat44        mul(Mat44 m);
   Vector4      mul(Vector4 v);
@@ -215,7 +218,6 @@ public:
   Mat44        rotate_z(f32 r);
   Mat44        rotate(Quaternion q);
   void         perspective(f32 fov, f32 screen_aspect, f32 screen_near, f32 screen_depth);
-  void         orthographic(f32 screen_width, f32 screen_height, f32 screen_near, f32 screen_depth);
 };
 
 typedef Vector2 Point2;
