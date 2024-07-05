@@ -142,6 +142,7 @@ bool recompile_shader(Shader* shader)
   Shader s;
   s.name = shader->name;
   s.id   = sta_glCreateProgram();
+  memset(s.locations, 0, sizeof(const char*) * ArrayCount(s.locations));
 
   logger.info("Reloading shader '%s'", shader->name);
   for (u32 i = 0; i < ArrayCount(shader->locations) && shader->locations[i] != 0; i++)
