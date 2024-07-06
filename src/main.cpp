@@ -141,8 +141,14 @@ Camera            camera(Vector3(), -20.0f, -3.0f);
 Mat44             projection;
 Renderer          renderer;
 u32               score;
+
+Model*            models;
+u32               model_count;
+RenderBuffer*     buffers;
+u32               buffer_count;
 EntityRenderData* render_data;
 u32               render_data_count;
+
 Entity*           entities;
 u32               entity_capacity = 2;
 u32               entity_count    = 0;
@@ -150,6 +156,169 @@ bool              god             = false;
 
 #include "ui.cpp"
 #include "ui.h"
+
+
+u32 get_buffer_by_name(const char* filename)
+{
+  for (u32 i = 0; i < buffer_count; i++)
+  {
+    if (compare_strings(buffers[i].model_name, filename))
+    {
+      return buffers[i].buffer_id;
+    }
+  }
+  logger.error("Couldn't find buffer '%s'", filename);
+  assert(!"Couldn't find the buffer!");
+}
+
+ModelFileExtensions get_model_file_extension(char* file_name)
+{
+  u32 len = strlen(file_name);
+  if (len > 4 && compare_strings("obj", &file_name[len - 3]))
+  {
+    return MODEL_FILE_OBJ;
+  }
+  if (len > 4 && compare_strings("glb", &file_name[len - 3]))
+  {
+    return MODEL_FILE_GLB;
+  }
+
+  return MODEL_FILE_UNKNOWN;
+}
+Model* get_model_by_name(const char* filename)
+{
+  for (u32 i = 0; i < model_count; i++)
+  {
+    if (compare_strings(filename, models[i].name))
+    {
+      return &models[i];
+    }
+  }
+  logger.error("Didn't find model '%s'", filename);
+  return 0;
+}
+
+bool load_models_from_files(const char* file_location)
+{
+
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, file_location))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+
+  model_count = parse_int_from_string(lines.strings[0]);
+
+  models      = sta_allocate_struct(Model, model_count);
+  logger.info("Found %d models", model_count);
+  for (u32 i = 0, string_index = 1; i < model_count; i++)
+  {
+    // ToDo free the loaded memory?
+    char*               model_name     = lines.strings[string_index++];
+    char*               model_location = lines.strings[string_index++];
+    ModelFileExtensions extension      = get_model_file_extension(model_location);
+    Model*              model          = &models[i];
+    model->name                        = model_name;
+    switch (extension)
+    {
+    case MODEL_FILE_OBJ:
+    {
+      ModelData model_data = {};
+      if (!sta_parse_wavefront_object_from_file(&model_data, model_location))
+      {
+        logger.error("Failed to parse obj from '%s'", model_location);
+      };
+
+      model->index_count  = model_data.vertex_count;
+      model->vertex_count = model_data.vertex_count;
+      model->vertices     = sta_allocate_struct(Vector3, model_data.vertex_count);
+      for (u32 i = 0; i < model_data.vertex_count; i++)
+      {
+        model->vertices[i] = model_data.vertices[i].vertex;
+      }
+      model->indices          = model_data.indices;
+      model->animation_data   = 0;
+      model->vertex_data      = (void*)model_data.vertices;
+      model->vertex_data_size = sizeof(VertexData);
+      break;
+    }
+    case MODEL_FILE_GLB:
+    {
+      AnimationModel model_data = {};
+      if (!gltf_parse(&model_data, model_location))
+      {
+        logger.error("Failed to read glb from '%s'", model_location);
+      }
+      model->indices          = model_data.indices;
+      model->index_count      = model_data.index_count;
+      model->vertex_count     = model_data.vertex_count;
+      model->vertex_data_size = sizeof(SkinnedVertex);
+      model->vertex_data      = (void*)model_data.vertices;
+      model->vertices         = sta_allocate_struct(Vector3, model_data.vertex_count);
+      for (u32 i = 0; i < model_data.vertex_count; i++)
+      {
+        model->vertices[i] = model_data.vertices[i].position;
+      }
+      model->animation_data           = (AnimationData*)sta_allocate_struct(AnimationData, 1);
+      model->animation_data->skeleton = model_data.skeleton;
+      // ToDo this should change once you fixed the parser
+      model->animation_data->animation_count = 1;
+      model->animation_data->animations      = (Animation*)sta_allocate_struct(Animation, model->animation_data->animation_count);
+      model->animation_data->animations[0]   = model_data.animations;
+      break;
+    }
+    case MODEL_FILE_UNKNOWN:
+    {
+      assert(!"Unknown model!");
+    }
+    }
+    logger.info("Loaded %s from '%s'", model_name, model_location);
+  }
+  return true;
+}
+
+bool load_buffers_from_files(const char* file_location)
+{
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, file_location))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+
+  assert(lines.count > 0 && "Buffers file had no content?");
+
+  u32 count    = parse_int_from_string(lines.strings[0]);
+
+  buffers      = (RenderBuffer*)sta_allocate_struct(RenderBuffer, count);
+  buffer_count = count;
+
+  for (u32 i = 0, string_index = 1; i < count; i++)
+  {
+    char*            model_name             = lines.strings[string_index++];
+    Model*           model                  = get_model_by_name(model_name);
+    u32              buffer_attribute_count = parse_int_from_string(lines.strings[string_index++]);
+    BufferAttributes attributes[buffer_attribute_count];
+    for (u32 j = 0; j < buffer_attribute_count; j++)
+    {
+      char* line = lines.strings[string_index];
+      string_index++;
+      Buffer buffer(line, strlen(line));
+      attributes[j].count = buffer.parse_int();
+      buffer.skip_whitespace();
+
+      // ToDo check validity
+      attributes[j].type = (BufferAttributeType)buffer.parse_int();
+    }
+    buffers[i].model_name = model_name;
+    buffers[i].buffer_id  = renderer.create_buffer_from_model(model, attributes, buffer_attribute_count);
+    logger.info("Loaded buffer '%s', id: %d", model_name, buffers[i].buffer_id);
+  }
+  return true;
+}
 
 EntityRenderData* get_render_data_by_name(const char* name)
 {
@@ -1527,7 +1696,7 @@ bool load_entity_render_data_from_file(const char* file_location)
     }
     else
     {
-      Model* model = renderer.get_model_by_name(lines.strings[string_index]);
+      Model* model = get_model_by_name(lines.strings[string_index]);
       assert(model->animation_data && "No animation data for the model!");
       data->model = model->animation_data;
     }
@@ -1540,7 +1709,7 @@ bool load_entity_render_data_from_file(const char* file_location)
     data->texture              = renderer.get_texture(texture);
     data->shader               = renderer.get_shader_by_name(shader);
     data->scale                = parse_float_from_string((char*)scale);
-    data->buffer_id            = renderer.get_buffer_by_name(buffer_id);
+    data->buffer_id            = get_buffer_by_name(buffer_id);
     data->animation_tick_start = 0;
     logger.info("Loaded render data for '%s': texture: %s, shader: %s, scale: %s,  buffer: %s", data->name, texture, shader, scale, buffer_id);
   }
@@ -1561,7 +1730,7 @@ bool       load_data()
   }
 
   const static char* model_locations = "./data/formats/models.txt";
-  if (!renderer.load_models_from_files(model_locations))
+  if (!load_models_from_files(model_locations))
   {
     logger.error("Failed to read models from '%s'", model_locations);
     return false;
@@ -1582,7 +1751,7 @@ bool       load_data()
   }
 
   const static char* buffer_locations = "./data/formats/buffers.txt";
-  if (!renderer.load_buffers_from_files(buffer_locations))
+  if (!load_buffers_from_files(buffer_locations))
   {
     logger.error("Failed to read buffers from '%s'", buffer_locations);
     return false;
@@ -1664,7 +1833,7 @@ void    render_to_depth_buffer(Vector3 light_position)
 
   sta_glBindVertexArray(vao);
 
-  Model* map_model = renderer.get_model_by_name("model_map_with_pillar");
+  Model* map_model = get_model_by_name("model_map_with_pillar");
   sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
   sta_glBufferData(GL_ARRAY_BUFFER, sizeof(Vector3) * map_model->vertex_count, map_model->vertices, GL_DYNAMIC_DRAW);
   sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
@@ -1906,8 +2075,8 @@ int main()
   init_imgui(renderer.window, renderer.context);
 
   u32    map_shader  = renderer.get_shader_by_name("model2");
-  Model* map_model   = renderer.get_model_by_name("model_map_with_pillar");
-  u32    map_buffer  = renderer.get_buffer_by_name("model_map_with_pillar");
+  Model* map_model   = get_model_by_name("model_map_with_pillar");
+  u32    map_buffer  = get_buffer_by_name("model_map_with_pillar");
   u32    map_texture = renderer.get_texture("dirt_texture");
 
   Hero   player      = {};
@@ -1920,7 +2089,7 @@ int main()
     return 1;
   }
 
-  map.init_map(renderer.get_model_by_name("model_map_with_hole"));
+  map.init_map(get_model_by_name("model_map_with_hole"));
 
   u32      ticks        = 0;
   u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0;

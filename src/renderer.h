@@ -81,13 +81,15 @@ public:
   u32            line_vao;
   u32            line_vbo;
   Logger*        logger;
-  Model*         models;
-  u32            model_count;
+
   RenderBuffer*  buffers;
   u32            buffer_count;
+
   SDL_Window*    window;
   SDL_GLContext  context;
-  Renderer(){}
+  Renderer()
+  {
+  }
   Renderer(u32 screen_width, u32 screen_height, AFont* font, Logger* logger, bool vsync)
   {
     this->vsync  = !vsync;
@@ -116,8 +118,6 @@ public:
   u32     create_buffer_from_model(Model* model, BufferAttributes* attributes, u32 attribute_count);
   bool    load_shaders_from_files(const char* file_location);
   bool    load_textures_from_files(const char* file_location);
-  bool    load_buffers_from_files(const char* file_location);
-  bool    load_models_from_files(const char* file_location);
   void    reset_viewport_to_screen_size();
   void    change_viewport(u32 w, u32 h);
   u32     add_texture(u32 texture_id);
@@ -126,8 +126,7 @@ public:
   u32     get_texture(const char* name);
   Shader* get_shader_by_index(u32 index);
   u32     get_shader_by_name(const char* name);
-  Model*  get_model_by_name(const char* filename);
-  u32     get_buffer_by_name(const char* filename);
+
   // render some buffer
   void render_arrays(u32 buffer_id, GLenum type, u32 count);
   void render_buffer(u32 buffer_id);
