@@ -755,32 +755,23 @@ struct Wave
 {
   u32*   spawn_times;
   u64    spawn_count;
-  u32    enemy_count;
+  u64    enemy_count;
   u64    enemies_alive;
   Enemy* enemies;
 };
 
-void spawn(Wave* wave, u32 enemy_index)
+struct CommandFindPathData
 {
-  Enemy*  enemy  = &wave->enemies[enemy_index];
-  Entity* entity = &entities[enemy->entity];
-  wave->spawn_count |= enemy_index == 0 ? 1 : (1 << enemy_index);
-  wave->enemies_alive++;
-  EntityRenderData* render_data = entity->render_data;
-  entity->position              = get_random_position(wave->spawn_times[enemy_index], enemy_index);
-  entity->hp                    = enemy->initial_hp;
-  logger.info("Spawning enemy %d at (%f, %f) %d", enemy_index, entity->position.x, entity->position.y, wave->enemies_alive);
-  if (enemy->type == ENEMY_RANGED)
-  {
-    enemy->cooldown = 1000;
-  }
-}
+  Enemy* enemy;
+  u32    tick;
+};
 
 enum CommandType
 {
   CMD_SPAWN_ENEMY,
   CMD_LET_RANGED_MOVE_AFTER_SHOOTING,
-  CMD_EXPLODE_COC
+  CMD_EXPLODE_COC,
+  CMD_FIND_PATH
 };
 
 struct Command
@@ -799,8 +790,10 @@ struct CommandNode
 // ToDo make it a heap?
 struct CommandQueue
 {
+  u32           cmds;
   PoolAllocator pool;
   CommandNode*  head;
+  CommandNode*  tail;
 };
 struct CommandSpawnEnemyData
 {
@@ -819,15 +812,47 @@ struct CommandExplodeCoCData
   Vector2 position;
 };
 
+void add_command(CommandType type, void* data, u32 tick);
+void spawn(Wave* wave, u32 enemy_index)
+{
+  Enemy*  enemy  = &wave->enemies[enemy_index];
+  Entity* entity = &entities[enemy->entity];
+  wave->spawn_count |= enemy_index == 0 ? 1 : (1 << enemy_index);
+  wave->enemies_alive++;
+  EntityRenderData* render_data = entity->render_data;
+  entity->position              = get_random_position(wave->spawn_times[enemy_index], enemy_index);
+  entity->hp                    = enemy->initial_hp;
+  logger.info("Spawning enemy %d at (%f, %f) %d %d", enemy_index, entity->position.x, entity->position.y, wave->enemies_alive, wave->spawn_times[enemy_index]);
+  if (enemy->type == ENEMY_RANGED)
+  {
+    enemy->cooldown = 1000;
+  }
+  CommandFindPathData* path_data = sta_allocate_struct(CommandFindPathData, 1);
+  path_data->enemy               = enemy;
+  path_data->tick                = wave->spawn_times[enemy_index];
+
+  add_command(CMD_FIND_PATH, (void*)path_data, path_data->tick);
+}
+
 void add_command(CommandType type, void* data, u32 tick)
 {
+  command_queue.cmds++;
   CommandNode* node          = (CommandNode*)command_queue.pool.alloc();
   node->command.type         = type;
   node->command.data         = data;
   node->command.execute_tick = tick;
 
-  node->next                 = command_queue.head;
-  command_queue.head         = node;
+  if (!command_queue.tail)
+  {
+    node->next         = command_queue.head;
+    command_queue.head = node;
+    command_queue.tail = node;
+  }
+  else
+  {
+    command_queue.tail->next = node;
+    command_queue.tail       = node;
+  }
 }
 
 void run_command_explode_coc(void* data)
@@ -866,6 +891,16 @@ void run_command_shoot_arrow(void* data)
   enemy->can_move                               = true;
 }
 
+void run_command_find_path(void* data)
+{
+  const u32            next_tick = 75;
+  CommandFindPathData* path_data = (CommandFindPathData*)data;
+  path_data->enemy->path.path_count = 0;
+  find_path(&path_data->enemy->path, entities[player.entity].position, entities[path_data->enemy->entity].position);
+  path_data->tick += next_tick;
+  add_command(CMD_FIND_PATH, (void*)path_data, path_data->tick);
+}
+
 void run_commands(u32 ticks)
 {
 
@@ -892,6 +927,11 @@ void run_commands(u32 ticks)
         run_command_shoot_arrow(node->command.data);
         break;
       }
+      case CMD_FIND_PATH:
+      {
+        run_command_find_path(node->command.data);
+        break;
+      }
       }
 
       if (prev)
@@ -902,9 +942,15 @@ void run_commands(u32 ticks)
       {
         command_queue.head = node->next;
       }
+      if (node == command_queue.tail)
+      {
+        command_queue.tail = prev;
+      }
+
       CommandNode* next = node->next;
       command_queue.pool.free((u64)node);
       node = next;
+      command_queue.cmds--;
       continue;
     }
     prev = node;
@@ -1309,9 +1355,10 @@ void handle_enemy_movement(Enemy* enemy, Vector2 target_position)
 {
   const static f32 ms     = 0.005f;
   Entity*          entity = &entities[enemy->entity];
-  enemy->path.path_count  = 0;
-  find_path(&enemy->path, target_position, entity->position);
-  Path path = enemy->path;
+  // enemy->path.path_count = 0;
+  // find_path(&enemy->path, target_position, entity->position);
+
+  Path             path   = enemy->path;
   if (path.path_count == 1)
   {
     return;
@@ -1407,7 +1454,7 @@ void update_enemies(Wave* wave, Hero* player, u32 tick_difference, u32 tick)
   // check if we spawn
 
   Vector2 player_position = entities[player->entity].position;
-  u32     spawn_count     = __builtin_popcount(wave->spawn_count);
+  u32     spawn_count     = __builtin_popcountll(wave->spawn_count);
   for (u32 i = 0; i < spawn_count; i++)
   {
     Enemy*  enemy  = &wave->enemies[i];
@@ -1619,6 +1666,7 @@ bool load_wave_from_file(Wave* wave, const char* filename)
 
   assert(lines.count > 1 && "Only one line in wave file?");
   wave->enemy_count = parse_int_from_string(lines.strings[0]);
+  printf("Expected %d\n", lines.count - 1);
   assert(wave->enemy_count * 2 + 1 == lines.count && "Mismatch in wave file, expected x enemies in wave and got y");
   wave->spawn_count   = 0;
   wave->enemies_alive = 0;
@@ -1901,7 +1949,7 @@ void render_console(Hero* player, InputState* input_state, char* console_buf, u3
     {
       logger.info("Restarting wave");
       wave->enemies_alive = 0;
-      u32 spawn_count     = __builtin_popcount(wave->spawn_count);
+      u32 spawn_count     = __builtin_popcountll(wave->spawn_count);
       for (u32 i = 0; i < spawn_count; i++)
       {
         Entity* e = &entities[wave->enemies[i].entity];
@@ -1957,7 +2005,7 @@ void update(Wave* wave, Camera& camera, InputState* input_state, Hero* player, u
 
 inline bool handle_wave_over(Wave* wave)
 {
-  u32 spawn_count = __builtin_popcount(wave->spawn_count);
+  u32 spawn_count = __builtin_popcountll(wave->spawn_count);
   return spawn_count == wave->enemy_count && wave->enemies_alive == 0;
 }
 
@@ -2050,7 +2098,8 @@ int main()
 {
 
   effects.pool.init(sta_allocate(sizeof(EffectNode) * 25), sizeof(EffectNode), 25);
-  command_queue.pool.init(sta_allocate(sizeof(CommandNode) * 25), sizeof(CommandNode), 25);
+  command_queue.pool.init(sta_allocate(sizeof(CommandNode) * 300), sizeof(CommandNode), 300);
+  command_queue.cmds     = 0;
 
   entities               = (Entity*)sta_allocate_struct(Entity, entity_capacity);
 
@@ -2177,6 +2226,7 @@ int main()
           logger.info("Wave is over!");
           return 0;
         }
+        // logger.info("CMDS: %d", command_queue.cmds);
 
         update_ticks       = SDL_GetTicks() - start_tick;
         prior_render_ticks = SDL_GetTicks();
