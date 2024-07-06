@@ -212,6 +212,7 @@ public:
   void         identity();
   Mat44        translate(Vector3 v);
   Mat44        scale(Vector3 v);
+  Mat44        scale(Vector4 v);
   Mat44        scale(f32 scale);
   Mat44        rotate_x(f32 r);
   Mat44        rotate_y(f32 r);

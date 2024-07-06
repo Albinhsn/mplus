@@ -3,6 +3,20 @@
 #include "common.h"
 #include "vector.h"
 
+struct Triangle3D
+{
+public:
+  Triangle3D()
+  {
+  }
+  Triangle3D(Vector3 v0, Vector3 v1, Vector3 v2)
+  {
+    points[0] = v0;
+    points[1] = v1;
+    points[2] = v2;
+  }
+  Vector3 points[3];
+};
 struct Triangle
 {
 public:

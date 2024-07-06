@@ -12,7 +12,6 @@ bool InputState::is_key_pressed(u32 code)
   return false;
 }
 
-
 bool InputState::is_key_released(u32 code)
 {
   for (u32 i = 0; i < this->event_count; i++)
@@ -122,7 +121,6 @@ static inline void clear_input(InputState* input)
   input->mouse_relative[0] = 0;
   input->mouse_relative[1] = 0;
 }
-
 
 static inline void add_event(InputState* input, InputEventType type, u32 key)
 {

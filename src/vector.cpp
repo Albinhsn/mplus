@@ -319,9 +319,9 @@ Mat44 Mat44::inverse()
   res.m[15] = m33.determinant();
 
   f32 det   = this->determinant();
-  f32 scale = 1.0f / det;
-  res.scale(Vector3(scale, scale, scale));
   res.transpose();
+  f32 scale = 1.0f / det;
+  res       = res.scale(Vector4(scale, scale, scale, scale));
   return res;
 }
 
@@ -345,6 +345,17 @@ Mat44 Mat44::scale(f32 scale)
   res.rc[2][2] *= scale;
   return res;
 }
+Mat44 Mat44::scale(Vector4 v)
+{
+  Mat44 m    = {};
+  m.rc[0][0] = v.x;
+  m.rc[1][1] = v.y;
+  m.rc[2][2] = v.z;
+  m.rc[3][3] = v.w;
+
+  return this->mul(m);
+}
+
 Mat44 Mat44::scale(Vector3 v)
 {
   Mat44 m    = {};

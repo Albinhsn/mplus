@@ -1,5 +1,6 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
+#include <SDL2/SDL_mouse.h>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/matrix_transform.hpp>
@@ -128,6 +129,7 @@ struct Entity
   EntityType        type;
 };
 
+Mat44             projection;
 u32               score;
 EntityRenderData* render_data;
 u32               render_data_count;
@@ -576,7 +578,7 @@ void spawn(Wave* wave, u32 enemy_index)
   EntityRenderData* render_data = entity->render_data;
   entity->position              = get_random_position(wave->spawn_times[enemy_index], enemy_index);
   entity->hp                    = enemy->initial_hp;
-  logger.info("Spawning enemy %d at (%f, %f)", enemy_index, entity->position.x, entity->position.y);
+  // logger.info("Spawning enemy %d at (%f, %f)", enemy_index, entity->position.x, entity->position.y);
   if (enemy->type == ENEMY_RANGED)
   {
     enemy->cooldown = 1000;
@@ -966,7 +968,97 @@ struct Effects
 
 Effects effects;
 
-bool    use_ability_cone_of_cold(Camera* camera, InputState* input, Hero* player, u32 ticks)
+Vector3 project_vertex(Vector2 v, Mat44 m)
+{
+  Vector4 v4 = m.mul(Vector4(v.x, v.y, 0, 1.0));
+  return v4.project();
+}
+
+bool IntersectSegmentTriangle(Vector3 q, Vector3 p, Triangle3D triangle, float& u, float& v, float& w, float& t)
+{
+  Vector3 ab = triangle.points[1].sub(triangle.points[0]);
+  Vector3 ac = triangle.points[2].sub(triangle.points[0]);
+  Vector3 qp = p.sub(q);
+
+  Vector3 n  = ab.cross(ac);
+
+  float   d  = qp.dot(n);
+
+  Vector3 ap = p.sub(triangle.points[0]);
+  t          = ap.dot(n);
+
+  Vector3 e  = qp.cross(ap);
+  v          = ac.dot(e);
+
+  w          = -ab.dot(e);
+  bool out   = true;
+  if (d <= 0.0f)
+  {
+    out = false;
+  }
+  if (t < 0.0f)
+  {
+    out = false;
+  }
+  if (v < 0.0f || v > d)
+  {
+    out = false;
+  }
+  if (w < 0.0f || v + w > d)
+  {
+    out = false;
+  }
+
+  float ood = 1.0f / d;
+  t *= ood;
+  v *= ood;
+  w *= ood;
+  u = 1.0f - v - w;
+  return out;
+}
+
+bool ray_triangle_intersection(Vector2& p, Triangle* t, Mat44 view_proj, Vector2 ray)
+{
+  Triangle3D triangle;
+  triangle.points[0] = project_vertex(t->points[0], view_proj);
+  triangle.points[1] = project_vertex(t->points[1], view_proj);
+  triangle.points[2] = project_vertex(t->points[2], view_proj);
+  Vector3 eye        = Vector3(ray.x, ray.y, 0);
+  Vector3 dir        = Vector3(eye.x, eye.y, eye.z - 1.0);
+  float u, v, w, time;
+  if (IntersectSegmentTriangle(eye, dir, triangle, u, v, w, time))
+  {
+    p.x = t->points[0].x * u + t->points[1].x * v + t->points[2].x * w;
+    p.y = t->points[0].y * u + t->points[1].y * v + t->points[2].y * w;
+    return true;
+  }
+  p.x = t->points[0].x * u + t->points[1].x * v + t->points[2].x * w;
+  p.y = t->points[0].y * u + t->points[1].y * v + t->points[2].y * w;
+  return false;
+}
+
+bool find_cursor_position_on_map(Vector2& point, f32* mouse_position, Mat44 view_proj)
+{
+  Vector2 ray(mouse_position[0], mouse_position[1]);
+  for (u32 i = 0; i < map.index_count - 2; i += 3)
+  {
+    Triangle t;
+    t.points[0] = map.vertices[map.indices[i]];
+    t.points[1] = map.vertices[map.indices[i + 1]];
+    t.points[2] = map.vertices[map.indices[i + 2]];
+
+    Vector2 p;
+    if (ray_triangle_intersection(p, &t, view_proj, ray))
+    {
+      point = p;
+      return true;
+    }
+    point = p;
+  }
+  return false;
+}
+
+bool use_ability_cone_of_cold(Camera* camera, InputState* input, Hero* player, u32 ticks)
 {
 
   Effect effect;
@@ -974,29 +1066,31 @@ bool    use_ability_cone_of_cold(Camera* camera, InputState* input, Hero* player
   effect.render_data   = *get_render_data_by_name("cone of cold");
   Entity entity        = entities[player->entity];
 
+  Mat44  view          = {};
+  view.identity();
+  view          = view.rotate_x(camera->rotation).translate(Vector3(camera->translation.x, camera->translation.y, camera->z));
+  view          = view.mul(projection);
 
-  // the ouse position is always relative to the center
-  // so find the center, then add the mouse position
-
-  f32    x             = input->mouse_position[0] + entity.position.x + camera->translation.x;
-  f32    y             = input->mouse_position[1] + entity.position.y + camera->translation.y;
-  if (!is_valid_tile(Vector2(x, y)))
+  Vector2 point = {};
+  if (!find_cursor_position_on_map(point, input->mouse_position, view))
   {
     return false;
   }
-  effect.position       = Vector2(x, y);
-  effect.angle          = entity.angle;
-  effect.effect_ends_at = ticks + 500;
 
-  EffectNode* node      = (EffectNode*)effects.pool.alloc();
-  node->next            = effects.head;
-  effects.head          = node;
+  CommandExplodeCoCData* data = sta_allocate_struct(CommandExplodeCoCData, 1);
+  data->position              = Vector2(input->mouse_position[0], input->mouse_position[1]);
+  effect.position             = Vector2(point.x, point.y);
 
-  node->effect          = effect;
+  effect.angle                = entity.angle;
+  effect.effect_ends_at       = ticks + 500;
+
+  EffectNode* node            = (EffectNode*)effects.pool.alloc();
+  node->next                  = effects.head;
+  effects.head                = node;
+
+  node->effect                = effect;
 
   // position
-  CommandExplodeCoCData* data = sta_allocate_struct(CommandExplodeCoCData, 1);
-  data->position              = effect.position;
   add_command(CMD_EXPLODE_COC, (void*)data, effect.effect_ends_at);
   return true;
 }
@@ -1014,7 +1108,7 @@ void read_abilities(Ability* abilities)
   abilities[1].use_ability    = use_ability_blink;
 
   abilities[2].name           = "Cone of Cold";
-  abilities[2].cooldown_ticks = 5000;
+  abilities[2].cooldown_ticks = 2000;
   abilities[2].cooldown       = 0;
   abilities[2].use_ability    = use_ability_cone_of_cold;
 }
@@ -1578,7 +1672,7 @@ void    render_to_depth_buffer(Renderer* renderer, u32 shadow_width, u32 shadow_
   glCullFace(GL_BACK);
 }
 
-void render_map(Renderer* renderer, u32 map_shader_index, Mat44 camera_m, Mat44 projection, u32 map_texture, u32 map_buffer, u32 depth_texture, Vector3 view_position)
+void render_map(Renderer* renderer, u32 map_shader_index, Mat44 camera_m, u32 map_texture, u32 map_buffer, u32 depth_texture, Vector3 view_position)
 {
 
   Shader* map_shader = renderer->get_shader_by_index(map_shader_index);
@@ -1601,7 +1695,7 @@ void render_map(Renderer* renderer, u32 map_shader_index, Mat44 camera_m, Mat44 
   renderer->render_buffer(map_buffer);
 }
 
-void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m, Mat44 projection, u32 depth_texture)
+void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m, u32 depth_texture)
 {
   for (u32 i = 0; i < entity_count; i++)
   {
@@ -1741,7 +1835,7 @@ void debug_render_depth_texture(Renderer* renderer, u32 depth_texture)
   renderer->disable_2d_rendering();
 }
 
-void render_effects(Renderer* renderer, Camera camera, Mat44 camera_m, Mat44 projection, u32 ticks, u32 depth_texture)
+void render_effects(Renderer* renderer, Camera camera, Mat44 camera_m, u32 ticks, u32 depth_texture)
 {
   EffectNode* node = effects.head;
   EffectNode* prev = 0;
@@ -1801,7 +1895,6 @@ int main()
     return 1;
   }
 
-  Mat44 projection;
   projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
 
   init_imgui(renderer.window, renderer.context);
@@ -1835,7 +1928,7 @@ int main()
   f32      fps      = 0.0f;
 
   UI_State ui_state = UI_STATE_GAME_RUNNING;
-  bool     console  = false;
+  bool     console = false, render_circle_on_mouse = false;
   char     console_buf[1024];
   memset(console_buf, 0, ArrayCount(console_buf));
   InputState input_state(renderer.window);
@@ -1898,6 +1991,11 @@ int main()
         camera.rotation -= 1;
         logger.info("New rotation %f", camera.rotation);
       }
+      if (input_state.is_key_released('x'))
+      {
+        render_circle_on_mouse = !render_circle_on_mouse;
+        logger.info("Rendering circle on mouse");
+      }
 
       u32 start_tick = SDL_GetTicks();
       if (ui_state == UI_STATE_GAME_RUNNING && input_state.is_key_pressed('p'))
@@ -1939,9 +2037,21 @@ int main()
 
         render_to_depth_buffer(&renderer, shadow_width, shadow_height, light_position, framebuffer);
 
-        render_map(&renderer, map_shader, camera_m, projection, map_texture, map_buffer, depth_texture, camera.translation);
-        render_entities(&renderer, camera, camera_m, projection, depth_texture);
-        render_effects(&renderer, camera, camera_m, projection, game_running_ticks, depth_texture);
+        render_map(&renderer, map_shader, camera_m, map_texture, map_buffer, depth_texture, camera.translation);
+        render_entities(&renderer, camera, camera_m, depth_texture);
+        render_effects(&renderer, camera, camera_m, game_running_ticks, depth_texture);
+        if (render_circle_on_mouse)
+        {
+          i32 sdl_x, sdl_y;
+          SDL_GetMouseState(&sdl_x, &sdl_y);
+
+          f32    x = input_state.mouse_position[0];
+          f32    y = input_state.mouse_position[1];
+          Entity e = entities[player.entity];
+          Mat44  m = {};
+          m.identity();
+          renderer.draw_circle(Vector2(x, y), 0.1f, 2, BLUE, m, m);
+        }
         if (debug_render)
         {
           debug_render_depth_texture(&renderer, depth_texture);
