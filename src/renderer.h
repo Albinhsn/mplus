@@ -61,44 +61,40 @@ public:
   u32            shadow_width, shadow_height;
   GLuint         shadow_map_framebuffer;
   u32            depth_texture;
-  bool           vsync;
+
   Texture*       textures;
-  u32            texture_capacity;
   u32            texture_count;
-  u64            used_texture_units;
-  AFont*         font;
-  Shader         text_shader;
-  Shader         circle_shader;
+  u32            texture_capacity;
+  RenderBuffer*  buffers;
+  u32            buffer_count;
   Shader*        shaders;
   u32            shader_count;
-  GLBufferIndex  text_buffer;
+
+  Shader         circle_shader;
+  u64            used_texture_units;
+
   GLBufferIndex  circle_buffer;
-  u32            screen_width;
-  u32            screen_height;
   GLBufferIndex* index_buffers;
   u32            index_buffers_count;
   u32            index_buffers_cap;
-  u32            line_vao;
-  u32            line_vbo;
+
   Logger*        logger;
 
-  RenderBuffer*  buffers;
-  u32            buffer_count;
 
+  u32            screen_width, screen_height;
+  bool           vsync;
   SDL_Window*    window;
   SDL_GLContext  context;
   Renderer()
   {
   }
-  Renderer(u32 screen_width, u32 screen_height, AFont* font, Logger* logger, bool vsync)
+  Renderer(u32 screen_width, u32 screen_height, Logger* logger, bool vsync)
   {
     this->vsync  = !vsync;
     this->logger = logger;
     sta_init_sdl_gl(&window, &context, screen_width, screen_height, this->vsync);
     this->screen_width  = screen_width;
     this->screen_height = screen_height;
-    this->font          = font;
-    this->init_line_buffer();
     this->init_circle_buffer();
     this->index_buffers_cap   = 0;
     this->index_buffers_count = 0;
@@ -106,8 +102,6 @@ public:
     this->used_texture_units  = 0;
   }
 
-  void clear_framebuffer();
-  void swap_buffers();
 
   // manage some buffer
   void    init_depth_texture();
@@ -118,8 +112,6 @@ public:
   u32     create_buffer_from_model(Model* model, BufferAttributes* attributes, u32 attribute_count);
   bool    load_shaders_from_files(const char* file_location);
   bool    load_textures_from_files(const char* file_location);
-  void    reset_viewport_to_screen_size();
-  void    change_viewport(u32 w, u32 h);
   u32     add_texture(u32 texture_id);
   void    reload_shaders();
 
@@ -128,7 +120,6 @@ public:
   u32     get_shader_by_name(const char* name);
 
   // render some buffer
-  void render_arrays(u32 buffer_id, GLenum type, u32 count);
   void render_buffer(u32 buffer_id);
   void render_text(const char* string, u32 string_length, f32 x, f32 y, TextAlignment alignment_x, TextAlignment alignment_y, Color color, f32 font_size);
 
@@ -139,13 +130,15 @@ public:
   void change_screen_size(u32 screen_width, u32 screen_height);
   void enable_2d_rendering();
   void disable_2d_rendering();
+  void    change_viewport(u32 w, u32 h);
+  void    reset_viewport_to_screen_size();
+  void clear_framebuffer();
+  void swap_buffers();
 
   // draw basic primitives
   void draw_circle(Vector2 position, f32 radius, f32 thickness, Color color, Mat44 view, Mat44 projection);
-  void draw_line(f32 x1, f32 y1, f32 x2, f32 y2, u32 line_width, Color color);
 
 private:
-  void init_line_buffer();
   void init_circle_buffer();
   u32  get_free_texture_unit();
 };

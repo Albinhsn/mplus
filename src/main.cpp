@@ -157,7 +157,6 @@ bool              god             = false;
 #include "ui.cpp"
 #include "ui.h"
 
-
 u32 get_buffer_by_name(const char* filename)
 {
   for (u32 i = 0; i < buffer_count; i++)
@@ -1542,30 +1541,6 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
   }
 }
 
-void debug_render_map_grid(Map* map, Camera camera)
-{
-  f32 tile_size = 1 / (f32)tile_count;
-  for (u32 x = 0; x < tile_count; x++)
-  {
-    f32 x0 = x * tile_size * 2.0f - 1.0f, x1 = x0 + tile_size * 2.0f;
-    x0 += camera.translation.x;
-    x1 += camera.translation.x;
-    for (u32 y = 0; y < tile_count; y++)
-    {
-      if (map->tiles[y][x])
-      {
-        f32 y0 = y * tile_size * 2.0f - 1.0f, y1 = y0 + tile_size * 2.0f;
-        y0 += camera.translation.y;
-        y1 += camera.translation.y;
-        renderer.draw_line(x0, y0, x0, y1, 1, BLUE);
-        renderer.draw_line(x1, y0, x1, y1, 1, BLUE);
-        renderer.draw_line(x0, y1, x1, y1, 1, BLUE);
-        renderer.draw_line(x0, y0, x1, y0, 1, BLUE);
-      }
-    }
-  }
-}
-
 struct EnemyData
 {
   EnemyType   type;
@@ -2063,7 +2038,7 @@ int main()
   entities               = (Entity*)sta_allocate_struct(Entity, entity_capacity);
 
   const int screen_width = 620, screen_height = 480;
-  renderer = Renderer(screen_width, screen_height, 0, &logger, true);
+  renderer = Renderer(screen_width, screen_height, &logger, true);
   if (!load_data())
   {
     return 1;
