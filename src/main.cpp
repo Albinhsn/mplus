@@ -96,7 +96,7 @@ struct Hero;
 struct Ability
 {
   const char* name;
-  bool (*use_ability)(Camera* camera, InputState* input, Hero* player, u32 ticks);
+  bool (*use_ability)(Camera* camera, InputState* input, u32 ticks);
   u32 cooldown_ticks;
   u32 cooldown;
 };
@@ -667,6 +667,7 @@ void find_path(Path* path, Vector2 needle, Vector2 source)
     // free node memory :)
     free(curr.path);
   }
+
   assert(!"Didn't find a path to player!");
 }
 
@@ -725,12 +726,8 @@ Vector2 get_random_position(u32 tick, u32 enemy_counter)
     position           = Vector2((x / 255.0f) * 2.0f - 1.0f, (y / 255.0f) * 2.0f - 1.0f);
 
     distance_to_player = position.sub(player_position).len();
-    if (min_valid_distance > distance_to_player)
-    {
-      logger.info("%f vs %f\n", min_valid_distance, distance_to_player);
-    }
 
-  } while (!is_valid_tile(position) && distance_to_player >= min_valid_distance);
+  } while (!is_valid_tile(position) || distance_to_player < min_valid_distance);
 
   return position;
 }
@@ -817,7 +814,7 @@ void spawn(Wave* wave, u32 enemy_index)
 {
   Enemy*  enemy  = &wave->enemies[enemy_index];
   Entity* entity = &entities[enemy->entity];
-  wave->spawn_count |= enemy_index == 0 ? 1 : (1 << enemy_index);
+  wave->spawn_count |= enemy_index == 0 ? 1 : ((u64)1 << (u64)enemy_index);
   wave->enemies_alive++;
   EntityRenderData* render_data = entity->render_data;
   entity->position              = get_random_position(wave->spawn_times[enemy_index], enemy_index);
@@ -893,8 +890,8 @@ void run_command_shoot_arrow(void* data)
 
 void run_command_find_path(void* data)
 {
-  const u32            next_tick = 75;
-  CommandFindPathData* path_data = (CommandFindPathData*)data;
+  const u32            next_tick    = 75;
+  CommandFindPathData* path_data    = (CommandFindPathData*)data;
   path_data->enemy->path.path_count = 0;
   find_path(&path_data->enemy->path, entities[player.entity].position, entities[path_data->enemy->entity].position);
   path_data->tick += next_tick;
@@ -958,9 +955,9 @@ void run_commands(u32 ticks)
   }
 }
 
-void handle_player_movement(Camera& camera, Hero* player, InputState* input, u32 tick)
+void handle_player_movement(Camera& camera, InputState* input, u32 tick)
 {
-  Entity* entity   = &entities[player->entity];
+  Entity* entity   = &entities[player.entity];
   entity->velocity = {};
   f32 MS           = 0.01f;
 
@@ -1010,9 +1007,9 @@ void handle_player_movement(Camera& camera, Hero* player, InputState* input, u32
     }
   }
 
-  camera.translation                            = Vector3(-entity->position.x, -entity->position.y, 0.0);
+  camera.translation                           = Vector3(-entity->position.x, -entity->position.y, 0.0);
 
-  entities[player->entity].render_data->texture = renderer.get_texture(player->can_take_damage_tick >= SDL_GetTicks() ? "blue_texture" : "black_texture");
+  entities[player.entity].render_data->texture = renderer.get_texture(player.can_take_damage_tick >= SDL_GetTicks() ? "blue_texture" : "black_texture");
 }
 
 Vector2 closest_point_triangle(Triangle triangle, Vector2 p)
@@ -1120,15 +1117,15 @@ static inline bool on_cooldown(Ability ability, u32 tick)
   return tick < ability.cooldown;
 }
 
-void handle_abilities(Camera camera, InputState* input, Hero* player, u32 tick)
+void handle_abilities(Camera camera, InputState* input, u32 tick)
 {
   const char keybinds[] = {'1', '2', '3'};
   for (u32 i = 0; i < ArrayCount(keybinds); i++)
   {
-    if (input->is_key_pressed(keybinds[i]) && !on_cooldown(player->abilities[i], tick))
+    if (input->is_key_pressed(keybinds[i]) && !on_cooldown(player.abilities[i], tick))
     {
-      Ability* ability = &player->abilities[i];
-      if (ability->use_ability(&camera, input, player, tick))
+      Ability* ability = &player.abilities[i];
+      if (ability->use_ability(&camera, input, tick))
       {
         ability->cooldown = tick + ability->cooldown_ticks;
         logger.info("Using %s", ability->name);
@@ -1136,10 +1133,10 @@ void handle_abilities(Camera camera, InputState* input, Hero* player, u32 tick)
     }
   }
 }
-bool use_ability_blink(Camera* camera, InputState* input, Hero* player, u32 ticks)
+bool use_ability_blink(Camera* camera, InputState* input, u32 ticks)
 {
 
-  Entity    player_entity = entities[player->entity];
+  Entity    player_entity = entities[player.entity];
   Vector2   position      = player_entity.position;
   f32       angle         = player_entity.angle;
 
@@ -1159,11 +1156,11 @@ bool use_ability_blink(Camera* camera, InputState* input, Hero* player, u32 tick
       break;
     }
   }
-  entities[player->entity].position = position;
+  entities[player.entity].position = position;
   return true;
 }
 
-bool use_ability_fireball(Camera* camera, InputState* input, Hero* player, u32 ticks)
+bool use_ability_fireball(Camera* camera, InputState* input, u32 ticks)
 {
   // ToDo this can reuse dead fireballs?
 
@@ -1173,8 +1170,8 @@ bool use_ability_fireball(Camera* camera, InputState* input, Hero* player, u32 t
 
   f32    ms            = 0.02;
 
-  Entity player_entity = entities[player->entity];
-  e->position          = entities[player->entity].position;
+  Entity player_entity = entities[player.entity];
+  e->position          = entities[player.entity].position;
   e->velocity          = Vector2(cosf(player_entity.angle) * ms, sinf(player_entity.angle) * ms);
   e->angle             = player_entity.angle;
   e->r                 = 0.03f;
@@ -1295,13 +1292,13 @@ bool find_cursor_position_on_map(Vector2& point, f32* mouse_position, Mat44 view
   return false;
 }
 
-bool use_ability_cone_of_cold(Camera* camera, InputState* input, Hero* player, u32 ticks)
+bool use_ability_cone_of_cold(Camera* camera, InputState* input, u32 ticks)
 {
 
   Effect effect;
   effect.update_effect = 0;
   effect.render_data   = *get_render_data_by_name("cone of cold");
-  Entity  entity       = entities[player->entity];
+  Entity  entity       = entities[player.entity];
 
   Mat44   view         = camera->get_view_matrix().mul(projection);
 
@@ -1358,7 +1355,7 @@ void handle_enemy_movement(Enemy* enemy, Vector2 target_position)
   // enemy->path.path_count = 0;
   // find_path(&enemy->path, target_position, entity->position);
 
-  Path             path   = enemy->path;
+  Path path = enemy->path;
   if (path.path_count == 1)
   {
     return;
@@ -1408,11 +1405,11 @@ inline bool point_in_sphere(Sphere sphere, Vector2 p)
   return sphere.position.sub(p).len() < sphere.r;
 }
 
-bool player_is_visible(f32& angle, Vector2 position, Hero* player)
+bool player_is_visible(f32& angle, Vector2 position)
 {
 
   const f32 step_size     = 0.005f;
-  Entity    player_entity = entities[player->entity];
+  Entity    player_entity = entities[player.entity];
   // ToDo this also just checks for the origin of the player and not the hitbox
   Vector2 direction = player_entity.position.sub(position);
 
@@ -1443,18 +1440,19 @@ bool player_is_visible(f32& angle, Vector2 position, Hero* player)
   return true;
 }
 
-void update_enemies(Wave* wave, Hero* player, u32 tick_difference, u32 tick)
+void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
 {
 
   Sphere player_sphere;
 
-  player_sphere.r        = entities[player->entity].r;
-  player_sphere.position = entities[player->entity].position;
+  player_sphere.r        = entities[player.entity].r;
+  player_sphere.position = entities[player.entity].position;
 
   // check if we spawn
 
-  Vector2 player_position = entities[player->entity].position;
+  Vector2 player_position = entities[player.entity].position;
   u32     spawn_count     = __builtin_popcountll(wave->spawn_count);
+  assert(spawn_count <= wave->enemy_count && "More spawning then enemies?");
   for (u32 i = 0; i < spawn_count; i++)
   {
     Enemy*  enemy  = &wave->enemies[i];
@@ -1481,11 +1479,13 @@ void update_enemies(Wave* wave, Hero* player, u32 tick_difference, u32 tick)
         if (sphere_sphere_collision(player_sphere, enemy_sphere))
         {
           u32 tick = SDL_GetTicks();
-          if (tick >= player->can_take_damage_tick && !god)
+          if (tick >= player.can_take_damage_tick && !god)
           {
-            player->can_take_damage_tick = tick + player->damage_taken_cd;
+            player.can_take_damage_tick = tick + player.damage_taken_cd;
             // entities[player->entity].hp -= 1;
-            // logger.info("Took damage, hp: %d %d", entities[player->entity].hp, enemy->entity);
+            logger.info("Took damage, hp: %d %d %d", player.entity, enemy->entity, i);
+            player_sphere.position.debug();
+            enemy_sphere.position.debug();
           }
         }
         break;
@@ -1498,7 +1498,7 @@ void update_enemies(Wave* wave, Hero* player, u32 tick_difference, u32 tick)
 
           // check if visible
           f32 angle = 0.0f;
-          if (player_is_visible(angle, entity->position, player))
+          if (player_is_visible(angle, entity->position))
           {
 
             enemy->can_move                               = false;
@@ -1666,7 +1666,6 @@ bool load_wave_from_file(Wave* wave, const char* filename)
 
   assert(lines.count > 1 && "Only one line in wave file?");
   wave->enemy_count = parse_int_from_string(lines.strings[0]);
-  printf("Expected %d\n", lines.count - 1);
   assert(wave->enemy_count * 2 + 1 == lines.count && "Mismatch in wave file, expected x enemies in wave and got y");
   wave->spawn_count   = 0;
   wave->enemies_alive = 0;
@@ -1912,17 +1911,17 @@ void render_entities()
 {
   for (u32 i = 0; i < entity_count; i++)
   {
-    Entity entity = entities[i];
-    if (entity.hp > 0)
+    Entity* entity = &entities[i];
+    if (entity->hp > 0)
     {
-      EntityRenderData* render_data = entity.render_data;
+      EntityRenderData* render_data = entity->render_data;
       Shader*           shader      = renderer.get_shader_by_index(render_data->shader);
       shader->use();
       Mat44 m = {};
       m.identity();
       m = m.scale(render_data->scale);
-      m = m.rotate_z(RADIANS_TO_DEGREES(entity.angle) + 90);
-      m = m.translate(Vector3(entity.position.x, entity.position.y, 0.0f));
+      m = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
+      m = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
 
       renderer.bind_texture(*shader, "texture1", render_data->texture);
       renderer.bind_texture(*shader, "shadow_map", renderer.depth_texture);
@@ -1934,7 +1933,7 @@ void render_entities()
       // shader->set_vec3("viewPos", camera.translation);
       renderer.render_buffer(render_data->buffer_id);
 
-      renderer.draw_circle(entity.position, entity.r, 1, RED, camera.get_view_matrix(), projection);
+      renderer.draw_circle(entity->position, entity->r, 1, RED, camera.get_view_matrix(), projection);
     }
   }
 }
@@ -1993,14 +1992,14 @@ void render_console(Hero* player, InputState* input_state, char* console_buf, u3
   ImGui::End();
 }
 
-void update(Wave* wave, Camera& camera, InputState* input_state, Hero* player, u32& game_running_ticks, u32 ticks, u32 tick_difference)
+void update(Wave* wave, Camera& camera, InputState* input_state, u32& game_running_ticks, u32 ticks, u32 tick_difference)
 {
 
-  handle_abilities(camera, input_state, player, game_running_ticks);
-  handle_player_movement(camera, player, input_state, ticks);
+  handle_abilities(camera, input_state, game_running_ticks);
+  handle_player_movement(camera, input_state, ticks);
   run_commands(game_running_ticks);
   update_entities(entities, entity_count, wave, tick_difference);
-  update_enemies(wave, player, tick_difference, game_running_ticks);
+  update_enemies(wave, tick_difference, game_running_ticks);
 }
 
 inline bool handle_wave_over(Wave* wave)
@@ -2218,7 +2217,7 @@ int main()
 
         game_running_ticks += SDL_GetTicks() - ticks;
 
-        update(&wave, camera, &input_state, &player, game_running_ticks, ticks, tick_difference);
+        update(&wave, camera, &input_state, game_running_ticks, ticks, tick_difference);
 
         if (handle_wave_over(&wave))
         {
