@@ -11,6 +11,7 @@ uniform sampler2D shadow_map;
 uniform sampler2D texture1;
 uniform vec3      light_position;
 uniform vec3      ambient_lighting;
+uniform vec3      viewPos;
 
 float shadow_calc(vec4 pos){
   vec3 proj_coords = pos.xyz / pos.w;
@@ -30,11 +31,19 @@ float shadow_calc(vec4 pos){
 void main()
 {
 
+
+  float specularStrength = 1;
+  vec3 viewDir = normalize(viewPos - FragPos);
+  vec3 reflectDir = reflect(normalize(light_position), normal);
+
+  float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+  vec3 specular = specularStrength * spec * vec3(1.0, 1.0, 1.0);
+
    float diff = clamp(dot(normal, vec3(normalize(light_position - FragPos))), 0.0, 1.0);  
 
    vec3 diffuse = vec3(1.0, 1.0, 1.0) * diff;
 
    float shadow = shadow_calc(FragPosLightSpace);
-   vec3 c = ((ambient_lighting + (1.0 - shadow )) * diffuse) * texture(texture1, TexCoord).rgb;
+   vec3 c = (ambient_lighting + (1.0 - shadow ) * (diffuse + specular)) * texture(texture1, TexCoord).rgb;
    FragColor = vec4(c, 1.0);
 }

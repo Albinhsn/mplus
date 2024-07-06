@@ -1851,6 +1851,7 @@ void render_map(u32 map_shader_index, u32 map_texture, u32 map_buffer, Vector3 v
   map_shader->set_mat4("model", m);
   map_shader->set_mat4("view", camera.get_view_matrix());
   map_shader->set_mat4("projection", projection);
+  map_shader->set_vec3("viewPos", Vector3(-camera.translation.x, -camera.translation.y, -camera.z));
 
   // render map
   renderer.bind_texture(*map_shader, "texture1", map_texture);
@@ -1879,6 +1880,7 @@ void render_entities()
       renderer.bind_texture(*shader, "shadow_map", renderer.depth_texture);
       shader->set_mat4("model", m);
       shader->set_mat4("view", camera.get_view_matrix());
+      shader->set_vec3("viewPos", camera.translation);
       shader->set_mat4("projection", projection);
       shader->set_mat4("light_space_matrix", light_space_matrix);
       // shader->set_vec3("viewPos", camera.translation);
@@ -2118,7 +2120,6 @@ int main()
       {
         camera.z_rotation -= 0.1f;
       }
-      logger.info("%f", camera.z_rotation);
 
       renderer.clear_framebuffer();
       if (entities[player.entity].hp == 0)
