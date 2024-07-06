@@ -75,6 +75,14 @@ public:
     rotation    = r;
     z           = _z;
   }
+
+public:
+  Mat44 get_view_matrix()
+  {
+    Mat44 camera_m = {};
+    camera_m.identity();
+    return camera_m.rotate_x(rotation).translate(Vector3(translation.x, translation.y, z));
+  }
   Vector3 translation;
   f32     rotation;
   f32     z;
@@ -129,6 +137,7 @@ struct Entity
   EntityType        type;
 };
 
+Camera            camera(Vector3(), -20.0f, -3.0f);
 Mat44             projection;
 Renderer          renderer;
 u32               score;
@@ -1063,14 +1072,11 @@ bool use_ability_cone_of_cold(Camera* camera, InputState* input, Hero* player, u
   Effect effect;
   effect.update_effect = 0;
   effect.render_data   = *get_render_data_by_name("cone of cold");
-  Entity entity        = entities[player->entity];
+  Entity  entity       = entities[player->entity];
 
-  Mat44  view          = {};
-  view.identity();
-  view          = view.rotate_x(camera->rotation).translate(Vector3(camera->translation.x, camera->translation.y, camera->z));
-  view          = view.mul(projection);
+  Mat44   view         = camera->get_view_matrix().mul(projection);
 
-  Vector2 point = {};
+  Vector2 point        = {};
   if (!find_cursor_position_on_map(point, input->mouse_position, view))
   {
     return false;
@@ -1671,7 +1677,7 @@ void    render_to_depth_buffer(Vector3 light_position)
   glCullFace(GL_BACK);
 }
 
-void render_map(u32 map_shader_index, Mat44 camera_m, u32 map_texture, u32 map_buffer, Vector3 view_position)
+void render_map(u32 map_shader_index, u32 map_texture, u32 map_buffer, Vector3 view_position)
 {
 
   Shader* map_shader = renderer.get_shader_by_index(map_shader_index);
@@ -1684,7 +1690,7 @@ void render_map(u32 map_shader_index, Mat44 camera_m, u32 map_texture, u32 map_b
   map_shader->set_vec3("light_position", light_position);
   map_shader->set_mat4("light_space_matrix", light_space_matrix);
   map_shader->set_mat4("model", m);
-  map_shader->set_mat4("view", camera_m);
+  map_shader->set_mat4("view", camera.get_view_matrix());
   map_shader->set_mat4("projection", projection);
 
   // render map
@@ -1694,7 +1700,7 @@ void render_map(u32 map_shader_index, Mat44 camera_m, u32 map_texture, u32 map_b
   renderer.render_buffer(map_buffer);
 }
 
-void render_entities(Camera camera, Mat44 camera_m)
+void render_entities()
 {
   for (u32 i = 0; i < entity_count; i++)
   {
@@ -1713,13 +1719,13 @@ void render_entities(Camera camera, Mat44 camera_m)
       renderer.bind_texture(*shader, "texture1", render_data->texture);
       renderer.bind_texture(*shader, "shadow_map", renderer.depth_texture);
       shader->set_mat4("model", m);
-      shader->set_mat4("view", camera_m);
+      shader->set_mat4("view", camera.get_view_matrix());
       shader->set_mat4("projection", projection);
       shader->set_mat4("light_space_matrix", light_space_matrix);
       // shader->set_vec3("viewPos", camera.translation);
       renderer.render_buffer(render_data->buffer_id);
 
-      renderer.draw_circle(entity.position, entity.r, 1, RED, camera_m, projection);
+      renderer.draw_circle(entity.position, entity.r, 1, RED, camera.get_view_matrix(), projection);
     }
   }
 }
@@ -1834,7 +1840,7 @@ void debug_render_depth_texture()
   renderer.disable_2d_rendering();
 }
 
-void render_effects(Camera camera, Mat44 camera_m, u32 ticks)
+void render_effects(u32 ticks)
 {
   EffectNode* node = effects.head;
   EffectNode* prev = 0;
@@ -1871,7 +1877,7 @@ void render_effects(Camera camera, Mat44 camera_m, u32 ticks)
 
     renderer.bind_texture(*shader, "texture1", render_data->texture);
     shader->set_mat4("model", m);
-    shader->set_mat4("view", camera_m);
+    shader->set_mat4("view", camera.get_view_matrix());
     shader->set_mat4("projection", projection);
     renderer.render_buffer(render_data->buffer_id);
 
@@ -1900,18 +1906,14 @@ int main()
   init_imgui(renderer.window, renderer.context);
 
   u32    map_shader  = renderer.get_shader_by_name("model2");
-
   Model* map_model   = renderer.get_model_by_name("model_map_with_pillar");
-
   u32    map_buffer  = renderer.get_buffer_by_name("model_map_with_pillar");
   u32    map_texture = renderer.get_texture("dirt_texture");
 
   Hero   player      = {};
   init_player(&player);
 
-  Camera camera(Vector3(), -20.0f, -3.0f);
-
-  Wave   wave = {};
+  Wave wave = {};
   if (!load_wave_from_file(&wave, "./data/waves/wave01.txt"))
   {
     logger.error("Failed to parse wave!");
@@ -2004,18 +2006,14 @@ int main()
           return 0;
         }
 
-        Mat44 camera_m = {};
-        camera_m.identity();
-        camera_m           = camera_m.rotate_x(camera.rotation).translate(Vector3(camera.translation.x, camera.translation.y, camera.z));
-
         update_ticks       = SDL_GetTicks() - start_tick;
         prior_render_ticks = SDL_GetTicks();
 
         render_to_depth_buffer(light_position);
 
-        render_map(map_shader, camera_m, map_texture, map_buffer, camera.translation);
-        render_entities(camera, camera_m);
-        render_effects(camera, camera_m, game_running_ticks);
+        render_map(map_shader, map_texture, map_buffer, camera.translation);
+        render_entities();
+        render_effects(game_running_ticks);
         if (render_circle_on_mouse)
         {
           i32 sdl_x, sdl_y;
