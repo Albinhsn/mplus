@@ -578,7 +578,7 @@ void spawn(Wave* wave, u32 enemy_index)
   EntityRenderData* render_data = entity->render_data;
   entity->position              = get_random_position(wave->spawn_times[enemy_index], enemy_index);
   entity->hp                    = enemy->initial_hp;
-  // logger.info("Spawning enemy %d at (%f, %f)", enemy_index, entity->position.x, entity->position.y);
+  logger.info("Spawning enemy %d at (%f, %f) %d", enemy_index, entity->position.x, entity->position.y, wave->enemies_alive);
   if (enemy->type == ENEMY_RANGED)
   {
     enemy->cooldown = 1000;
@@ -1310,7 +1310,6 @@ void handle_collision(Entity* e1, Entity* e2, Wave* wave)
   if ((e1->type == ENTITY_PLAYER && e2->type == ENTITY_ENEMY_PROJECTILE) || (e1->type == ENTITY_ENEMY_PROJECTILE && e2->type == ENTITY_PLAYER))
   {
     e2->hp = 0;
-    wave->enemies_alive -= 1;
   }
 }
 
@@ -1465,6 +1464,7 @@ bool load_wave_from_file(Wave* wave, const char* filename)
   {
 
     Enemy* enemy                = &wave->enemies[i];
+    enemy->can_move = true;
     enemy->type                 = (EnemyType)parse_int_from_string(lines.strings[string_index++]);
     EnemyData enemy_data        = get_enemy_data_from_type(enemy->type);
     enemy->initial_hp           = enemy_data.hp;
