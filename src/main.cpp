@@ -130,6 +130,7 @@ struct Entity
 };
 
 Mat44             projection;
+Renderer          renderer;
 u32               score;
 EntityRenderData* render_data;
 u32               render_data_count;
@@ -237,8 +238,6 @@ public:
     assert(!"Was out of bounds!\n");
   }
 };
-u32 fireball_shader;
-u32 fireball_id;
 Map map;
 
 struct HeapNode
@@ -721,7 +720,7 @@ void run_commands(u32 ticks)
   }
 }
 
-void handle_player_movement(Renderer* renderer, Camera& camera, Hero* player, InputState* input, u32 tick)
+void handle_player_movement(Camera& camera, Hero* player, InputState* input, u32 tick)
 {
   Entity* entity   = &entities[player->entity];
   entity->velocity = {};
@@ -748,7 +747,7 @@ void handle_player_movement(Renderer* renderer, Camera& camera, Hero* player, In
   entity->angle                    = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
 
   EntityRenderData* render_data    = entity->render_data;
-  Shader*           shader         = renderer->get_shader_by_index(render_data->shader);
+  Shader*           shader         = renderer.get_shader_by_index(render_data->shader);
   AnimationData*    animation_data = render_data->model;
   if (animation_data)
   {
@@ -775,7 +774,7 @@ void handle_player_movement(Renderer* renderer, Camera& camera, Hero* player, In
 
   camera.translation                            = Vector3(-entity->position.x, -entity->position.y, 0.0);
 
-  entities[player->entity].render_data->texture = renderer->get_texture(player->can_take_damage_tick >= SDL_GetTicks() ? "blue_texture" : "black_texture");
+  entities[player->entity].render_data->texture = renderer.get_texture(player->can_take_damage_tick >= SDL_GetTicks() ? "blue_texture" : "black_texture");
 }
 
 Vector2 closest_point_triangle(Triangle triangle, Vector2 p)
@@ -1368,7 +1367,7 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
   }
 }
 
-void debug_render_map_grid(Renderer* renderer, Map* map, Camera camera)
+void debug_render_map_grid(Map* map, Camera camera)
 {
   f32 tile_size = 1 / (f32)tile_count;
   for (u32 x = 0; x < tile_count; x++)
@@ -1383,10 +1382,10 @@ void debug_render_map_grid(Renderer* renderer, Map* map, Camera camera)
         f32 y0 = y * tile_size * 2.0f - 1.0f, y1 = y0 + tile_size * 2.0f;
         y0 += camera.translation.y;
         y1 += camera.translation.y;
-        renderer->draw_line(x0, y0, x0, y1, 1, BLUE);
-        renderer->draw_line(x1, y0, x1, y1, 1, BLUE);
-        renderer->draw_line(x0, y1, x1, y1, 1, BLUE);
-        renderer->draw_line(x0, y0, x1, y0, 1, BLUE);
+        renderer.draw_line(x0, y0, x0, y1, 1, BLUE);
+        renderer.draw_line(x1, y0, x1, y1, 1, BLUE);
+        renderer.draw_line(x0, y1, x1, y1, 1, BLUE);
+        renderer.draw_line(x0, y0, x1, y0, 1, BLUE);
       }
     }
   }
@@ -1464,7 +1463,7 @@ bool load_wave_from_file(Wave* wave, const char* filename)
   {
 
     Enemy* enemy                = &wave->enemies[i];
-    enemy->can_move = true;
+    enemy->can_move             = true;
     enemy->type                 = (EnemyType)parse_int_from_string(lines.strings[string_index++]);
     EnemyData enemy_data        = get_enemy_data_from_type(enemy->type);
     enemy->initial_hp           = enemy_data.hp;
@@ -1491,7 +1490,7 @@ bool load_wave_from_file(Wave* wave, const char* filename)
   return true;
 }
 
-bool load_entity_render_data_from_file(Renderer* renderer, const char* file_location)
+bool load_entity_render_data_from_file(const char* file_location)
 {
 
   Buffer      buffer = {};
@@ -1522,7 +1521,7 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
     }
     else
     {
-      Model* model = renderer->get_model_by_name(lines.strings[string_index]);
+      Model* model = renderer.get_model_by_name(lines.strings[string_index]);
       assert(model->animation_data && "No animation data for the model!");
       data->model = model->animation_data;
     }
@@ -1532,10 +1531,10 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
     const char* shader         = lines.strings[string_index++];
     const char* scale          = lines.strings[string_index++];
     const char* buffer_id      = lines.strings[string_index++];
-    data->texture              = renderer->get_texture(texture);
-    data->shader               = renderer->get_shader_by_name(shader);
+    data->texture              = renderer.get_texture(texture);
+    data->shader               = renderer.get_shader_by_name(shader);
     data->scale                = parse_float_from_string((char*)scale);
-    data->buffer_id            = renderer->get_buffer_by_name(buffer_id);
+    data->buffer_id            = renderer.get_buffer_by_name(buffer_id);
     data->animation_tick_start = 0;
     logger.info("Loaded render data for '%s': texture: %s, shader: %s, scale: %s,  buffer: %s", data->name, texture, shader, scale, buffer_id);
   }
@@ -1545,7 +1544,7 @@ bool load_entity_render_data_from_file(Renderer* renderer, const char* file_loca
 
 static f32 p = PI;
 
-bool       load_data(Renderer* renderer)
+bool       load_data()
 {
 
   const static char* enemy_data_location = "./data/formats/enemy.txt";
@@ -1556,28 +1555,28 @@ bool       load_data(Renderer* renderer)
   }
 
   const static char* model_locations = "./data/formats/models.txt";
-  if (!renderer->load_models_from_files(model_locations))
+  if (!renderer.load_models_from_files(model_locations))
   {
     logger.error("Failed to read models from '%s'", model_locations);
     return false;
   }
 
   const static char* texture_locations = "./data/formats/textures.txt";
-  if (!renderer->load_textures_from_files(texture_locations))
+  if (!renderer.load_textures_from_files(texture_locations))
   {
     logger.error("Failed to read textures from '%s'", texture_locations);
     return false;
   }
 
   const static char* shader_locations = "./data/formats/shader.txt";
-  if (!renderer->load_shaders_from_files(shader_locations))
+  if (!renderer.load_shaders_from_files(shader_locations))
   {
     logger.error("Failed to read shaders from '%s'", shader_locations);
     return false;
   }
 
   const static char* buffer_locations = "./data/formats/buffers.txt";
-  if (!renderer->load_buffers_from_files(buffer_locations))
+  if (!renderer.load_buffers_from_files(buffer_locations))
   {
     logger.error("Failed to read buffers from '%s'", buffer_locations);
     return false;
@@ -1591,7 +1590,7 @@ bool       load_data(Renderer* renderer)
   }
 
   const static char* render_data_location = "./data/formats/render_data.txt";
-  if (!load_entity_render_data_from_file(renderer, render_data_location))
+  if (!load_entity_render_data_from_file(render_data_location))
   {
     logger.error("Failed to read render data from '%s'", render_data_location);
     return false;
@@ -1618,12 +1617,12 @@ void init_player(Hero* player)
 
 Mat44   light_space_matrix;
 Vector3 light_position;
-void    render_to_depth_buffer(Renderer* renderer, Vector3 light_position)
+void    render_to_depth_buffer(Vector3 light_position)
 {
 
   glCullFace(GL_FRONT);
-  renderer->change_viewport(renderer->shadow_width, renderer->shadow_height);
-  glBindFramebuffer(GL_FRAMEBUFFER, renderer->shadow_map_framebuffer);
+  renderer.change_viewport(renderer.shadow_width, renderer.shadow_height);
+  glBindFramebuffer(GL_FRAMEBUFFER, renderer.shadow_map_framebuffer);
   glClear(GL_DEPTH_BUFFER_BIT);
 
   static u32 vao = 0, vbo = 0, ebo = 0;
@@ -1644,7 +1643,7 @@ void    render_to_depth_buffer(Renderer* renderer, Vector3 light_position)
 
     sta_glBindVertexArray(0);
   }
-  Shader depth_shader = *renderer->get_shader_by_index(renderer->get_shader_by_name("depth"));
+  Shader depth_shader = *renderer.get_shader_by_index(renderer.get_shader_by_name("depth"));
   Mat44  m            = {};
   m.identity();
   depth_shader.use();
@@ -1659,7 +1658,7 @@ void    render_to_depth_buffer(Renderer* renderer, Vector3 light_position)
 
   sta_glBindVertexArray(vao);
 
-  Model* map_model = renderer->get_model_by_name("model_map_with_pillar");
+  Model* map_model = renderer.get_model_by_name("model_map_with_pillar");
   sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
   sta_glBufferData(GL_ARRAY_BUFFER, sizeof(Vector3) * map_model->vertex_count, map_model->vertices, GL_DYNAMIC_DRAW);
   sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
@@ -1667,15 +1666,15 @@ void    render_to_depth_buffer(Renderer* renderer, Vector3 light_position)
   glDrawElements(GL_TRIANGLES, map_model->index_count, GL_UNSIGNED_INT, 0);
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  renderer->reset_viewport_to_screen_size();
+  renderer.reset_viewport_to_screen_size();
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glCullFace(GL_BACK);
 }
 
-void render_map(Renderer* renderer, u32 map_shader_index, Mat44 camera_m, u32 map_texture, u32 map_buffer, Vector3 view_position)
+void render_map(u32 map_shader_index, Mat44 camera_m, u32 map_texture, u32 map_buffer, Vector3 view_position)
 {
 
-  Shader* map_shader = renderer->get_shader_by_index(map_shader_index);
+  Shader* map_shader = renderer.get_shader_by_index(map_shader_index);
 
   map_shader->use();
   Mat44   m;
@@ -1689,13 +1688,13 @@ void render_map(Renderer* renderer, u32 map_shader_index, Mat44 camera_m, u32 ma
   map_shader->set_mat4("projection", projection);
 
   // render map
-  renderer->bind_texture(*map_shader, "texture1", map_texture);
-  renderer->bind_texture(*map_shader, "shadow_map", renderer->depth_texture);
+  renderer.bind_texture(*map_shader, "texture1", map_texture);
+  renderer.bind_texture(*map_shader, "shadow_map", renderer.depth_texture);
   // map_shader->set_vec3("viewPos", view_position);
-  renderer->render_buffer(map_buffer);
+  renderer.render_buffer(map_buffer);
 }
 
-void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m)
+void render_entities(Camera camera, Mat44 camera_m)
 {
   for (u32 i = 0; i < entity_count; i++)
   {
@@ -1703,7 +1702,7 @@ void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m)
     if (entity.hp > 0)
     {
       EntityRenderData* render_data = entity.render_data;
-      Shader*           shader      = renderer->get_shader_by_index(render_data->shader);
+      Shader*           shader      = renderer.get_shader_by_index(render_data->shader);
       shader->use();
       Mat44 m = {};
       m.identity();
@@ -1711,21 +1710,21 @@ void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m)
       m = m.rotate_z(RADIANS_TO_DEGREES(entity.angle) + 90);
       m = m.translate(Vector3(entity.position.x, entity.position.y, 0.0f));
 
-      renderer->bind_texture(*shader, "texture1", render_data->texture);
-      renderer->bind_texture(*shader, "shadow_map", renderer->depth_texture);
+      renderer.bind_texture(*shader, "texture1", render_data->texture);
+      renderer.bind_texture(*shader, "shadow_map", renderer.depth_texture);
       shader->set_mat4("model", m);
       shader->set_mat4("view", camera_m);
       shader->set_mat4("projection", projection);
       shader->set_mat4("light_space_matrix", light_space_matrix);
       // shader->set_vec3("viewPos", camera.translation);
-      renderer->render_buffer(render_data->buffer_id);
+      renderer.render_buffer(render_data->buffer_id);
 
-      renderer->draw_circle(entity.position, entity.r, 1, RED, camera_m, projection);
+      renderer.draw_circle(entity.position, entity.r, 1, RED, camera_m, projection);
     }
   }
 }
 
-void render_console(Hero* player, Renderer* renderer, InputState* input_state, char* console_buf, u32 console_buf_size, Wave* wave, u32& game_running_ticks)
+void render_console(Hero* player, InputState* input_state, char* console_buf, u32 console_buf_size, Wave* wave, u32& game_running_ticks)
 {
 
   if (input_state->is_key_released(ASCII_RETURN))
@@ -1748,8 +1747,8 @@ void render_console(Hero* player, Renderer* renderer, InputState* input_state, c
     }
     else if (compare_strings("vsync", console_buf))
     {
-      renderer->toggle_vsync();
-      logger.info("toggled vsync to %d!\n", renderer->vsync);
+      renderer.toggle_vsync();
+      logger.info("toggled vsync to %d!\n", renderer.vsync);
     }
     else if (compare_strings("god", console_buf))
     {
@@ -1767,7 +1766,7 @@ void render_console(Hero* player, Renderer* renderer, InputState* input_state, c
     }
     else if (compare_strings("reload", console_buf))
     {
-      renderer->reload_shaders();
+      renderer.reload_shaders();
     }
     memset(console_buf, 0, console_buf_size);
   }
@@ -1779,11 +1778,11 @@ void render_console(Hero* player, Renderer* renderer, InputState* input_state, c
   ImGui::End();
 }
 
-void update(Wave* wave, Renderer* renderer, Camera& camera, InputState* input_state, Hero* player, u32& game_running_ticks, u32 ticks, u32 tick_difference)
+void update(Wave* wave, Camera& camera, InputState* input_state, Hero* player, u32& game_running_ticks, u32 ticks, u32 tick_difference)
 {
 
   handle_abilities(camera, input_state, player, game_running_ticks);
-  handle_player_movement(renderer, camera, player, input_state, ticks);
+  handle_player_movement(camera, player, input_state, ticks);
   run_commands(game_running_ticks);
   update_entities(entities, entity_count, wave, tick_difference);
   update_enemies(wave, player, tick_difference, game_running_ticks);
@@ -1795,13 +1794,13 @@ inline bool handle_wave_over(Wave* wave)
   return spawn_count == wave->enemy_count && wave->enemies_alive == 0;
 }
 
-void debug_render_depth_texture(Renderer* renderer)
+void debug_render_depth_texture()
 {
-  Shader q_shader = *renderer->get_shader_by_index(renderer->get_shader_by_name("quad"));
+  Shader q_shader = *renderer.get_shader_by_index(renderer.get_shader_by_name("quad"));
   q_shader.use();
 
-  renderer->bind_texture(q_shader, "texture1", renderer->depth_texture);
-  renderer->enable_2d_rendering();
+  renderer.bind_texture(q_shader, "texture1", renderer.depth_texture);
+  renderer.enable_2d_rendering();
   static u32 vao = 0, vbo = 0, ebo = 0;
 
   if (vao == 0)
@@ -1832,10 +1831,10 @@ void debug_render_depth_texture(Renderer* renderer)
 
   sta_glBindVertexArray(vao);
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-  renderer->disable_2d_rendering();
+  renderer.disable_2d_rendering();
 }
 
-void render_effects(Renderer* renderer, Camera camera, Mat44 camera_m, u32 ticks)
+void render_effects(Camera camera, Mat44 camera_m, u32 ticks)
 {
   EffectNode* node = effects.head;
   EffectNode* prev = 0;
@@ -1862,7 +1861,7 @@ void render_effects(Renderer* renderer, Camera camera, Mat44 camera_m, u32 ticks
       }
     }
     EntityRenderData* render_data = &effect.render_data;
-    Shader*           shader      = renderer->get_shader_by_index(render_data->shader);
+    Shader*           shader      = renderer.get_shader_by_index(render_data->shader);
     shader->use();
     Mat44 m = {};
     m.identity();
@@ -1870,11 +1869,11 @@ void render_effects(Renderer* renderer, Camera camera, Mat44 camera_m, u32 ticks
     m = m.rotate_z(RADIANS_TO_DEGREES(effect.angle) + 90);
     m = m.translate(Vector3(effect.position.x, effect.position.y, 0.0f));
 
-    renderer->bind_texture(*shader, "texture1", render_data->texture);
+    renderer.bind_texture(*shader, "texture1", render_data->texture);
     shader->set_mat4("model", m);
     shader->set_mat4("view", camera_m);
     shader->set_mat4("projection", projection);
-    renderer->render_buffer(render_data->buffer_id);
+    renderer.render_buffer(render_data->buffer_id);
 
     node = node->next;
   }
@@ -1889,8 +1888,8 @@ int main()
   entities               = (Entity*)sta_allocate_struct(Entity, entity_capacity);
 
   const int screen_width = 620, screen_height = 480;
-  Renderer  renderer(screen_width, screen_height, 0, &logger, true);
-  if (!load_data(&renderer))
+  renderer = Renderer(screen_width, screen_height, 0, &logger, true);
+  if (!load_data())
   {
     return 1;
   }
@@ -1899,9 +1898,6 @@ int main()
   projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
 
   init_imgui(renderer.window, renderer.context);
-
-  fireball_id        = renderer.get_buffer_by_name("model_fireball");
-  fireball_shader    = renderer.get_shader_by_name("model2");
 
   u32    map_shader  = renderer.get_shader_by_name("model2");
 
@@ -1999,7 +1995,7 @@ int main()
 
         game_running_ticks += SDL_GetTicks() - ticks;
 
-        update(&wave, &renderer, camera, &input_state, &player, game_running_ticks, ticks, tick_difference);
+        update(&wave, camera, &input_state, &player, game_running_ticks, ticks, tick_difference);
 
         if (handle_wave_over(&wave))
         {
@@ -2015,11 +2011,11 @@ int main()
         update_ticks       = SDL_GetTicks() - start_tick;
         prior_render_ticks = SDL_GetTicks();
 
-        render_to_depth_buffer(&renderer, light_position);
+        render_to_depth_buffer(light_position);
 
-        render_map(&renderer, map_shader, camera_m, map_texture, map_buffer, camera.translation);
-        render_entities(&renderer, camera, camera_m);
-        render_effects(&renderer, camera, camera_m, game_running_ticks);
+        render_map(map_shader, camera_m, map_texture, map_buffer, camera.translation);
+        render_entities(camera, camera_m);
+        render_effects(camera, camera_m, game_running_ticks);
         if (render_circle_on_mouse)
         {
           i32 sdl_x, sdl_y;
@@ -2034,13 +2030,13 @@ int main()
         }
         if (debug_render)
         {
-          debug_render_depth_texture(&renderer);
+          debug_render_depth_texture();
         }
       }
 
       if (console)
       {
-        render_console(&player, &renderer, &input_state, console_buf, ArrayCount(console_buf), &wave, game_running_ticks);
+        render_console(&player, &input_state, console_buf, ArrayCount(console_buf), &wave, game_running_ticks);
       }
 
       render_ui_frame();

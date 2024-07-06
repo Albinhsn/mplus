@@ -87,6 +87,7 @@ public:
   u32            buffer_count;
   SDL_Window*    window;
   SDL_GLContext  context;
+  Renderer(){}
   Renderer(u32 screen_width, u32 screen_height, AFont* font, Logger* logger, bool vsync)
   {
     this->vsync  = !vsync;
