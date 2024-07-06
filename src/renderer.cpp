@@ -34,6 +34,29 @@ void Renderer::reset_viewport_to_screen_size()
   glViewport(0, 0, screen_width, screen_height);
 }
 
+void Renderer::init_depth_texture()
+{
+  shadow_width = 1024, shadow_height = 1024;
+  sta_glGenFramebuffers(1, &this->shadow_map_framebuffer);
+
+  GLuint depth_texture;
+  glGenTextures(1, &depth_texture);
+  glBindTexture(GL_TEXTURE_2D, depth_texture);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadow_width, shadow_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+  float borderColor[] = {1.0, 1.0, 1.0, 1.0};
+  glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+  sta_glBindFramebuffer(GL_FRAMEBUFFER, this->shadow_map_framebuffer);
+  sta_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
+  glDrawBuffer(GL_NONE);
+  glReadBuffer(GL_NONE);
+  sta_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  this->depth_texture = this->add_texture(depth_texture);
+}
+
 void Renderer::change_screen_size(u32 screen_width, u32 screen_height)
 {
   SDL_SetWindowSize(this->window, screen_width, screen_height);

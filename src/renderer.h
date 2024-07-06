@@ -58,6 +58,9 @@ struct Texture
 struct Renderer
 {
 public:
+  u32            shadow_width, shadow_height;
+  GLuint         shadow_map_framebuffer;
+  u32            depth_texture;
   bool           vsync;
   Texture*       textures;
   u32            texture_capacity;
@@ -104,6 +107,7 @@ public:
   void swap_buffers();
 
   // manage some buffer
+  void    init_depth_texture();
   u32     create_buffer_indices(u64 buffer_size, void* buffer_data, u64 index_count, u32* indices, BufferAttributes* attributes, u32 attribute_count);
   u32     create_buffer(u64 buffer_size, void* buffer_data, BufferAttributes* attributes, u64 attribute_count);
   u32     create_texture(u32 width, u32 height, void* data);
@@ -116,11 +120,11 @@ public:
   void    reset_viewport_to_screen_size();
   void    change_viewport(u32 w, u32 h);
   u32     add_texture(u32 texture_id);
-void reload_shaders();
+  void    reload_shaders();
 
   u32     get_texture(const char* name);
-  Shader * get_shader_by_index(u32 index);
-  u32 get_shader_by_name(const char* name);
+  Shader* get_shader_by_index(u32 index);
+  u32     get_shader_by_name(const char* name);
   Model*  get_model_by_name(const char* filename);
   u32     get_buffer_by_name(const char* filename);
   // render some buffer

@@ -1025,7 +1025,7 @@ bool ray_triangle_intersection(Vector2& p, Triangle* t, Mat44 view_proj, Vector2
   triangle.points[2] = project_vertex(t->points[2], view_proj);
   Vector3 eye        = Vector3(ray.x, ray.y, 0);
   Vector3 dir        = Vector3(eye.x, eye.y, eye.z - 1.0);
-  float u, v, w, time;
+  float   u, v, w, time;
   if (IntersectSegmentTriangle(eye, dir, triangle, u, v, w, time))
   {
     p.x = t->points[0].x * u + t->points[1].x * v + t->points[2].x * w;
@@ -1078,7 +1078,7 @@ bool use_ability_cone_of_cold(Camera* camera, InputState* input, Hero* player, u
   }
 
   CommandExplodeCoCData* data = sta_allocate_struct(CommandExplodeCoCData, 1);
-  data->position              = Vector2(input->mouse_position[0], input->mouse_position[1]);
+  data->position              = Vector2(point.x, point.y);
   effect.position             = Vector2(point.x, point.y);
 
   effect.angle                = entity.angle;
@@ -1618,12 +1618,12 @@ void init_player(Hero* player)
 
 Mat44   light_space_matrix;
 Vector3 light_position;
-void    render_to_depth_buffer(Renderer* renderer, u32 shadow_width, u32 shadow_height, Vector3 light_position, u32 framebuffer)
+void    render_to_depth_buffer(Renderer* renderer, Vector3 light_position)
 {
 
   glCullFace(GL_FRONT);
-  renderer->change_viewport(shadow_width, shadow_height);
-  glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+  renderer->change_viewport(renderer->shadow_width, renderer->shadow_height);
+  glBindFramebuffer(GL_FRAMEBUFFER, renderer->shadow_map_framebuffer);
   glClear(GL_DEPTH_BUFFER_BIT);
 
   static u32 vao = 0, vbo = 0, ebo = 0;
@@ -1672,7 +1672,7 @@ void    render_to_depth_buffer(Renderer* renderer, u32 shadow_width, u32 shadow_
   glCullFace(GL_BACK);
 }
 
-void render_map(Renderer* renderer, u32 map_shader_index, Mat44 camera_m, u32 map_texture, u32 map_buffer, u32 depth_texture, Vector3 view_position)
+void render_map(Renderer* renderer, u32 map_shader_index, Mat44 camera_m, u32 map_texture, u32 map_buffer, Vector3 view_position)
 {
 
   Shader* map_shader = renderer->get_shader_by_index(map_shader_index);
@@ -1690,12 +1690,12 @@ void render_map(Renderer* renderer, u32 map_shader_index, Mat44 camera_m, u32 ma
 
   // render map
   renderer->bind_texture(*map_shader, "texture1", map_texture);
-  renderer->bind_texture(*map_shader, "shadow_map", depth_texture);
+  renderer->bind_texture(*map_shader, "shadow_map", renderer->depth_texture);
   // map_shader->set_vec3("viewPos", view_position);
   renderer->render_buffer(map_buffer);
 }
 
-void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m, u32 depth_texture)
+void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m)
 {
   for (u32 i = 0; i < entity_count; i++)
   {
@@ -1712,7 +1712,7 @@ void render_entities(Renderer* renderer, Camera camera, Mat44 camera_m, u32 dept
       m = m.translate(Vector3(entity.position.x, entity.position.y, 0.0f));
 
       renderer->bind_texture(*shader, "texture1", render_data->texture);
-      renderer->bind_texture(*shader, "shadow_map", depth_texture);
+      renderer->bind_texture(*shader, "shadow_map", renderer->depth_texture);
       shader->set_mat4("model", m);
       shader->set_mat4("view", camera_m);
       shader->set_mat4("projection", projection);
@@ -1795,12 +1795,12 @@ inline bool handle_wave_over(Wave* wave)
   return spawn_count == wave->enemy_count && wave->enemies_alive == 0;
 }
 
-void debug_render_depth_texture(Renderer* renderer, u32 depth_texture)
+void debug_render_depth_texture(Renderer* renderer)
 {
   Shader q_shader = *renderer->get_shader_by_index(renderer->get_shader_by_name("quad"));
   q_shader.use();
 
-  renderer->bind_texture(q_shader, "texture1", depth_texture);
+  renderer->bind_texture(q_shader, "texture1", renderer->depth_texture);
   renderer->enable_2d_rendering();
   static u32 vao = 0, vbo = 0, ebo = 0;
 
@@ -1835,7 +1835,7 @@ void debug_render_depth_texture(Renderer* renderer, u32 depth_texture)
   renderer->disable_2d_rendering();
 }
 
-void render_effects(Renderer* renderer, Camera camera, Mat44 camera_m, u32 ticks, u32 depth_texture)
+void render_effects(Renderer* renderer, Camera camera, Mat44 camera_m, u32 ticks)
 {
   EffectNode* node = effects.head;
   EffectNode* prev = 0;
@@ -1894,6 +1894,7 @@ int main()
   {
     return 1;
   }
+  renderer.init_depth_texture();
 
   projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
 
@@ -1934,28 +1935,7 @@ int main()
   InputState input_state(renderer.window);
 
   // ToDo make this work when game over is implemented
-  score = 0;
-
-  GLuint framebuffer;
-  u32    shadow_width = 1024, shadow_height = 1024;
-  u32    depth_texture;
-  glGenFramebuffers(1, &framebuffer);
-
-  glGenTextures(1, &depth_texture);
-  glBindTexture(GL_TEXTURE_2D, depth_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadow_width, shadow_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-  float borderColor[] = {1.0, 1.0, 1.0, 1.0};
-  glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-  glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
-  glDrawBuffer(GL_NONE);
-  glReadBuffer(GL_NONE);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  depth_texture     = renderer.add_texture(depth_texture);
+  score             = 0;
 
   bool debug_render = false;
 
@@ -2035,11 +2015,11 @@ int main()
         update_ticks       = SDL_GetTicks() - start_tick;
         prior_render_ticks = SDL_GetTicks();
 
-        render_to_depth_buffer(&renderer, shadow_width, shadow_height, light_position, framebuffer);
+        render_to_depth_buffer(&renderer, light_position);
 
-        render_map(&renderer, map_shader, camera_m, map_texture, map_buffer, depth_texture, camera.translation);
-        render_entities(&renderer, camera, camera_m, depth_texture);
-        render_effects(&renderer, camera, camera_m, game_running_ticks, depth_texture);
+        render_map(&renderer, map_shader, camera_m, map_texture, map_buffer, camera.translation);
+        render_entities(&renderer, camera, camera_m);
+        render_effects(&renderer, camera, camera_m, game_running_ticks);
         if (render_circle_on_mouse)
         {
           i32 sdl_x, sdl_y;
@@ -2054,7 +2034,7 @@ int main()
         }
         if (debug_render)
         {
-          debug_render_depth_texture(&renderer, depth_texture);
+          debug_render_depth_texture(&renderer);
         }
       }
 
