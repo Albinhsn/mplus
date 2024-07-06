@@ -138,6 +138,7 @@ struct Entity
 };
 
 Camera            camera(Vector3(), -20.0f, -3.0f);
+Hero              player = {};
 Mat44             projection;
 Renderer          renderer;
 u32               score;
@@ -698,10 +699,16 @@ bool       is_valid_tile(Vector2 position)
 
 Vector2 get_random_position(u32 tick, u32 enemy_counter)
 {
-  u32     SEED_X   = 1234;
-  u32     SEED_Y   = 2345;
+  u32     SEED_X             = 1234;
+  u32     SEED_Y             = 2345;
 
-  Vector2 position = {};
+  f32     min_valid_distance = 0.5f;
+
+  Vector2 position           = {};
+
+  Vector2 player_position    = entities[player.entity].position;
+
+  f32     distance_to_player;
   do
   {
     // ToDo check vs player
@@ -713,9 +720,15 @@ Vector2 get_random_position(u32 tick, u32 enemy_counter)
 
     tick *= 3;
 
-    position = Vector2((x / 255.0f) * 2.0f - 1.0f, (y / 255.0f) * 2.0f - 1.0f);
+    position           = Vector2((x / 255.0f) * 2.0f - 1.0f, (y / 255.0f) * 2.0f - 1.0f);
 
-  } while (!is_valid_tile(position));
+    distance_to_player = position.sub(player_position).len();
+    if (min_valid_distance > distance_to_player)
+    {
+      logger.info("%f vs %f\n", min_valid_distance, distance_to_player);
+    }
+
+  } while (!is_valid_tile(position) && distance_to_player >= min_valid_distance);
 
   return position;
 }
@@ -2054,7 +2067,6 @@ int main()
   u32    map_buffer  = get_buffer_by_name("model_map_with_pillar");
   u32    map_texture = renderer.get_texture("dirt_texture");
 
-  Hero   player      = {};
   init_player(&player);
 
   Wave wave = {};
