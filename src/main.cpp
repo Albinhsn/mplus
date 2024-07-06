@@ -73,6 +73,7 @@ public:
   {
     translation = t;
     rotation    = r;
+    z_rotation  = 0;
     z           = _z;
   }
 
@@ -81,11 +82,12 @@ public:
   {
     Mat44 camera_m = {};
     camera_m.identity();
-    return camera_m.rotate_x(rotation).translate(Vector3(translation.x, translation.y, z));
+    return camera_m.rotate_y(z_rotation).rotate_x(rotation).translate(Vector3(translation.x, translation.y, z));
   }
   Vector3 translation;
   f32     rotation;
   f32     z;
+  f32     z_rotation;
 };
 
 struct Entity;
@@ -2105,6 +2107,19 @@ int main()
       {
         break;
       }
+      // set min
+      camera.z += input_state.mouse_wheel_direction * 0.1f;
+      camera.z = MAX(MIN(-1.5, camera.z), -4.5);
+      if (input_state.is_key_pressed('q'))
+      {
+        camera.z_rotation += 0.1f;
+      }
+      if (input_state.is_key_pressed('e'))
+      {
+        camera.z_rotation -= 0.1f;
+      }
+      logger.info("%f", camera.z_rotation);
+
       renderer.clear_framebuffer();
       if (entities[player.entity].hp == 0)
       {

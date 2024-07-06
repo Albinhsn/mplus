@@ -120,6 +120,7 @@ static inline void clear_input(InputState* input)
   input->event_count       = count;
   input->mouse_relative[0] = 0;
   input->mouse_relative[1] = 0;
+  input->mouse_wheel_direction = 0;
 }
 
 static inline void add_event(InputState* input, InputEventType type, u32 key)
@@ -197,6 +198,13 @@ void InputState::update()
       {
         add_event(this, EVENT_MOUSE_RELEASE, mouse_button);
       }
+      break;
+    }
+    case SDL_MOUSEWHEEL:
+    {
+      SDL_MouseWheelEvent e = event.wheel;
+      logger.info("Wheel: x:%d, y:%d, dir:%d, px:%f, py:%f, mx:%d, my:%d", e.x, e.y, e.direction, e.preciseX, e.preciseY, e.mouseX, e.mouseY);
+      this->mouse_wheel_direction = e.preciseY;
       break;
     }
     case SDL_MOUSEBUTTONDOWN:

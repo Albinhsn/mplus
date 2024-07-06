@@ -31,7 +31,8 @@ enum InputEventType
 struct InputEvent
 {
 public:
-  void debug(){
+  void debug()
+  {
     printf("%d: %d\n", state, key);
   }
   InputEventType state;
@@ -45,7 +46,6 @@ public:
   u32         event_count;
   u32         matched;
 };
-
 
 struct InputState
 {
@@ -64,6 +64,7 @@ public:
   SDL_Window*    window;
   f32            mouse_position[2];
   f32            mouse_relative[2];
+  f32            mouse_wheel_direction;
   u32            sequence_count;
   u32            sequence_capacity;
   InputEvent     events[50];
