@@ -1,15 +1,7 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <SDL2/SDL_mouse.h>
-#include <glm/ext/matrix_clip_space.hpp>
-#include <glm/ext/matrix_float4x4.hpp>
-#include <glm/ext/matrix_transform.hpp>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <strings.h>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/string_cast.hpp>
 
 #include <sys/time.h>
 #include <sys/mman.h>
@@ -103,6 +95,7 @@ struct Ability
 
 struct Hero
 {
+  char*   name;
   Ability abilities[5];
   u32     can_take_damage_tick;
   u32     damage_taken_cd;
@@ -1892,7 +1885,66 @@ bool load_entity_render_data_from_file(const char* file_location)
 
 static f32 p = PI;
 
-bool       load_ability_from_file(const char* file_location)
+Hero*      heroes;
+u32        hero_count;
+
+Hero       get_hero_by_name(const char* name)
+{
+  for (u32 i = 0; i < hero_count; i++)
+  {
+    if (compare_strings(name, heroes[i].name))
+    {
+      return heroes[i];
+    }
+  }
+  logger.error("Couldn't find hero! %s", name);
+  assert(!"Couldn't find hero!");
+}
+
+bool load_hero_from_file(const char* file_location)
+{
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, file_location))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+
+  int count  = parse_int_from_string(lines.strings[0]);
+  hero_count = count;
+  heroes     = sta_allocate_struct(Hero, count);
+
+  logger.info("Found %d heroes", count);
+  for (u32 i = 0, string_index = 1; i < count; i++)
+  {
+    char* name          = lines.strings[string_index++];
+    u32   ability_count = parse_int_from_string(lines.strings[string_index++]);
+    Hero* hero          = &heroes[i];
+    assert(ability_count < ArrayCount(hero->abilities) && "Too many abilities!!");
+    for (u32 j = 0; j < ability_count; j++)
+    {
+      hero->abilities[j] = get_ability_by_name(lines.strings[string_index++]);
+    }
+    hero->damage_taken_cd      = 0;
+    hero->can_take_damage_tick = 0;
+    hero->name          = name;
+
+    u32     entity_index       = get_new_entity();
+    Entity* entity             = &entities[entity_index];
+    hero->entity               = entity_index;
+    entity->type               = ENTITY_PLAYER;
+    entity->render_data        = get_render_data_by_name("player");
+    entity->position           = Vector2(0.5, 0.5);
+    entity->velocity           = Vector2(0, 0);
+    entity->r                  = 0.05f;
+    entity->hp                 = 3;
+    // ToDo we render uninitialized heroes if this isn't here
+    break;
+  }
+  return true;
+}
+bool load_ability_from_file(const char* file_location)
 {
   Buffer      buffer = {};
   StringArray lines  = {};
@@ -1906,6 +1958,7 @@ bool       load_ability_from_file(const char* file_location)
   abilities     = sta_allocate_struct(Ability, count);
   ability_count = count;
 
+  logger.info("Found %d abilities", count);
   for (u32 i = 0, string_index = 1; i < count; i++)
   {
     char* name                  = lines.strings[string_index++];
@@ -1982,24 +2035,19 @@ bool load_data()
     logger.error("Failed to read ability data from '%s'", ability_data_location);
     return false;
   }
+  const static char* hero_data_location = "./data/formats/hero.txt";
+  if (!load_hero_from_file(hero_data_location))
+  {
+    logger.error("Failed to read hero data from '%s'", hero_data_location);
+    return false;
+  }
   return true;
 }
 
 void init_player(Hero* player)
 {
 
-  u32     entity_index         = get_new_entity();
-  Entity* entity               = &entities[entity_index];
-  player->entity               = entity_index;
-  entity->type                 = ENTITY_PLAYER;
-  entity->render_data          = get_render_data_by_name("player");
-  entity->position             = Vector2(0.5, 0.5);
-  entity->velocity             = Vector2(0, 0);
-  player->can_take_damage_tick = 0;
-  player->damage_taken_cd      = 500;
-  entity->r                    = 0.05f;
-  entity->hp                   = 3;
-  read_abilities(player->abilities);
+  *player = get_hero_by_name("Mage");
 }
 
 Mat44   light_space_matrix;
