@@ -127,7 +127,7 @@ struct Entity
   f32               r;
   f32               angle;
   Vector2           velocity;
-  u32               hp;
+  i32               hp;
   EntityRenderData* render_data;
   EntityType        type;
 };
@@ -139,7 +139,7 @@ struct StaticGeometry
   u32               count;
 };
 
-Camera            camera(Vector3(), -20.0f, -3.0f);
+Camera            camera(Vector3(), 0.0f, -3.0f);
 Hero              player = {};
 Mat44             projection;
 Renderer          renderer;
@@ -1031,7 +1031,7 @@ enum CommandType
 {
   CMD_SPAWN_ENEMY,
   CMD_LET_RANGED_MOVE_AFTER_SHOOTING,
-  CMD_EXPLODE_COC,
+  CMD_EXPLODE_PILLAR,
   CMD_FIND_PATH
 };
 
@@ -1068,7 +1068,7 @@ struct CommandLetRangedMoveAfterShooting
 };
 
 CommandQueue command_queue;
-struct CommandExplodeCoCData
+struct CommandExplodePillarOfFlameData
 {
   Vector2 position;
 };
@@ -1117,12 +1117,12 @@ void add_command(CommandType type, void* data, u32 tick)
   }
 }
 
-void run_command_explode_coc(void* data)
+void run_command_explode_pillar_of_flame(void* data)
 {
-  CommandExplodeCoCData* coc_data = (CommandExplodeCoCData*)data;
-  Sphere                 coc_sphere;
-  coc_sphere.position = coc_data->position;
-  coc_sphere.r        = 0.2f;
+  CommandExplodePillarOfFlameData* pof_data = (CommandExplodePillarOfFlameData*)data;
+  Sphere                           pof_sphere;
+  pof_sphere.position = pof_data->position;
+  pof_sphere.r        = 0.2f;
   // iterate over the entities
   for (u32 i = 0; i < entity_count; i++)
   {
@@ -1131,7 +1131,7 @@ void run_command_explode_coc(void* data)
       Sphere enemy_sphere;
       enemy_sphere.position = entities[i].position;
       enemy_sphere.r        = entities[i].r;
-      if (sphere_sphere_collision(coc_sphere, enemy_sphere))
+      if (sphere_sphere_collision(pof_sphere, enemy_sphere))
       {
         score += 100;
         entities[i].hp = 0;
@@ -1174,9 +1174,9 @@ void run_commands(u32 ticks)
     {
       switch (node->command.type)
       {
-      case CMD_EXPLODE_COC:
+      case CMD_EXPLODE_PILLAR:
       {
-        run_command_explode_coc(node->command.data);
+        run_command_explode_pillar_of_flame(node->command.data);
         break;
       }
       case CMD_SPAWN_ENEMY:
@@ -1284,7 +1284,7 @@ static inline bool on_cooldown(Ability ability, u32 tick)
 
 void handle_abilities(Camera camera, InputState* input, u32 tick)
 {
-  const char keybinds[] = {'1', '2', '3'};
+  const char keybinds[] = {'1', '2', '3', '4'};
   for (u32 i = 0; i < ArrayCount(keybinds); i++)
   {
     if (input->is_key_pressed(keybinds[i]) && !on_cooldown(player.abilities[i], tick))
@@ -1323,8 +1323,8 @@ bool use_ability_blink(Camera* camera, InputState* input, u32 ticks)
     }
     if (collides_with_static_geometry(closest_point, position, player_entity.r))
     {
-      position.x = closest_point.x - direction.x;
-      position.y = closest_point.y - direction.y;
+      position.x -= direction.x;
+      position.y -= direction.y;
       break;
     }
   }
@@ -1421,6 +1421,72 @@ bool find_cursor_position_on_map(Vector2& point, f32* mouse_position, Mat44 view
   return false;
 }
 
+bool use_ability_coc(Camera* camera, InputState* input, u32 ticks)
+{
+  // deal damage instantly
+  // create and effect that last like a few frames
+  Effect effect;
+  effect.update_effect = 0;
+  effect.render_data   = *get_render_data_by_name("cone of cold");
+
+  // position is just the angle of the mouse, from our radius and outwards with half the length
+  // the translation distance can be hardcoded
+  Entity player_entity = entities[player.entity];
+
+  effect.position      = player_entity.position;
+  effect.position.x += cosf(player_entity.angle) * 0.25f;
+  effect.position.y += sinf(player_entity.angle) * 0.25f;
+  f32 scale = effect.render_data.scale;
+  effect.position.x -= sinf(player_entity.angle) * scale * 0.5f;
+  effect.position.y += cosf(player_entity.angle) * scale * 0.5f;
+
+  effect.angle          = player_entity.angle;
+  effect.effect_ends_at = ticks + 100;
+
+  EffectNode* node      = (EffectNode*)effects.pool.alloc();
+  node->next            = effects.head;
+  effects.head          = node;
+
+  node->effect          = effect;
+
+  Model*  model         = get_model_by_name("model_coc");
+  Vector2 vertices[model->vertex_count];
+  for (u32 i = 0; i < model->vertex_count; i++)
+  {
+    vertices[i].x = effect.position.x + model->vertices[i].x * scale;
+    vertices[i].y = effect.position.y + model->vertices[i].y * scale;
+  }
+
+  for (u32 i = 0; i < entity_count; i++)
+  {
+    Entity* entity = &entities[i];
+    if (entity->hp > 0 && entity->type == ENTITY_ENEMY)
+    {
+      for (u32 i = 0; i < model->index_count; i += 3)
+      {
+        Triangle t;
+        t.points[0].x = vertices[model->indices[i]].x;
+        t.points[0].y = vertices[model->indices[i]].y;
+        t.points[1].x = vertices[model->indices[i + 1]].x;
+        t.points[1].y = vertices[model->indices[i + 1]].y;
+        t.points[2].x = vertices[model->indices[i + 2]].x;
+        t.points[2].y = vertices[model->indices[i + 2]].y;
+
+        Vector2 cp    = closest_point_triangle(t, entity->position);
+        f32     len   = cp.sub(entity->position).len();
+        if (len < entity->r)
+        {
+          logger.info("Hit with coc!");
+          entity->hp -= 1;
+          break;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
 bool use_ability_pillar_of_flame(Camera* camera, InputState* input, u32 ticks)
 {
 
@@ -1437,28 +1503,29 @@ bool use_ability_pillar_of_flame(Camera* camera, InputState* input, u32 ticks)
     return false;
   }
 
-  CommandExplodeCoCData* data = sta_allocate_struct(CommandExplodeCoCData, 1);
-  data->position              = Vector2(point.x, point.y);
-  effect.position             = Vector2(point.x, point.y);
+  CommandExplodePillarOfFlameData* data = sta_allocate_struct(CommandExplodePillarOfFlameData, 1);
+  data->position                        = Vector2(point.x, point.y);
+  effect.position                       = Vector2(point.x, point.y);
 
-  effect.angle                = entity.angle;
-  effect.effect_ends_at       = ticks + 500;
+  effect.angle                          = entity.angle;
+  effect.effect_ends_at                 = ticks + 500;
 
-  EffectNode* node            = (EffectNode*)effects.pool.alloc();
-  node->next                  = effects.head;
-  effects.head                = node;
+  EffectNode* node                      = (EffectNode*)effects.pool.alloc();
+  node->next                            = effects.head;
+  effects.head                          = node;
 
-  node->effect                = effect;
+  node->effect                          = effect;
 
   // position
-  add_command(CMD_EXPLODE_COC, (void*)data, effect.effect_ends_at);
+  add_command(CMD_EXPLODE_PILLAR, (void*)data, effect.effect_ends_at);
   return true;
 }
 
 bool (*use_ability_function_ptrs[])(Camera* camera, InputState* input, u32 ticks) = {
-    use_ability_fireball,       //
-    use_ability_blink,          //
-    use_ability_pillar_of_flame //
+    use_ability_fireball,        //
+    use_ability_blink,           //
+    use_ability_pillar_of_flame, //
+    use_ability_coc              //
 };
 Ability* abilities;
 u32      ability_count;
@@ -1697,13 +1764,13 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
       entity->position.y += entity->velocity.y * diff;
       Vector2 closest_point = {};
       // // ToDo very bug prone this yes
-      // ToDo very bug prone this yes
       if (collides_with_static_geometry(closest_point, entity->position, entity->r))
       {
         if (entity->type == ENTITY_PLAYER_PROJECTILE || entity->type == ENTITY_ENEMY_PROJECTILE)
         {
           entity->hp = 0;
         }
+
         entity->position.x -= entity->velocity.x * diff;
         entity->position.y -= entity->velocity.y * diff;
       }

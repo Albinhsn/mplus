@@ -85,7 +85,6 @@ struct VertexData
 
 struct ModelData
 {
-
   VertexData* vertices;
   u32*        indices;
   u64         vertex_count;

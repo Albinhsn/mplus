@@ -29,6 +29,12 @@
     "scale": 0.2,
     "buffer": "model_circle"
   },
+  "cone of cold": {
+    "texture": "blue_texture",
+    "shader": "model",
+    "scale": 0.2,
+    "buffer": "model_coc"
+  },
   "arrow": {
     "texture": "white_texture",
     "shader": "model2",

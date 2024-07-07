@@ -2,6 +2,9 @@
   "model_map_with_hole": {
     "location": "./data/models/map_with_hole.obj"
   },
+  "model_coc": {
+    "location": "./data/models/coc.obj"
+  },
   "model_map_with_pillar": {
     "location": "./data/models/map_with_pillar2.obj"
   },
