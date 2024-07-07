@@ -38,7 +38,7 @@
   "melee": {
     "texture": "blue_texture",
     "shader": "model",
-    "scale": 0.05,
+    "scale": 0.1,
     "buffer": "model_coc"
   },
   "arrow": {

@@ -100,7 +100,12 @@ struct Hero
   u32     can_take_damage_tick;
   u32     damage_taken_cd;
   u32     entity;
+  bool    can_move;
 };
+
+// something needs to push the dude along, this can be velocity in normal update
+// basically we don't want to update the players movement/velocity
+// and just let the thing run until we hit something or some time/distance has passed? i.e just a command queue thing?
 
 struct EntityRenderData
 {
@@ -1032,7 +1037,8 @@ enum CommandType
   CMD_SPAWN_ENEMY,
   CMD_LET_RANGED_MOVE_AFTER_SHOOTING,
   CMD_EXPLODE_PILLAR,
-  CMD_FIND_PATH
+  CMD_FIND_PATH,
+  CMD_STOP_CHARGE
 };
 
 struct Command
@@ -1163,6 +1169,11 @@ void run_command_find_path(void* data)
   add_command(CMD_FIND_PATH, (void*)path_data, path_data->tick);
 }
 
+void run_command_stop_charge()
+{
+  player.can_move = true;
+}
+
 void run_commands(u32 ticks)
 {
 
@@ -1194,6 +1205,11 @@ void run_commands(u32 ticks)
         run_command_find_path(node->command.data);
         break;
       }
+      case CMD_STOP_CHARGE:
+      {
+        run_command_stop_charge();
+        break;
+      }
       }
 
       if (prev)
@@ -1222,25 +1238,28 @@ void run_commands(u32 ticks)
 
 void handle_player_movement(Camera& camera, InputState* input, u32 tick)
 {
-  Entity* entity   = &entities[player.entity];
-  entity->velocity = {};
-  f32 MS           = 0.01f;
+  Entity* entity = &entities[player.entity];
+  if (player.can_move)
+  {
+    entity->velocity = {};
+    f32 MS           = 0.01f;
 
-  if (input->is_key_pressed('w'))
-  {
-    entity->velocity.y += MS;
-  }
-  if (input->is_key_pressed('a'))
-  {
-    entity->velocity.x -= MS;
-  }
-  if (input->is_key_pressed('s'))
-  {
-    entity->velocity.y -= MS;
-  }
-  if (input->is_key_pressed('d'))
-  {
-    entity->velocity.x += MS;
+    if (input->is_key_pressed('w'))
+    {
+      entity->velocity.y += MS;
+    }
+    if (input->is_key_pressed('a'))
+    {
+      entity->velocity.x -= MS;
+    }
+    if (input->is_key_pressed('s'))
+    {
+      entity->velocity.y -= MS;
+    }
+    if (input->is_key_pressed('d'))
+    {
+      entity->velocity.x += MS;
+    }
   }
 
   f32* mouse_pos                   = input->mouse_position;
@@ -1534,8 +1553,8 @@ bool use_ability_melee(Camera* camera, InputState* input, u32 ticks)
   Entity player_entity = entities[player.entity];
 
   effect.position      = player_entity.position;
-  effect.position.x += cosf(player_entity.angle) * 0.05f;
-  effect.position.y += sinf(player_entity.angle) * 0.05f;
+  effect.position.x += cosf(player_entity.angle) * 0.1f;
+  effect.position.y += sinf(player_entity.angle) * 0.1f;
   f32 scale = effect.render_data.scale;
   effect.position.x -= sinf(player_entity.angle) * scale * 0.5f;
   effect.position.y += cosf(player_entity.angle) * scale * 0.5f;
@@ -1588,6 +1607,12 @@ bool use_ability_melee(Camera* camera, InputState* input, u32 ticks)
 }
 bool use_ability_charge(Camera* camera, InputState* input, u32 ticks)
 {
+  player.can_move = false;
+  Entity* p       = &entities[player.entity];
+  p->velocity.x   = cosf(p->angle) * 0.1f;
+  p->velocity.y   = sinf(p->angle) * 0.1f;
+  add_command(CMD_STOP_CHARGE, 0, ticks + 150);
+  return true;
 }
 bool use_ability_thunderclap(Camera* camera, InputState* input, u32 ticks)
 {
@@ -1903,6 +1928,10 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
         {
           entity->hp = 0;
         }
+        if (entity->type == ENTITY_PLAYER && !player.can_move)
+        {
+          player.can_move = true;
+        }
 
         entity->position.x -= entity->velocity.x * diff;
         entity->position.y -= entity->velocity.y * diff;
@@ -1913,6 +1942,10 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
         if (entity->type == ENTITY_PLAYER_PROJECTILE || entity->type == ENTITY_ENEMY_PROJECTILE)
         {
           entity->hp = 0;
+        }
+        if (entity->type == ENTITY_PLAYER && !player.can_move)
+        {
+          player.can_move = true;
         }
         entity->position = closest_point;
       }
@@ -2289,7 +2322,8 @@ bool load_data()
 void init_player(Hero* player)
 {
 
-  *player = get_hero_by_name("Warrior");
+  *player          = get_hero_by_name("Warrior");
+  player->can_move = true;
 }
 
 Mat44   light_space_matrix;
