@@ -1,4 +1,4 @@
-8
+9
 model_map_with_hole
 ./data/models/map_with_hole.obj
 model_map_with_pillar
@@ -15,3 +15,6 @@ model_unarmed_man
 ./data/models/unarmed.glb
 model_circle
 ./data/models/circle.obj
+model_cube
+./data/models/cube.obj
+

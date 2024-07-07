@@ -138,6 +138,15 @@ struct Entity
   EntityRenderData* render_data;
   EntityType        type;
 };
+struct StaticGeometry
+{
+  EntityRenderData* render_data;
+  Model*            models;
+  Vector3*          position;
+  u32               count;
+};
+
+StaticGeometry    static_geometry;
 
 Camera            camera(Vector3(), -20.0f, -3.0f);
 Hero              player = {};
@@ -198,6 +207,46 @@ Model* get_model_by_name(const char* filename)
   }
   logger.error("Didn't find model '%s'", filename);
   return 0;
+}
+
+EntityRenderData* get_render_data_by_name(const char* name)
+{
+  for (u32 i = 0; i < render_data_count; i++)
+  {
+    if (compare_strings(render_data[i].name, name))
+    {
+      return &render_data[i];
+    }
+  }
+  logger.error("Couldn't find render data with name '%s'", name);
+  assert(!"Couldn't find render data!");
+}
+
+bool load_static_geometry_from_file(const char* filename)
+{
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, filename))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+  static_geometry.count       = parse_int_from_string(lines.strings[0]);
+  static_geometry.position    = (Vector3*)sta_allocate_struct(Vector3, static_geometry.count);
+  static_geometry.models      = (Model*)sta_allocate_struct(Model, static_geometry.count);
+  static_geometry.render_data = (EntityRenderData*)sta_allocate_struct(EntityRenderData, static_geometry.count);
+  logger.info("Found %d static geometry items", static_geometry.count);
+  for (u32 i = 0, string_index = 1; i < static_geometry.count; i++)
+  {
+    static_geometry.render_data[i] = *get_render_data_by_name(lines.strings[string_index++]);
+    static_geometry.models[i]      = *get_model_by_name(lines.strings[string_index++]);
+    static_geometry.position[i].x  = parse_float_from_string(lines.strings[string_index++]);
+    static_geometry.position[i].y  = parse_float_from_string(lines.strings[string_index++]);
+    static_geometry.position[i].z  = parse_float_from_string(lines.strings[string_index++]);
+    logger.info("Item %d: '%s' at (%f, %f, %f)", i, static_geometry.render_data[i].name, static_geometry.position[i].x, static_geometry.position[i].y, static_geometry.position[i].z);
+  }
+
+  return true;
 }
 
 bool load_models_from_files(const char* file_location)
@@ -322,19 +371,6 @@ bool load_buffers_from_files(const char* file_location)
   return true;
 }
 
-EntityRenderData* get_render_data_by_name(const char* name)
-{
-  for (u32 i = 0; i < render_data_count; i++)
-  {
-    if (compare_strings(render_data[i].name, name))
-    {
-      return &render_data[i];
-    }
-  }
-  logger.error("Couldn't find render data with name '%s'", name);
-  assert(!"Couldn't find render data!");
-}
-
 u32 get_new_entity()
 {
   RESIZE_ARRAY(entities, Entity, entity_count, entity_capacity);
@@ -343,6 +379,98 @@ u32 get_new_entity()
 
 const static u32 tile_count = 64;
 const static f32 tile_size  = 1.0f / tile_count;
+Vector2          closest_point_triangle(Triangle triangle, Vector2 p)
+{
+  Vector2 ab = triangle.points[1].sub(triangle.points[0]);
+  Vector2 ac = triangle.points[2].sub(triangle.points[0]);
+  Vector2 ap = p.sub(triangle.points[0]);
+
+  float   d1 = ab.dot(ap);
+  float   d2 = ac.dot(ap);
+  if (d1 <= 0.0f && d2 <= 0.0f)
+  {
+    return triangle.points[0];
+  }
+
+  Vector2 bp = p.sub(triangle.points[1]);
+  float   d3 = ab.dot(bp);
+  float   d4 = ac.dot(bp);
+  if (d3 >= 0.0f && d4 <= d3)
+  {
+    return triangle.points[1];
+  }
+
+  float vc = d1 * d4 - d3 * d2;
+  if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f)
+  {
+    float v = d1 / (d1 - d3);
+    ab.scale(v);
+    return Vector2(triangle.points[0].x + ab.x, triangle.points[0].y + ab.y);
+  }
+
+  Vector2 cp = p.sub(triangle.points[2]);
+  float   d5 = ab.dot(cp);
+  float   d6 = ac.dot(cp);
+  if (d6 >= 0.0f && d5 <= d6)
+  {
+    return triangle.points[2];
+  }
+
+  float vb = d5 * d2 - d1 * d6;
+  if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f)
+  {
+    float w = d2 / (d2 - d6);
+    ac.scale(w);
+    return Vector2(triangle.points[0].x + ac.x, triangle.points[0].y + ac.y);
+  }
+
+  float va = d3 * d6 - d5 * d4;
+  if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f)
+  {
+    float   w  = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+    Vector2 bc = triangle.points[2].sub(triangle.points[1]);
+    bc.scale(w);
+    return Vector2(triangle.points[1].x + bc.x, triangle.points[1].y + bc.y);
+  }
+
+  float denom = 1.0f / (va + vb + vc);
+  float v     = vb * denom;
+  float w     = vc * denom;
+  ab.scale(v);
+  ac.scale(w);
+  float x = triangle.points[0].x + ab.x + ac.x;
+  float y = triangle.points[0].y + ab.y + ac.y;
+  return Vector2(x, y);
+}
+
+bool collides_with_static_geometry(Vector2& closest_point, Vector2 position, f32 r)
+{
+  for (u32 i = 0; i < static_geometry.count; i++)
+  {
+    Model*   model    = &static_geometry.models[i];
+    f32      scale    = static_geometry.render_data[i].scale;
+    Vector3  pos      = static_geometry.position[i];
+
+    Vector3* vertices = model->vertices;
+    u32*     indices  = model->indices;
+    for (u32 j = 0; j < model->index_count; j += 3)
+    {
+      Triangle t;
+      t.points[0].x = vertices[indices[j]].x * scale + pos.x;
+      t.points[0].y = vertices[indices[j]].y * scale + pos.y;
+      t.points[1].x = vertices[indices[j + 1]].x * scale + pos.x;
+      t.points[1].y = vertices[indices[j + 1]].y * scale + pos.y;
+      t.points[2].x = vertices[indices[j + 2]].x * scale + pos.x;
+      t.points[2].y = vertices[indices[j + 2]].y * scale + pos.y;
+      closest_point = closest_point_triangle(t, position);
+      if (closest_point.sub(position).len() < r)
+      {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 struct Map
 {
@@ -367,6 +495,7 @@ public:
       this->vertices[i] = Vector2(v.x, v.y);
     }
 
+    Vector2 p;
     for (u32 x = 0; x < tile_count; x++)
     {
       f32 x0 = x * tile_size * 2.0f - 1.0f, x1 = x0 + tile_size * 2.0f;
@@ -376,6 +505,11 @@ public:
         f32 x_middle = x0 + (x1 - x0) / 2.0f;
         f32 y_middle = y0 + (y1 - y0) / 2.0f;
 
+        if (collides_with_static_geometry(p, Vector2(x_middle, y_middle), tile_size))
+        {
+          tiles[y][x] = false;
+          continue;
+        }
         for (u32 i = 0; i < index_count; i += 3)
         {
           Triangle t;
@@ -700,7 +834,7 @@ bool       is_valid_tile(Vector2 position)
   return false;
 }
 
-Vector2 get_random_position(u32 tick, u32 enemy_counter)
+Vector2 get_random_position(u32 tick, u32 enemy_counter, f32 r)
 {
   u32     SEED_X             = 1234;
   u32     SEED_Y             = 2345;
@@ -712,6 +846,7 @@ Vector2 get_random_position(u32 tick, u32 enemy_counter)
   Vector2 player_position    = entities[player.entity].position;
 
   f32     distance_to_player;
+  Vector2 p;
   do
   {
     // ToDo check vs player
@@ -727,7 +862,7 @@ Vector2 get_random_position(u32 tick, u32 enemy_counter)
 
     distance_to_player = position.sub(player_position).len();
 
-  } while (!is_valid_tile(position) || distance_to_player < min_valid_distance);
+  } while (!is_valid_tile(position) || collides_with_static_geometry(p, position, r) || distance_to_player < min_valid_distance);
 
   return position;
 }
@@ -817,7 +952,7 @@ void spawn(Wave* wave, u32 enemy_index)
   wave->spawn_count |= enemy_index == 0 ? 1 : ((u64)1 << (u64)enemy_index);
   wave->enemies_alive++;
   EntityRenderData* render_data = entity->render_data;
-  entity->position              = get_random_position(wave->spawn_times[enemy_index], enemy_index);
+  entity->position              = get_random_position(wave->spawn_times[enemy_index], enemy_index, entity->r);
   entity->hp                    = enemy->initial_hp;
   logger.info("Spawning enemy %d at (%f, %f) %d %d", enemy_index, entity->position.x, entity->position.y, wave->enemies_alive, wave->spawn_times[enemy_index]);
   if (enemy->type == ENEMY_RANGED)
@@ -1012,70 +1147,6 @@ void handle_player_movement(Camera& camera, InputState* input, u32 tick)
   entities[player.entity].render_data->texture = renderer.get_texture(player.can_take_damage_tick >= SDL_GetTicks() ? "blue_texture" : "black_texture");
 }
 
-Vector2 closest_point_triangle(Triangle triangle, Vector2 p)
-{
-  Vector2 ab = triangle.points[1].sub(triangle.points[0]);
-  Vector2 ac = triangle.points[2].sub(triangle.points[0]);
-  Vector2 ap = p.sub(triangle.points[0]);
-
-  float   d1 = ab.dot(ap);
-  float   d2 = ac.dot(ap);
-  if (d1 <= 0.0f && d2 <= 0.0f)
-  {
-    return triangle.points[0];
-  }
-
-  Vector2 bp = p.sub(triangle.points[1]);
-  float   d3 = ab.dot(bp);
-  float   d4 = ac.dot(bp);
-  if (d3 >= 0.0f && d4 <= d3)
-  {
-    return triangle.points[1];
-  }
-
-  float vc = d1 * d4 - d3 * d2;
-  if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f)
-  {
-    float v = d1 / (d1 - d3);
-    ab.scale(v);
-    return Vector2(triangle.points[0].x + ab.x, triangle.points[0].y + ab.y);
-  }
-
-  Vector2 cp = p.sub(triangle.points[2]);
-  float   d5 = ab.dot(cp);
-  float   d6 = ac.dot(cp);
-  if (d6 >= 0.0f && d5 <= d6)
-  {
-    return triangle.points[2];
-  }
-
-  float vb = d5 * d2 - d1 * d6;
-  if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f)
-  {
-    float w = d2 / (d2 - d6);
-    ac.scale(w);
-    return Vector2(triangle.points[0].x + ac.x, triangle.points[0].y + ac.y);
-  }
-
-  float va = d3 * d6 - d5 * d4;
-  if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f)
-  {
-    float   w  = (d4 - d3) / ((d4 - d3) + (d5 - d6));
-    Vector2 bc = triangle.points[2].sub(triangle.points[1]);
-    bc.scale(w);
-    return Vector2(triangle.points[1].x + bc.x, triangle.points[1].y + bc.y);
-  }
-
-  float denom = 1.0f / (va + vb + vc);
-  float v     = vb * denom;
-  float w     = vc * denom;
-  ab.scale(v);
-  ac.scale(w);
-  float x = triangle.points[0].x + ab.x + ac.x;
-  float y = triangle.points[0].y + ab.y + ac.y;
-  return Vector2(x, y);
-}
-
 bool is_out_of_map_bounds(Vector2* closest_point, Map* map, Vector2 position)
 {
   f32 distance = FLT_MAX;
@@ -1150,9 +1221,16 @@ bool use_ability_blink(Camera* camera, InputState* input, u32 ticks)
     position.x += direction.x;
     position.y += direction.y;
     Vector2 closest_point = {};
+    // ToDo This does not take into account the radius?
     if (is_out_of_map_bounds(&closest_point, &map, position))
     {
       position = closest_point;
+      break;
+    }
+    if (collides_with_static_geometry(closest_point, position, player_entity.r))
+    {
+      position.x = closest_point.x - direction.x;
+      position.y = closest_point.y - direction.y;
       break;
     }
   }
@@ -1484,8 +1562,6 @@ void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
             player.can_take_damage_tick = tick + player.damage_taken_cd;
             // entities[player->entity].hp -= 1;
             logger.info("Took damage, hp: %d %d %d", player.entity, enemy->entity, i);
-            player_sphere.position.debug();
-            enemy_sphere.position.debug();
           }
         }
         break;
@@ -1561,6 +1637,18 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
       entity->position.x += entity->velocity.x * diff;
       entity->position.y += entity->velocity.y * diff;
       Vector2 closest_point = {};
+      // // ToDo very bug prone this yes
+      // ToDo very bug prone this yes
+      if (collides_with_static_geometry(closest_point, entity->position, entity->r))
+      {
+        if (entity->type == ENTITY_PLAYER_PROJECTILE || entity->type == ENTITY_ENEMY_PROJECTILE)
+        {
+          entity->hp = 0;
+        }
+        entity->position.x -= entity->velocity.x * diff;
+        entity->position.y -= entity->velocity.y * diff;
+      }
+
       if (is_out_of_map_bounds(&closest_point, &map, entity->position))
       {
         if (entity->type == ENTITY_PLAYER_PROJECTILE || entity->type == ENTITY_ENEMY_PROJECTILE)
@@ -1805,6 +1893,12 @@ bool       load_data()
   if (!load_entity_render_data_from_file(render_data_location))
   {
     logger.error("Failed to read render data from '%s'", render_data_location);
+    return false;
+  }
+  const static char* static_map_data_location = "./data/maps/map01_static.txt";
+  if (!load_static_geometry_from_file(static_map_data_location))
+  {
+    logger.error("Failed to read static geometry data from '%s'", static_map_data_location);
     return false;
   }
   return true;
@@ -2093,6 +2187,31 @@ void render_effects(u32 ticks)
   }
 }
 
+void render_static_geometry()
+{
+  // load the static geometry that exists outside of the plane/map
+  for (u32 i = 0; i < static_geometry.count; i++)
+  {
+
+    EntityRenderData* render_data = &static_geometry.render_data[i];
+    Vector3           cube_pos    = static_geometry.position[i];
+
+    Mat44             m           = {};
+    m.identity();
+    m              = m.scale(render_data->scale).translate(cube_pos);
+
+    Shader* shader = renderer.get_shader_by_index(render_data->shader);
+    renderer.bind_texture(*shader, "texture1", render_data->texture);
+    renderer.bind_texture(*shader, "shadow_map", renderer.depth_texture);
+    shader->set_mat4("model", m);
+    shader->set_mat4("view", camera.get_view_matrix());
+    shader->set_vec3("viewPos", camera.translation);
+    shader->set_mat4("projection", projection);
+    shader->set_mat4("light_space_matrix", light_space_matrix);
+    renderer.render_buffer(render_data->buffer_id);
+  }
+}
+
 int main()
 {
 
@@ -2157,7 +2276,7 @@ int main()
       {
         break;
       }
-      // set min
+
       camera.z += input_state.mouse_wheel_direction * 0.1f;
       camera.z = MAX(MIN(-1.5, camera.z), -4.5);
       if (input_state.is_key_pressed('q'))
@@ -2222,8 +2341,8 @@ int main()
         if (handle_wave_over(&wave))
         {
           // ToDo this should get you back to main menu or game over screen or smth
-          logger.info("Wave is over!");
-          return 0;
+          // logger.info("Wave is over!");
+          // return 0;
         }
         // logger.info("CMDS: %d", command_queue.cmds);
 
@@ -2233,6 +2352,7 @@ int main()
         render_to_depth_buffer(light_position);
 
         render_map(map_shader, map_texture, map_buffer, camera.translation);
+        render_static_geometry();
         render_entities();
         render_effects(game_running_ticks);
         if (render_circle_on_mouse)

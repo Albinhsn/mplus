@@ -1,4 +1,4 @@
-8
+9
 model_unarmed_man
 5
 3 0
@@ -39,6 +39,11 @@ model_pillar
 2 0 
 3 0
 model_circle
+3
+3 0
+2 0
+3 0
+model_cube
 3
 3 0
 2 0
