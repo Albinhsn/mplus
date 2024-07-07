@@ -62,6 +62,40 @@ void Renderer::change_screen_size(u32 screen_width, u32 screen_height)
   glViewport(0, 0, screen_width, screen_height);
 }
 
+void Renderer::init_line_buffer()
+{
+  sta_glGenVertexArrays(1, &this->line_vao);
+  sta_glGenBuffers(1, &this->line_vbo);
+
+  sta_glBindVertexArray(this->line_vao);
+  sta_glBindBuffer(GL_ARRAY_BUFFER, this->line_vbo);
+  const int vertices_in_a_line = 4;
+  f32       tot[4]             = {
+      1.0f, 1.0f, //
+      1.0f, -1.0, //
+  };
+  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * vertices_in_a_line, tot, GL_DYNAMIC_DRAW);
+
+  sta_glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(f32) * 2, (void*)(0));
+  sta_glEnableVertexAttribArray(0);
+}
+
+void Renderer::draw_line(f32 x1, f32 y1, f32 x2, f32 y2, u32 line_width, Color color)
+{
+  this->enable_2d_rendering();
+  f32    lines[4] = {x1, y1, x2, y2};
+  Shader s        = *this->get_shader_by_index(this->get_shader_by_name("quad"));
+  s.use();
+  s.set_float4f("color", (float*)&color);
+
+  sta_glBindVertexArray(this->line_vao);
+  sta_glBindBuffer(GL_ARRAY_BUFFER, this->line_vbo);
+  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * 4, lines, GL_DYNAMIC_DRAW);
+  glLineWidth(line_width);
+  glDrawArrays(GL_LINES, 0, 2);
+  this->disable_2d_rendering();
+}
+
 void Renderer::init_circle_buffer()
 {
   GLBufferIndex* circle_buffer = &this->circle_buffer;
@@ -125,7 +159,6 @@ void Renderer::draw_circle(Vector2 position, f32 radius, f32 thickness, Color co
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
   this->disable_2d_rendering();
 }
-
 
 void Renderer::bind_texture(Shader shader, const char* uniform_name, u32 texture_index)
 {

@@ -275,5 +275,6 @@ Mat44   interpolate_transforms(Mat44 first, Mat44 second, f32 time);
 #define RED   Color(1, 0, 0, 1)
 #define GREEN Color(0, 1, 0, 1)
 #define BLUE  Color(0, 0, 1, 1)
+#define YELLOW Color(0, 1, 1, 1)
 
 #endif

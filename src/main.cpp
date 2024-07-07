@@ -348,9 +348,7 @@ u32 get_new_entity()
   return entity_count++;
 }
 
-const static u32 tile_count = 64;
-const static f32 tile_size  = 1.0f / tile_count;
-Vector2          closest_point_triangle(Triangle triangle, Vector2 p)
+Vector2 closest_point_triangle(Triangle triangle, Vector2 p)
 {
   Vector2 ab = triangle.points[1].sub(triangle.points[0]);
   Vector2 ac = triangle.points[2].sub(triangle.points[0]);
@@ -414,6 +412,13 @@ Vector2          closest_point_triangle(Triangle triangle, Vector2 p)
   return Vector2(x, y);
 }
 
+u32 get_tile_count_per_row(f32 r)
+{
+  // 2.0f for the length of the thing divided by the radius *  aka 2.0f / (r * 2) == 1 /r
+  u32 row = 1.0f / r;
+  return row;
+}
+
 bool collides_with_static_geometry(Vector2& closest_point, Vector2 position, f32 r);
 struct Map
 {
@@ -438,62 +443,16 @@ public:
       Vector3 v         = vertices[i].vertex;
       this->vertices[i] = Vector2(v.x, v.y);
     }
-
-    Vector2 p;
-    for (u32 x = 0; x < tile_count; x++)
-    {
-      f32 x0 = x * tile_size * 2.0f - 1.0f, x1 = x0 + tile_size * 2.0f;
-      for (u32 y = 0; y < tile_count; y++)
-      {
-        f32 y0 = y * tile_size * 2.0f - 1.0f, y1 = y0 + tile_size * 2.0f;
-        f32 x_middle = x0 + (x1 - x0) / 2.0f;
-        f32 y_middle = y0 + (y1 - y0) / 2.0f;
-
-        if (collides_with_static_geometry(p, Vector2(x_middle, y_middle), tile_size))
-        {
-          tiles[y][x] = false;
-          continue;
-        }
-        for (u32 i = 0; i < index_count; i += 3)
-        {
-          Triangle t;
-          t.points[0].x = vertices[indices[i]].vertex.x;
-          t.points[0].y = vertices[indices[i]].vertex.y;
-          t.points[1].x = vertices[indices[i + 1]].vertex.x;
-          t.points[1].y = vertices[indices[i + 1]].vertex.y;
-          t.points[2].x = vertices[indices[i + 2]].vertex.x;
-          t.points[2].y = vertices[indices[i + 2]].vertex.y;
-          tiles[y][x]   = point_in_triangle_2d(t, Vector2(x_middle, y_middle));
-          if (tiles[y][x])
-          {
-            break;
-          }
-        }
-      }
-    }
   }
-  bool tiles[tile_count][tile_count];
-  void get_tile_position(u8& tile_x, u8& tile_y, Vector2 position)
+
+  void get_tile_position(u8& tile_x, u8& tile_y, Vector2 position, f32 r)
   {
-    for (u32 y = 0; y < tile_count; y++)
-    {
-      f32 min_y = -1.0f + tile_size * y * 2.0f;
-      if (min_y <= position.y && position.y <= min_y + tile_size * 2.0f)
-      {
-        for (u32 x = 0; x < tile_count; x++)
-        {
-          f32 min_x = -1.0f + tile_size * x * 2.0f;
-          if (min_x <= position.x && position.x <= min_x + tile_size * 2.0f)
-          {
-            tile_x = x;
-            tile_y = y;
-            return;
-          }
-        }
-        break;
-      }
-    }
-    assert(!"Was out of bounds!\n");
+    u32 tile_count = get_tile_count_per_row(r);
+
+    f32 px_n       = ((1.0f + position.x) * 0.5f);
+    f32 py_n       = ((1.0f + position.y) * 0.5f);
+    tile_x         = px_n * tile_count;
+    tile_y         = py_n * tile_count;
   }
 };
 Map  map;
@@ -709,17 +668,162 @@ public:
 };
 struct Path
 {
-  u8  path[tile_count * 4][2];
-  u32 path_count;
+  u16* path;
+  u32  path_count;
 };
 
-void find_path(Path* path, Vector2 needle, Vector2 source)
+bool is_out_of_map_bounds(Vector2 position, f32 r)
+{
+  for (u32 i = 0; i < map.vertex_count - 2; i += 3)
+  {
+    Triangle t;
+    t.points[0].x = map.vertices[map.indices[i]].x;
+    t.points[0].y = map.vertices[map.indices[i]].y;
+    t.points[1].x = map.vertices[map.indices[i + 1]].x;
+    t.points[1].y = map.vertices[map.indices[i + 1]].y;
+    t.points[2].x = map.vertices[map.indices[i + 2]].x;
+    t.points[2].y = map.vertices[map.indices[i + 2]].y;
+    Vector2 cp    = closest_point_triangle(t, position);
+    f32     len   = cp.sub(position).len();
+    if (len < r)
+    {
+      return false;
+    }
+  }
+  return true;
+}
+bool is_out_of_map_bounds(Vector2& closest_point, Vector2 position, f32 r)
+{
+  f32 distance = FLT_MAX;
+  for (u32 i = 0; i < map.vertex_count - 2; i += 3)
+  {
+    Triangle t;
+    t.points[0].x = map.vertices[map.indices[i]].x;
+    t.points[0].y = map.vertices[map.indices[i]].y;
+    t.points[1].x = map.vertices[map.indices[i + 1]].x;
+    t.points[1].y = map.vertices[map.indices[i + 1]].y;
+    t.points[2].x = map.vertices[map.indices[i + 2]].x;
+    t.points[2].y = map.vertices[map.indices[i + 2]].y;
+    Vector2 cp    = closest_point_triangle(t, position);
+    f32     len   = cp.sub(position).len();
+    if (len < r)
+    {
+      return false;
+    }
+    if (len < distance)
+    {
+      closest_point = cp;
+      distance      = len;
+    }
+  }
+  return true;
+}
+f32 tile_position_to_game(i16 x, f32 r)
+{
+  u32 count = get_tile_count_per_row(r);
+  return (x + 0.5f) / (f32)count * 2.0f - 1.0f;
+}
+
+bool IntersectSegmentTriangle(Vector3 q, Vector3 p, Triangle3D triangle, float& u, float& v, float& w, float& t)
+{
+  Vector3 ab = triangle.points[1].sub(triangle.points[0]);
+  Vector3 ac = triangle.points[2].sub(triangle.points[0]);
+  Vector3 qp = p.sub(q);
+
+  Vector3 n  = ab.cross(ac);
+
+  float   d  = qp.dot(n);
+
+  Vector3 ap = p.sub(triangle.points[0]);
+  t          = ap.dot(n);
+
+  Vector3 e  = qp.cross(ap);
+  v          = ac.dot(e);
+
+  w          = -ab.dot(e);
+  bool out   = true;
+  if (d <= 0.0f)
+  {
+    out = false;
+  }
+  if (t < 0.0f)
+  {
+    out = false;
+  }
+  if (v < 0.0f || v > d)
+  {
+    out = false;
+  }
+  if (w < 0.0f || v + w > d)
+  {
+    out = false;
+  }
+
+  float ood = 1.0f / d;
+  t *= ood;
+  v *= ood;
+  w *= ood;
+  u = 1.0f - v - w;
+  return out;
+}
+
+float Signed2DTriArea(Vector2 a, Vector2 b, Vector2 c)
+{
+  return (a.x - c.x) * (b.y - c.y) - (a.y - c.y) * (b.x - c.x);
+}
+bool Test2DSegmentSegment(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
+{
+
+  float a1 = Signed2DTriArea(a, b, d);
+  float a2 = Signed2DTriArea(a, b, c);
+
+  if (a1 != 0 && a2 != 0 && a1 * a2 < 0.0f)
+  {
+    float a3 = Signed2DTriArea(c, d, a);
+
+    float a4 = a3 + a2 - a1;
+
+    if (a3 * a4 < 0.0f)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool is_tile_in_map(u8 x, u8 y, f32 r)
+{
+  f32     xs = tile_position_to_game(x, r);
+  f32     ys = tile_position_to_game(y, r);
+
+  Vector2 v0(xs, ys);
+  Vector2 v1(xs + r * 2, ys);
+  Vector2 v2(xs + r * 2, ys + r * 2);
+  Vector2 v3(xs, ys + r * 2);
+
+  for (u32 i = 0; i < map.vertex_count - 2; i += 3)
+  {
+    Triangle tri;
+    tri.points[0] = map.vertices[map.indices[i + 0]];
+    tri.points[1] = map.vertices[map.indices[i + 1]];
+    tri.points[2] = map.vertices[map.indices[i + 2]];
+    Vector2 cp    = closest_point_triangle(tri, v0);
+    f32     len   = cp.sub(v0).len();
+    if (len < r)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+void find_path(Path* path, Vector2 needle, Vector2 source, f32 r)
 {
   // get the tile position of both source and needle
   u8 source_x, source_y;
   u8 needle_x, needle_y;
-  map.get_tile_position(source_x, source_y, source);
-  map.get_tile_position(needle_x, needle_y, needle);
+  map.get_tile_position(source_x, source_y, source, r);
+  map.get_tile_position(needle_x, needle_y, needle, r);
 
   // init heap
   Heap heap               = {};
@@ -742,6 +846,8 @@ void find_path(Path* path, Vector2 needle, Vector2 source)
   heap.visited          = (u16*)malloc(sizeof(u16) * heap.visited_capacity);
   heap.distances        = (u32*)malloc(sizeof(u32) * heap.visited_capacity);
 
+  u32 tile_count        = get_tile_count_per_row(r);
+
   path->path_count      = 0;
   while (heap.node_count != 0)
   {
@@ -757,8 +863,7 @@ void find_path(Path* path, Vector2 needle, Vector2 source)
     {
       for (u32 i = 0; i < curr.path_count; i++)
       {
-        path->path[i][0] = curr.path[i] >> 8;
-        path->path[i][1] = curr.path[i] & 0xFF;
+        path->path[i] = curr.path[i];
       }
       path->path_count = curr.path_count;
       free(curr.path);
@@ -793,7 +898,8 @@ void find_path(Path* path, Vector2 needle, Vector2 source)
         {
           continue;
         }
-        if (!map.tiles[y][x])
+        Vector2 c;
+        if (!is_tile_in_map(x, y, r) || collides_with_static_geometry(c, Vector2(tile_position_to_game(x, r), tile_position_to_game(y, r)), r))
         {
           continue;
         }
@@ -834,49 +940,10 @@ bool sphere_sphere_collision(Sphere s0, Sphere s1)
 }
 TargaImage noise;
 
-bool       is_valid_tile(Vector2 position)
+bool       is_valid_tile(Vector2 position, f32 r)
 {
-  f32 tile_size = 2.0f / tile_count;
-  for (u32 y = 0; y < tile_count; y++)
-  {
-    if (-1.0f + tile_size * y <= position.y && position.y <= -1.0f + tile_size * (y + 1))
-    {
-      for (u32 x = 0; x < tile_count; x++)
-      {
-        if (-1.0f + tile_size * x <= position.x && position.x <= -1.0f + tile_size * (x + 1))
-        {
-          return map.tiles[y][x];
-        }
-      }
-    }
-  }
-  return false;
-}
-bool is_out_of_map_bounds(Vector2& closest_point, Vector2 position, f32 r)
-{
-  f32 distance = FLT_MAX;
-  for (u32 i = 0; i < map.vertex_count - 2; i += 3)
-  {
-    Triangle t;
-    t.points[0].x = map.vertices[map.indices[i]].x;
-    t.points[0].y = map.vertices[map.indices[i]].y;
-    t.points[1].x = map.vertices[map.indices[i + 1]].x;
-    t.points[1].y = map.vertices[map.indices[i + 1]].y;
-    t.points[2].x = map.vertices[map.indices[i + 2]].x;
-    t.points[2].y = map.vertices[map.indices[i + 2]].y;
-    Vector2 cp    = closest_point_triangle(t, position);
-    f32     len   = cp.sub(position).len();
-    if (len < r)
-    {
-      return false;
-    }
-    if (len < distance)
-    {
-      closest_point = cp;
-      distance      = len;
-    }
-  }
-  return true;
+  u32 tile_count = get_tile_count_per_row(r);
+  return is_out_of_map_bounds(position, r);
 }
 
 bool is_valid_position(Vector2 position, f32 r)
@@ -919,7 +986,7 @@ Vector2 get_random_position(u32 tick, u32 enemy_counter, f32 r)
 
     distance_to_player = position.sub(player_position).len();
 
-  } while (!is_valid_tile(position) || distance_to_player < min_valid_distance);
+  } while (!is_valid_tile(position, r) || distance_to_player < min_valid_distance);
 
   return position;
 }
@@ -1011,7 +1078,8 @@ void spawn(Wave* wave, u32 enemy_index)
   EntityRenderData* render_data = entity->render_data;
   entity->position              = get_random_position(wave->spawn_times[enemy_index], enemy_index, entity->r);
   entity->hp                    = enemy->initial_hp;
-  logger.info("Spawning enemy %d at (%f, %f) %d %d", enemy_index, entity->position.x, entity->position.y, wave->enemies_alive, wave->spawn_times[enemy_index]);
+  logger.info("Spawning enemy %d at (%f, %f) %d %ld %ld", enemy_index, entity->position.x, entity->position.y, wave->enemies_alive, wave->spawn_times[enemy_index],
+              wave->enemies[enemy_index].path.path);
   if (enemy->type == ENEMY_RANGED)
   {
     enemy->cooldown = 1000;
@@ -1085,7 +1153,7 @@ void run_command_find_path(void* data)
   const u32            next_tick    = 75;
   CommandFindPathData* path_data    = (CommandFindPathData*)data;
   path_data->enemy->path.path_count = 0;
-  find_path(&path_data->enemy->path, entities[player.entity].position, entities[path_data->enemy->entity].position);
+  find_path(&path_data->enemy->path, entities[player.entity].position, entities[path_data->enemy->entity].position, entities[path_data->enemy->entity].r);
   path_data->tick += next_tick;
   add_command(CMD_FIND_PATH, (void*)path_data, path_data->tick);
 }
@@ -1307,49 +1375,6 @@ Vector3 project_vertex(Vector2 v, Mat44 m)
   return v4.project();
 }
 
-bool IntersectSegmentTriangle(Vector3 q, Vector3 p, Triangle3D triangle, float& u, float& v, float& w, float& t)
-{
-  Vector3 ab = triangle.points[1].sub(triangle.points[0]);
-  Vector3 ac = triangle.points[2].sub(triangle.points[0]);
-  Vector3 qp = p.sub(q);
-
-  Vector3 n  = ab.cross(ac);
-
-  float   d  = qp.dot(n);
-
-  Vector3 ap = p.sub(triangle.points[0]);
-  t          = ap.dot(n);
-
-  Vector3 e  = qp.cross(ap);
-  v          = ac.dot(e);
-
-  w          = -ab.dot(e);
-  bool out   = true;
-  if (d <= 0.0f)
-  {
-    out = false;
-  }
-  if (t < 0.0f)
-  {
-    out = false;
-  }
-  if (v < 0.0f || v > d)
-  {
-    out = false;
-  }
-  if (w < 0.0f || v + w > d)
-  {
-    out = false;
-  }
-
-  float ood = 1.0f / d;
-  t *= ood;
-  v *= ood;
-  w *= ood;
-  u = 1.0f - v - w;
-  return out;
-}
-
 bool ray_triangle_intersection(Vector2& p, Triangle* t, Mat44 view_proj, Vector2 ray)
 {
   Triangle3D triangle;
@@ -1442,15 +1467,13 @@ void read_abilities(Ability* abilities)
   abilities[2].cooldown       = 0;
   abilities[2].use_ability    = use_ability_cone_of_cold;
 }
-f32 tile_position_to_game(u8 x)
-{
-  return (tile_size * (f32)x) * 2.0f - 1.0f;
-}
 
 void handle_enemy_movement(Enemy* enemy, Vector2 target_position)
 {
-  const static f32 ms     = 0.005f;
-  Entity*          entity = &entities[enemy->entity];
+  const static f32 ms         = 0.005f;
+  Entity*          entity     = &entities[enemy->entity];
+  u32              tile_count = get_tile_count_per_row(entity->r);
+
   // enemy->path.path_count = 0;
   // find_path(&enemy->path, target_position, entity->position);
 
@@ -1460,14 +1483,14 @@ void handle_enemy_movement(Enemy* enemy, Vector2 target_position)
     return;
   }
 
-  u32     path_idx           = 2;
+  u32     path_idx           = 1;
   Vector2 prev_position      = entity->position;
   Vector2 curr               = entity->position;
   f32     movement_remaining = ms;
   while (true)
   {
-    f32 x = tile_position_to_game(path.path[path_idx][0]);
-    f32 y = tile_position_to_game(path.path[path_idx][1]);
+    f32 x = tile_position_to_game(path.path[path_idx] >> 8, entity->r);
+    f32 y = tile_position_to_game(path.path[path_idx] & 0xFF, entity->r);
     path_idx++;
     if (compare_float(x, curr.x) && compare_float(y, curr.y))
     {
@@ -1476,7 +1499,7 @@ void handle_enemy_movement(Enemy* enemy, Vector2 target_position)
     Vector2 point(x, y);
 
     // distance from curr to point
-    f32 moved = (ABS(point.x - curr.x) + ABS(point.y - curr.y)) / tile_size;
+    f32 moved = (ABS(point.x - curr.x) + ABS(point.y - curr.y)) / entity->r;
     if (moved > movement_remaining)
     {
       Vector2 velocity(point.x - curr.x, point.y - curr.y);
@@ -1801,6 +1824,9 @@ bool load_wave_from_file(Wave* wave, const char* filename)
     entity->r                   = enemy_data.radius;
     entity->velocity            = Vector2(0, 0);
 
+    u32 tile_count              = get_tile_count_per_row(entity->r);
+    enemy->path.path            = sta_allocate_struct(u16, tile_count * tile_count);
+
     CommandSpawnEnemyData* data = sta_allocate_struct(CommandSpawnEnemyData, 1);
     data->enemy_index           = i;
     data->wave                  = wave;
@@ -2013,6 +2039,8 @@ void render_map(u32 map_shader_index, u32 map_texture, u32 map_buffer, Vector3 v
   map_shader->set_mat4("model", m);
   map_shader->set_mat4("view", camera.get_view_matrix());
   map_shader->set_mat4("projection", projection);
+  // map_shader->set_mat4("view", m);
+  // map_shader->set_mat4("projection", m);
   map_shader->set_vec3("viewPos", Vector3(-camera.translation.x, -camera.translation.y, -camera.z));
 
   // render map
@@ -2233,6 +2261,59 @@ void render_static_geometry()
   }
 }
 
+void render_paths(Wave* wave)
+{
+  Mat44 m = {};
+  m.identity();
+  u32 spawn_count = __builtin_popcountll(wave->spawn_count);
+  for (u32 i = 0; i < spawn_count; i++)
+  {
+    Path path = wave->enemies[i].path;
+    for (u32 j = 0; j < path.path_count - 1; j++)
+    {
+      f32 x1, y1, x2, y2;
+      x1 = tile_position_to_game(path.path[j] >> 8, entities[wave->enemies[i].entity].r);
+      y1 = tile_position_to_game(path.path[j] & 0xFF, entities[wave->enemies[i].entity].r);
+      x2 = tile_position_to_game(path.path[j + 1] >> 8, entities[wave->enemies[i].entity].r);
+      y2 = tile_position_to_game(path.path[j + 1] & 0xFF, entities[wave->enemies[i].entity].r);
+
+      renderer.draw_circle(entities[wave->enemies[i].entity].position, entities[wave->enemies[i].entity].r, 1, RED, m, m);
+      renderer.draw_line(x1, y1, x2, y2, 1, BLUE);
+    }
+  }
+}
+
+void debug_render_map_grid()
+{
+  u32 tile_count = 20;
+  f32 tile_size  = 0.1f;
+  for (u32 x = 0; x < tile_count; x++)
+  {
+    f32 x0 = x * tile_size * 2.0f - 1.0f, x1 = x0 + tile_size * 2.0f;
+    for (u32 y = 0; y < tile_count; y++)
+    {
+      if (is_tile_in_map(x, y, tile_size))
+      {
+        f32 y0 = y * tile_size * 2.0f - 1.0f, y1 = y0 + tile_size * 2.0f;
+        renderer.draw_line(x0, y0, x0, y1, 1, BLUE);
+        renderer.draw_line(x1, y0, x1, y1, 1, BLUE);
+        renderer.draw_line(x0, y1, x1, y1, 1, BLUE);
+        renderer.draw_line(x0, y0, x1, y0, 1, BLUE);
+      }
+    }
+  }
+}
+
+void debug_render_everything(Wave* wave)
+{
+
+  Mat44 m = {};
+  m.identity();
+  debug_render_map_grid();
+  render_paths(wave);
+  renderer.draw_circle(entities[player.entity].position, entities[player.entity].r, 1, YELLOW, m, m);
+}
+
 int main()
 {
 
@@ -2248,6 +2329,7 @@ int main()
   {
     return 1;
   }
+
   renderer.init_depth_texture();
 
   projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
@@ -2374,6 +2456,9 @@ int main()
         render_static_geometry();
         render_entities();
         render_effects(game_running_ticks);
+        // render_paths(&wave);
+        // debug_render_map_grid();
+        // debug_render_everything(&wave);
         if (render_circle_on_mouse)
         {
           i32 sdl_x, sdl_y;

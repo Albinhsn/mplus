@@ -58,6 +58,7 @@ struct Texture
 struct Renderer
 {
 public:
+  u32 line_vao, line_vbo;
   u32            shadow_width, shadow_height;
   GLuint         shadow_map_framebuffer;
   u32            depth_texture;
@@ -96,6 +97,7 @@ public:
     this->screen_width  = screen_width;
     this->screen_height = screen_height;
     this->init_circle_buffer();
+    this->init_line_buffer();
     this->index_buffers_cap   = 0;
     this->index_buffers_count = 0;
     this->texture_count       = 0;
@@ -114,6 +116,8 @@ public:
   bool    load_textures_from_files(const char* file_location);
   u32     add_texture(u32 texture_id);
   void    reload_shaders();
+void draw_line(f32 x1, f32 y1, f32 x2, f32 y2, u32 line_width, Color color);
+  void init_line_buffer();
 
   u32     get_texture(const char* name);
   Shader* get_shader_by_index(u32 index);
