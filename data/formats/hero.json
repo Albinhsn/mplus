@@ -1,18 +1,22 @@
 {
-  "Mage": {
-    "abilities": [
-      "Fireball",
-      "Blink",
-      "Pillar of flame",
-      "Cone of Cold"
-    ]
-  },
   "Warrior": {
+    "radius": 0.05,
+    "hp": 3,
     "abilities": [
       "Melee",
       "Charge",
       "Thunderclap",
       "Slam"
+    ]
+  },
+  "Mage": {
+    "radius": 0.05,
+    "hp": 3,
+    "abilities": [
+      "Fireball",
+      "Blink",
+      "Pillar of flame",
+      "Cone of Cold"
     ]
   }
 }
