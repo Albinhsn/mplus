@@ -1,1 +1,52 @@
-{"model": [{"type": 0, "location": "./shaders/model.vert"}, {"type": 1, "location": "./shaders/model.frag"}], "animation": [{"type": 0, "location": "./shaders/animation.vert"}, {"type": 1, "location": "./shaders/animation.frag"}], "model2": [{"type": 0, "location": "./shaders/model2.vert"}, {"type": 1, "location": "./shaders/model2.frag"}], "depth": [{"type": 0, "location": "./shaders/depth.vert"}, {"type": 1, "location": "./shaders/depth.frag"}], "quad": [{"type": 0, "location": "./shaders/quad.vert"}, {"type": 1, "location": "./shaders/quad.frag"}]}
+{
+  "model": [
+    {
+      "type": 0,
+      "location": "./shaders/model.vert"
+    },
+    {
+      "type": 1,
+      "location": "./shaders/model.frag"
+    }
+  ],
+  "animation": [
+    {
+      "type": 0,
+      "location": "./shaders/animation.vert"
+    },
+    {
+      "type": 1,
+      "location": "./shaders/animation.frag"
+    }
+  ],
+  "model2": [
+    {
+      "type": 0,
+      "location": "./shaders/model2.vert"
+    },
+    {
+      "type": 1,
+      "location": "./shaders/model2.frag"
+    }
+  ],
+  "depth": [
+    {
+      "type": 0,
+      "location": "./shaders/depth.vert"
+    },
+    {
+      "type": 1,
+      "location": "./shaders/depth.frag"
+    }
+  ],
+  "quad": [
+    {
+      "type": 0,
+      "location": "./shaders/quad.vert"
+    },
+    {
+      "type": 1,
+      "location": "./shaders/quad.frag"
+    }
+  ]
+}

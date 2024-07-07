@@ -235,7 +235,7 @@ bool load_models_from_files(const char* file_location)
 
   models            = sta_allocate_struct(Model, model_count);
   logger.info("Found %d models", model_count);
-  for (u32 i = 0, string_index = 1; i < model_count; i++)
+  for (u32 i = 0; i < model_count; i++)
   {
     // ToDo free the loaded memory?
     JsonObject*         json_data      = head->values[i].obj;
@@ -304,37 +304,37 @@ bool load_models_from_files(const char* file_location)
 
 bool load_buffers_from_files(const char* file_location)
 {
-  Buffer      buffer = {};
-  StringArray lines  = {};
+
+  Buffer buffer = {};
   if (!sta_read_file(&buffer, file_location))
   {
     return false;
   }
-  split_buffer_by_newline(&lines, &buffer);
-
-  assert(lines.count > 0 && "Buffers file had no content?");
-
-  u32 count    = parse_int_from_string(lines.strings[0]);
-
-  buffers      = (RenderBuffer*)sta_allocate_struct(RenderBuffer, count);
-  buffer_count = count;
-
-  for (u32 i = 0, string_index = 1; i < count; i++)
+  Json json = {};
+  if (!sta_json_deserialize_from_string(&buffer, &json))
   {
-    char*            model_name             = lines.strings[string_index++];
+    return false;
+  };
+  assert(json.headType == JSON_OBJECT && "Expected head to be object");
+  JsonObject* head  = &json.obj;
+
+  u32         count = head->size;
+
+  buffers           = (RenderBuffer*)sta_allocate_struct(RenderBuffer, count);
+  buffer_count      = count;
+
+  for (u32 i = 0; i < count; i++)
+  {
+    char*            model_name             = head->keys[i];
     Model*           model                  = get_model_by_name(model_name);
-    u32              buffer_attribute_count = parse_int_from_string(lines.strings[string_index++]);
+    JsonObject*      model_json             = head->values[i].obj;
+    JsonArray*       attributes_json        = model_json->lookup_value("attributes")->arr;
+    u32              buffer_attribute_count = attributes_json->arraySize;
     BufferAttributes attributes[buffer_attribute_count];
     for (u32 j = 0; j < buffer_attribute_count; j++)
     {
-      char* line = lines.strings[string_index];
-      string_index++;
-      Buffer buffer(line, strlen(line));
-      attributes[j].count = buffer.parse_int();
-      buffer.skip_whitespace();
-
-      // ToDo check validity
-      attributes[j].type = (BufferAttributeType)buffer.parse_int();
+      attributes[j].count = attributes_json->values[j].obj->lookup_value("count")->number;
+      attributes[j].type  = (BufferAttributeType)attributes_json->values[j].obj->lookup_value("type")->number;
     }
     buffers[i].model_name = model_name;
     buffers[i].buffer_id  = renderer.create_buffer_from_model(model, attributes, buffer_attribute_count);
@@ -491,25 +491,33 @@ bool collides_with_static_geometry(Vector2& closest_point, Vector2 position, f32
 }
 bool load_static_geometry_from_file(const char* filename)
 {
-  Buffer      buffer = {};
-  StringArray lines  = {};
+  Buffer buffer = {};
   if (!sta_read_file(&buffer, filename))
   {
     return false;
   }
-  split_buffer_by_newline(&lines, &buffer);
-  map.static_geometry.count       = parse_int_from_string(lines.strings[0]);
+  Json json = {};
+  if (!sta_json_deserialize_from_string(&buffer, &json))
+  {
+    return false;
+  };
+  assert(json.headType == JSON_OBJECT && "Expected head to be object");
+  JsonObject* head                = &json.obj;
+
+  map.static_geometry.count       = head->size;
   map.static_geometry.position    = (Vector3*)sta_allocate_struct(Vector3, map.static_geometry.count);
   map.static_geometry.models      = (Model*)sta_allocate_struct(Model, map.static_geometry.count);
   map.static_geometry.render_data = (EntityRenderData*)sta_allocate_struct(EntityRenderData, map.static_geometry.count);
+
   logger.info("Found %d static geometry items", map.static_geometry.count);
-  for (u32 i = 0, string_index = 1; i < map.static_geometry.count; i++)
+  for (u32 i = 0; i < map.static_geometry.count; i++)
   {
-    map.static_geometry.render_data[i] = *get_render_data_by_name(lines.strings[string_index++]);
-    map.static_geometry.models[i]      = *get_model_by_name(lines.strings[string_index++]);
-    map.static_geometry.position[i].x  = parse_float_from_string(lines.strings[string_index++]);
-    map.static_geometry.position[i].y  = parse_float_from_string(lines.strings[string_index++]);
-    map.static_geometry.position[i].z  = parse_float_from_string(lines.strings[string_index++]);
+    map.static_geometry.render_data[i] = *get_render_data_by_name(head->keys[i]);
+    map.static_geometry.models[i]      = *get_model_by_name(head->values[i].obj->lookup_value("model")->string);
+    JsonArray* position_json           = head->values[i].obj->lookup_value("position")->arr;
+    map.static_geometry.position[i].x  = position_json->values[0].number;
+    map.static_geometry.position[i].y  = position_json->values[1].number;
+    map.static_geometry.position[i].z  = position_json->values[2].number;
     logger.info("Item %d: '%s' at (%f, %f, %f)", i, map.static_geometry.render_data[i].name, map.static_geometry.position[i].x, map.static_geometry.position[i].y, map.static_geometry.position[i].z);
   }
 
@@ -518,19 +526,24 @@ bool load_static_geometry_from_file(const char* filename)
 
 bool load_map_from_file(const char* filename)
 {
-  Buffer      buffer = {};
-  StringArray lines  = {};
+  Buffer buffer = {};
   if (!sta_read_file(&buffer, filename))
   {
     return false;
   }
-  split_buffer_by_newline(&lines, &buffer);
-
-  Model* model = get_model_by_name(lines.strings[0]);
-  f32    scale = parse_float_from_string(lines.strings[1]);
-  if (!load_static_geometry_from_file(lines.strings[2]))
+  Json json = {};
+  if (!sta_json_deserialize_from_string(&buffer, &json))
   {
-    logger.error("Failed to read static geometry data from '%s'", lines.strings[2]);
+    return false;
+  };
+  assert(json.headType == JSON_OBJECT && "Expected head to be object");
+  JsonObject* head  = &json.obj;
+
+  Model*      model = get_model_by_name(head->lookup_value("model")->string);
+  f32         scale = head->lookup_value("model")->number;
+  if (!load_static_geometry_from_file(head->lookup_value("static_geometry")->string))
+  {
+    logger.error("Failed to read static geometry data from '%s'", head->lookup_value("static_geometry")->string);
     return false;
   }
   map.init_map(model);
@@ -1781,7 +1794,7 @@ bool load_enemies_from_file(const char* filename)
   enemy_data_count  = count;
   enemy_data        = sta_allocate_struct(EnemyData, count);
 
-  for (u32 i = 0, string_index = 1; i < count; i++)
+  for (u32 i = 0; i < count; i++)
   {
     EnemyData*  data       = &enemy_data[i];
     JsonObject* json_data  = head->values[i].obj;
@@ -1851,47 +1864,46 @@ bool load_wave_from_file(Wave* wave, const char* filename)
 bool load_entity_render_data_from_file(const char* file_location)
 {
 
-  Buffer      buffer = {};
-  StringArray lines  = {};
+  Buffer buffer = {};
   if (!sta_read_file(&buffer, file_location))
   {
     return false;
   }
-  split_buffer_by_newline(&lines, &buffer);
+  Json json = {};
+  if (!sta_json_deserialize_from_string(&buffer, &json))
+  {
+    return false;
+  };
+  assert(json.headType == JSON_OBJECT && "Expected head to be object");
+  JsonObject* head  = &json.obj;
 
-  assert(lines.count > 0 && "Empty render data file?");
-  u32 count         = parse_int_from_string(lines.strings[0]);
+  u32         count = head->size;
+
   render_data       = sta_allocate_struct(EntityRenderData, count);
   render_data_count = count;
-  for (u32 i = 0, string_index = 1; i < count; i++)
+  for (u32 i = 0; i < count; i++)
   {
-    EntityRenderData* data = &render_data[i];
-    // name
-    // animation
-    // texture
-    // shader
-    // scale
-    // buffer
-    data->name = lines.strings[string_index++];
-    if (lines.strings[string_index][0] == '0')
+    EntityRenderData* data      = &render_data[i];
+    data->name                  = head->keys[i];
+    JsonObject* render_data_obj = head->values[i].obj;
+    if (render_data_obj->lookup_value("animation"))
     {
-      data->model = 0;
-    }
-    else
-    {
-      Model* model = get_model_by_name(lines.strings[string_index]);
+      Model* model = get_model_by_name(render_data_obj->lookup_value("animation")->string);
       assert(model->animation_data && "No animation data for the model!");
       data->model = model->animation_data;
     }
-    string_index++;
+    else
+    {
+      data->model = 0;
+    }
 
-    const char* texture        = lines.strings[string_index++];
-    const char* shader         = lines.strings[string_index++];
-    const char* scale          = lines.strings[string_index++];
-    const char* buffer_id      = lines.strings[string_index++];
+    const char* texture        = render_data_obj->lookup_value("texture")->string;
+    const char* shader         = render_data_obj->lookup_value("shader")->string;
+    f32         scale          = render_data_obj->lookup_value("scale")->number;
+    const char* buffer_id      = render_data_obj->lookup_value("buffer")->string;
     data->texture              = renderer.get_texture(texture);
     data->shader               = renderer.get_shader_by_name(shader);
-    data->scale                = parse_float_from_string((char*)scale);
+    data->scale                = scale;
     data->buffer_id            = get_buffer_by_name(buffer_id);
     data->animation_tick_start = 0;
     logger.info("Loaded render data for '%s': texture: %s, shader: %s, scale: %s,  buffer: %s", data->name, texture, shader, scale, buffer_id);
@@ -1920,28 +1932,35 @@ Hero       get_hero_by_name(const char* name)
 
 bool load_hero_from_file(const char* file_location)
 {
-  Buffer      buffer = {};
-  StringArray lines  = {};
+  Buffer buffer = {};
   if (!sta_read_file(&buffer, file_location))
   {
     return false;
   }
-  split_buffer_by_newline(&lines, &buffer);
+  Json json = {};
+  if (!sta_json_deserialize_from_string(&buffer, &json))
+  {
+    return false;
+  };
+  assert(json.headType == JSON_OBJECT && "Expected head to be object");
+  JsonObject* head  = &json.obj;
 
-  int count  = parse_int_from_string(lines.strings[0]);
-  hero_count = count;
-  heroes     = sta_allocate_struct(Hero, count);
+  u32         count = head->size;
+  hero_count        = count;
+  heroes            = sta_allocate_struct(Hero, count);
 
   logger.info("Found %d heroes", count);
-  for (u32 i = 0, string_index = 1; i < count; i++)
+  for (u32 i = 0; i < count; i++)
   {
-    char* name          = lines.strings[string_index++];
-    u32   ability_count = parse_int_from_string(lines.strings[string_index++]);
-    Hero* hero          = &heroes[i];
+    char*      name          = head->keys[i];
+
+    JsonArray* ability_array = head->values[i].obj->lookup_value("abilities")->arr;
+    u32        ability_count = ability_array->arraySize;
+    Hero*      hero          = &heroes[i];
     assert(ability_count < ArrayCount(hero->abilities) && "Too many abilities!!");
     for (u32 j = 0; j < ability_count; j++)
     {
-      hero->abilities[j] = get_ability_by_name(lines.strings[string_index++]);
+      hero->abilities[j] = get_ability_by_name(ability_array->values[j].string);
     }
     hero->damage_taken_cd      = 0;
     hero->can_take_damage_tick = 0;
@@ -1963,24 +1982,29 @@ bool load_hero_from_file(const char* file_location)
 }
 bool load_ability_from_file(const char* file_location)
 {
-  Buffer      buffer = {};
-  StringArray lines  = {};
+  Buffer buffer = {};
   if (!sta_read_file(&buffer, file_location))
   {
     return false;
   }
-  split_buffer_by_newline(&lines, &buffer);
+  Json json = {};
+  if (!sta_json_deserialize_from_string(&buffer, &json))
+  {
+    return false;
+  };
 
-  int count     = parse_int_from_string(lines.strings[0]);
-  abilities     = sta_allocate_struct(Ability, count);
-  ability_count = count;
+  assert(json.headType == JSON_OBJECT && "Expected head to be object");
+  JsonObject* head  = &json.obj;
+  u32         count = head->size;
+  abilities         = sta_allocate_struct(Ability, count);
+  ability_count     = count;
 
   logger.info("Found %d abilities", count);
-  for (u32 i = 0, string_index = 1; i < count; i++)
+  for (u32 i = 0; i < count; i++)
   {
-    char* name                  = lines.strings[string_index++];
-    u32   use_ability_index     = parse_int_from_string(lines.strings[string_index++]);
-    u32   cooldown              = parse_int_from_string(lines.strings[string_index++]);
+    char* name                  = head->keys[i];
+    u32   use_ability_index     = head->values[i].obj->lookup_value("use_ptr_idx")->number;
+    u32   cooldown              = head->values[i].obj->lookup_value("cooldown")->number;
     abilities[i].name           = name;
     abilities[i].cooldown_ticks = cooldown;
     abilities[i].use_ability    = use_ability_function_ptrs[use_ability_index];
@@ -2006,21 +2030,21 @@ bool load_data()
     return false;
   }
 
-  const static char* texture_locations = "./data/formats/textures.txt";
+  const static char* texture_locations = "./data/formats/textures.json";
   if (!renderer.load_textures_from_files(texture_locations))
   {
     logger.error("Failed to read textures from '%s'", texture_locations);
     return false;
   }
 
-  const static char* shader_locations = "./data/formats/shader.txt";
+  const static char* shader_locations = "./data/formats/shader.json";
   if (!renderer.load_shaders_from_files(shader_locations))
   {
     logger.error("Failed to read shaders from '%s'", shader_locations);
     return false;
   }
 
-  const static char* buffer_locations = "./data/formats/buffers.txt";
+  const static char* buffer_locations = "./data/formats/buffers.json";
   if (!load_buffers_from_files(buffer_locations))
   {
     logger.error("Failed to read buffers from '%s'", buffer_locations);
@@ -2034,25 +2058,25 @@ bool load_data()
     return false;
   }
 
-  const static char* render_data_location = "./data/formats/render_data.txt";
+  const static char* render_data_location = "./data/formats/render_data.json";
   if (!load_entity_render_data_from_file(render_data_location))
   {
     logger.error("Failed to read render data from '%s'", render_data_location);
     return false;
   }
-  const static char* map_data_location = "./data/maps/map01.txt";
+  const static char* map_data_location = "./data/maps/map01.json";
   if (!load_map_from_file(map_data_location))
   {
     logger.error("Failed to read map data from '%s'", map_data_location);
     return false;
   }
-  const static char* ability_data_location = "./data/formats/abilities.txt";
+  const static char* ability_data_location = "./data/formats/abilities.json";
   if (!load_ability_from_file(ability_data_location))
   {
     logger.error("Failed to read ability data from '%s'", ability_data_location);
     return false;
   }
-  const static char* hero_data_location = "./data/formats/hero.txt";
+  const static char* hero_data_location = "./data/formats/hero.json";
   if (!load_hero_from_file(hero_data_location))
   {
     logger.error("Failed to read hero data from '%s'", hero_data_location);

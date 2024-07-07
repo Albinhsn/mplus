@@ -9,10 +9,10 @@ def convert_abilities():
         name = lines[idx]
         idx += 1
 
-        function_ptr = lines[idx]
+        function_ptr = int(lines[idx])
         idx += 1
 
-        cooldown = lines[idx]
+        cooldown = int(lines[idx])
         idx += 1
         m = {
             "use_ptr_idx": function_ptr,
@@ -230,6 +230,7 @@ def convert_map01_static():
     f.write(json.dumps(static_geometry))
     
 def main()   ->int:
+    convert_abilities()
     
 
     return 0

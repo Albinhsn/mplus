@@ -275,56 +275,39 @@ u32 Renderer::get_shader_by_name(const char* name)
 
 bool Renderer::load_shaders_from_files(const char* file_location)
 {
-  Buffer      buffer = {};
-  StringArray lines  = {};
+  Buffer buffer = {};
   if (!sta_read_file(&buffer, file_location))
   {
     return false;
   }
-  split_buffer_by_newline(&lines, &buffer);
-  assert(lines.count > 0 && "No lines in shader file?");
-
-  u32     count   = parse_int_from_string(lines.strings[0]);
-
-  Shader* shaders = sta_allocate_struct(Shader, count);
-
-  for (u32 i = 0, string_index = 1; i < count; i++)
+  Json json = {};
+  if (!sta_json_deserialize_from_string(&buffer, &json))
   {
-    char log[256];
-    memset(log, 0, ArrayCount(log));
-    u64         log_index    = 0;
-    const char* name         = lines.strings[string_index++];
-    u32         shader_count = parse_int_from_string(lines.strings[string_index++]);
-    ShaderType  types[shader_count];
-    char*       shader_locations[shader_count];
+    return false;
+  };
+  assert(json.headType == JSON_OBJECT && "Expected head to be object");
+  JsonObject* head    = &json.obj;
 
-    log_index = snprintf(log, ArrayCount(log), "Found shader '%s': ", name);
+  u32         count   = head->size;
+
+  Shader*     shaders = sta_allocate_struct(Shader, count);
+
+  for (u32 i = 0; i < count; i++)
+  {
+    u64         log_index = 0;
+    const char* name      = head->keys[i];
+    assert(head->values[i].type == JSON_ARRAY && "Expected shader to be an array!");
+    JsonArray* shaders_json      = head->values[i].arr;
+    u32        shader_count = shaders_json->arraySize;
+    ShaderType types[shader_count];
+    char*      shader_locations[shader_count];
+
     for (u32 j = 0; j < shader_count; j++)
     {
-      char*      line = lines.strings[string_index++];
-      Buffer     buffer(line, strlen(line));
-      ShaderType type = (ShaderType)buffer.parse_int();
-      while (!buffer.is_out_of_bounds() && buffer.current_char() == ' ')
-      {
-        buffer.advance();
-      }
-
-      if (buffer.is_out_of_bounds())
-      {
-        assert(!"Expected shader file location but found end of line!");
-      }
-
-      char* file_location                      = sta_allocate_struct(char, buffer.len - buffer.index + 1);
-      file_location[buffer.len - buffer.index] = '\0';
-      strncpy(file_location, buffer.current_address(), buffer.len - buffer.index);
-
-      log_index += snprintf(&log[log_index], ArrayCount(log) - log_index, "type: %d at '%s',\t", type, file_location);
-      assert(log_index < ArrayCount(log) && "Overflow in log msg!");
-      shader_locations[j] = file_location;
-      types[j]            = type;
+      JsonObject* shader  = shaders_json->values[j].obj;
+      types[j]            = (ShaderType)shader->lookup_value("type")->number;
+      shader_locations[j] = shader->lookup_value("location")->string;
     }
-
-    this->logger->info(log);
 
     shaders[i] = Shader(types, (const char**)shader_locations, shader_count, name);
   }
@@ -336,25 +319,30 @@ bool Renderer::load_shaders_from_files(const char* file_location)
 bool Renderer::load_textures_from_files(const char* file_location)
 {
 
-  Buffer      buffer = {};
-  StringArray lines  = {};
+  Buffer buffer = {};
   if (!sta_read_file(&buffer, file_location))
   {
     return false;
   }
-  split_buffer_by_newline(&lines, &buffer);
+  Json json = {};
+  if (!sta_json_deserialize_from_string(&buffer, &json))
+  {
+    return false;
+  };
+  assert(json.headType == JSON_OBJECT && "Expected head to be object");
+  JsonObject* head       = &json.obj;
 
-  this->texture_count    = parse_int_from_string(lines.strings[0]);
+  this->texture_count    = head->size;
   this->textures         = sta_allocate_struct(Texture, texture_count);
   this->texture_capacity = this->texture_count;
 
-  for (u32 i = 0, string_index = 1; i < this->texture_count; i++)
+  for (u32 i = 0; i < this->texture_count; i++)
   {
     Texture    texture = {};
     TargaImage image   = {};
-    texture.name       = lines.strings[string_index++];
+    texture.name       = head->keys[i];
 
-    char* targa_file   = lines.strings[string_index++];
+    char* targa_file   = head->values[i].obj->lookup_value("location")->string;
     if (!sta_targa_read_from_file_rgba(&image, targa_file))
     {
       // ToDo load token texture
