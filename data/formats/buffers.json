@@ -1,0 +1,162 @@
+{
+  "model_unarmed_man": {
+    "attributes": [
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 2,
+        "type": 0
+      },
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 4,
+        "type": 0
+      },
+      {
+        "count": 4,
+        "type": 1
+      }
+    ]
+  },
+  "model_player": {
+    "attributes": [
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 2,
+        "type": 0
+      },
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 4,
+        "type": 0
+      },
+      {
+        "count": 4,
+        "type": 1
+      }
+    ]
+  },
+  "model_fireball": {
+    "attributes": [
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 2,
+        "type": 0
+      },
+      {
+        "count": 3,
+        "type": 0
+      }
+    ]
+  },
+  "model_enemy": {
+    "attributes": [
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 2,
+        "type": 0
+      },
+      {
+        "count": 3,
+        "type": 0
+      }
+    ]
+  },
+  "model_map_with_hole": {
+    "attributes": [
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 2,
+        "type": 0
+      },
+      {
+        "count": 3,
+        "type": 0
+      }
+    ]
+  },
+  "model_map_with_pillar": {
+    "attributes": [
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 2,
+        "type": 0
+      },
+      {
+        "count": 3,
+        "type": 0
+      }
+    ]
+  },
+  "model_pillar": {
+    "attributes": [
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 2,
+        "type": 0
+      },
+      {
+        "count": 3,
+        "type": 0
+      }
+    ]
+  },
+  "model_circle": {
+    "attributes": [
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 2,
+        "type": 0
+      },
+      {
+        "count": 3,
+        "type": 0
+      }
+    ]
+  },
+  "model_cube": {
+    "attributes": [
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 2,
+        "type": 0
+      },
+      {
+        "count": 3,
+        "type": 0
+      }
+    ]
+  }
+}

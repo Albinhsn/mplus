@@ -4,6 +4,9 @@ LDFLAGS := -lm -lGL -lSDL2
 TARGET = main
 
 
+convert:
+	python3 convert.py
+
 c:
 	$(CC) $(CFLAGS) src/main.cpp -o main $(LDFLAGS) && ./main
 d:
