@@ -1591,6 +1591,60 @@ bool use_ability_charge(Camera* camera, InputState* input, u32 ticks)
 }
 bool use_ability_thunderclap(Camera* camera, InputState* input, u32 ticks)
 {
+
+  Effect effect;
+  effect.update_effect  = 0;
+  effect.render_data    = *get_render_data_by_name("pillar of flame");
+  Entity entity         = entities[player.entity];
+
+  effect.position       = entity.position;
+
+  effect.angle          = entity.angle;
+  effect.effect_ends_at = ticks + 100;
+
+  EffectNode* node      = (EffectNode*)effects.pool.alloc();
+  node->next            = effects.head;
+  effects.head          = node;
+
+  node->effect          = effect;
+
+  f32     scale         = effect.render_data.scale;
+  Model*  model         = get_model_by_name("model_coc");
+  Vector2 vertices[model->vertex_count];
+  for (u32 i = 0; i < model->vertex_count; i++)
+  {
+    vertices[i].x = effect.position.x + model->vertices[i].x * scale;
+    vertices[i].y = effect.position.y + model->vertices[i].y * scale;
+  }
+
+  for (u32 i = 0; i < entity_count; i++)
+  {
+    Entity* entity = &entities[i];
+    if (entity->hp > 0 && entity->type == ENTITY_ENEMY)
+    {
+      for (u32 i = 0; i < model->index_count; i += 3)
+      {
+        Triangle t;
+        t.points[0].x = vertices[model->indices[i]].x;
+        t.points[0].y = vertices[model->indices[i]].y;
+        t.points[1].x = vertices[model->indices[i + 1]].x;
+        t.points[1].y = vertices[model->indices[i + 1]].y;
+        t.points[2].x = vertices[model->indices[i + 2]].x;
+        t.points[2].y = vertices[model->indices[i + 2]].y;
+
+        Vector2 cp    = closest_point_triangle(t, entity->position);
+        f32     len   = cp.sub(entity->position).len();
+        if (len < entity->r)
+        {
+          logger.info("Hit with coc!");
+          entity->hp -= 1;
+          break;
+        }
+      }
+    }
+  }
+
+  return true;
 }
 bool use_ability_slam(Camera* camera, InputState* input, u32 ticks)
 {
