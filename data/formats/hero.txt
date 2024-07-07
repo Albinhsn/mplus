@@ -1,6 +1,12 @@
-1
-player
-5
-fireball
-blink
-cone of cold
+mage
+4
+Fireball
+Blink
+Cone of cold
+Pillar of flame
+Warrior
+4
+Melee
+Charge
+Thunderclap
+Slam

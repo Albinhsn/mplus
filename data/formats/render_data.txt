@@ -23,7 +23,7 @@ stone
 model2
 0.35
 model_pillar
-cone of cold
+pillar of flame
 0
 red_texture
 model

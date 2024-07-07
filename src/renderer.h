@@ -55,10 +55,11 @@ struct Texture
   i32         unit;
 };
 
+
 struct Renderer
 {
 public:
-  u32 line_vao, line_vbo;
+  u32            line_vao, line_vbo;
   u32            shadow_width, shadow_height;
   GLuint         shadow_map_framebuffer;
   u32            depth_texture;
@@ -80,7 +81,6 @@ public:
   u32            index_buffers_cap;
 
   Logger*        logger;
-
 
   u32            screen_width, screen_height;
   bool           vsync;
@@ -104,7 +104,6 @@ public:
     this->used_texture_units  = 0;
   }
 
-
   // manage some buffer
   void    init_depth_texture();
   u32     create_buffer_indices(u64 buffer_size, void* buffer_data, u64 index_count, u32* indices, BufferAttributes* attributes, u32 attribute_count);
@@ -116,8 +115,8 @@ public:
   bool    load_textures_from_files(const char* file_location);
   u32     add_texture(u32 texture_id);
   void    reload_shaders();
-void draw_line(f32 x1, f32 y1, f32 x2, f32 y2, u32 line_width, Color color);
-  void init_line_buffer();
+  void    draw_line(f32 x1, f32 y1, f32 x2, f32 y2, u32 line_width, Color color);
+  void    init_line_buffer();
 
   u32     get_texture(const char* name);
   Shader* get_shader_by_index(u32 index);
@@ -134,8 +133,8 @@ void draw_line(f32 x1, f32 y1, f32 x2, f32 y2, u32 line_width, Color color);
   void change_screen_size(u32 screen_width, u32 screen_height);
   void enable_2d_rendering();
   void disable_2d_rendering();
-  void    change_viewport(u32 w, u32 h);
-  void    reset_viewport_to_screen_size();
+  void change_viewport(u32 w, u32 h);
+  void reset_viewport_to_screen_size();
   void clear_framebuffer();
   void swap_buffers();
 

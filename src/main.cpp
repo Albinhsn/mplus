@@ -412,11 +412,15 @@ Vector2 closest_point_triangle(Triangle triangle, Vector2 p)
   return Vector2(x, y);
 }
 
-u32 get_tile_count_per_row(f32 r)
+u32 get_tile_count_per_row()
 {
   // 2.0f for the length of the thing divided by the radius *  aka 2.0f / (r * 2) == 1 /r
-  u32 row = 1.0f / r;
-  return row;
+  return 24;
+}
+
+f32 get_tile_size()
+{
+  return 2.0f / get_tile_count_per_row();
 }
 
 bool collides_with_static_geometry(Vector2& closest_point, Vector2 position, f32 r);
@@ -445,9 +449,9 @@ public:
     }
   }
 
-  void get_tile_position(u8& tile_x, u8& tile_y, Vector2 position, f32 r)
+  void get_tile_position(u8& tile_x, u8& tile_y, Vector2 position)
   {
-    u32 tile_count = get_tile_count_per_row(r);
+    u32 tile_count = get_tile_count_per_row();
 
     f32 px_n       = ((1.0f + position.x) * 0.5f);
     f32 py_n       = ((1.0f + position.y) * 0.5f);
@@ -683,9 +687,7 @@ bool is_out_of_map_bounds(Vector2 position, f32 r)
     t.points[1].y = map.vertices[map.indices[i + 1]].y;
     t.points[2].x = map.vertices[map.indices[i + 2]].x;
     t.points[2].y = map.vertices[map.indices[i + 2]].y;
-    Vector2 cp    = closest_point_triangle(t, position);
-    f32     len   = cp.sub(position).len();
-    if (len < r)
+    if (point_in_triangle_2d(t, Point2(position.x, position.y)))
     {
       return false;
     }
@@ -718,10 +720,15 @@ bool is_out_of_map_bounds(Vector2& closest_point, Vector2 position, f32 r)
   }
   return true;
 }
-f32 tile_position_to_game(i16 x, f32 r)
+f32 tile_position_to_game(i16 x)
 {
-  u32 count = get_tile_count_per_row(r);
+  u32 count = get_tile_count_per_row();
   return (x + 0.5f) / (f32)count * 2.0f - 1.0f;
+}
+f32 tile_position_to_game2(i16 x)
+{
+  u32 count = get_tile_count_per_row();
+  return x / (f32)count * 2.0f - 1.0f;
 }
 
 bool IntersectSegmentTriangle(Vector3 q, Vector3 p, Triangle3D triangle, float& u, float& v, float& w, float& t)
@@ -793,28 +800,12 @@ bool Test2DSegmentSegment(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
 
 bool is_tile_in_map(u8 x, u8 y, f32 r)
 {
-  f32     xs = tile_position_to_game(x, r);
-  f32     ys = tile_position_to_game(y, r);
+  f32     xs = tile_position_to_game(x);
+  f32     ys = tile_position_to_game(y);
 
   Vector2 v0(xs, ys);
-  Vector2 v1(xs + r * 2, ys);
-  Vector2 v2(xs + r * 2, ys + r * 2);
-  Vector2 v3(xs, ys + r * 2);
 
-  for (u32 i = 0; i < map.vertex_count - 2; i += 3)
-  {
-    Triangle tri;
-    tri.points[0] = map.vertices[map.indices[i + 0]];
-    tri.points[1] = map.vertices[map.indices[i + 1]];
-    tri.points[2] = map.vertices[map.indices[i + 2]];
-    Vector2 cp    = closest_point_triangle(tri, v0);
-    f32     len   = cp.sub(v0).len();
-    if (len < r)
-    {
-      return true;
-    }
-  }
-  return false;
+  return !is_out_of_map_bounds(v0, r);
 }
 
 void find_path(Path* path, Vector2 needle, Vector2 source, f32 r)
@@ -822,8 +813,8 @@ void find_path(Path* path, Vector2 needle, Vector2 source, f32 r)
   // get the tile position of both source and needle
   u8 source_x, source_y;
   u8 needle_x, needle_y;
-  map.get_tile_position(source_x, source_y, source, r);
-  map.get_tile_position(needle_x, needle_y, needle, r);
+  map.get_tile_position(source_x, source_y, source);
+  map.get_tile_position(needle_x, needle_y, needle);
 
   // init heap
   Heap heap               = {};
@@ -846,7 +837,7 @@ void find_path(Path* path, Vector2 needle, Vector2 source, f32 r)
   heap.visited          = (u16*)malloc(sizeof(u16) * heap.visited_capacity);
   heap.distances        = (u32*)malloc(sizeof(u32) * heap.visited_capacity);
 
-  u32 tile_count        = get_tile_count_per_row(r);
+  u32 tile_count        = get_tile_count_per_row();
 
   path->path_count      = 0;
   while (heap.node_count != 0)
@@ -899,7 +890,7 @@ void find_path(Path* path, Vector2 needle, Vector2 source, f32 r)
           continue;
         }
         Vector2 c;
-        if (!is_tile_in_map(x, y, r) || collides_with_static_geometry(c, Vector2(tile_position_to_game(x, r), tile_position_to_game(y, r)), r))
+        if (!is_tile_in_map(x, y, r) || collides_with_static_geometry(c, Vector2(tile_position_to_game(x), tile_position_to_game(y)), r))
         {
           continue;
         }
@@ -942,7 +933,7 @@ TargaImage noise;
 
 bool       is_valid_tile(Vector2 position, f32 r)
 {
-  u32 tile_count = get_tile_count_per_row(r);
+  u32 tile_count = get_tile_count_per_row();
   return is_out_of_map_bounds(position, r);
 }
 
@@ -1416,12 +1407,12 @@ bool find_cursor_position_on_map(Vector2& point, f32* mouse_position, Mat44 view
   return false;
 }
 
-bool use_ability_cone_of_cold(Camera* camera, InputState* input, u32 ticks)
+bool use_ability_pillar_of_flame(Camera* camera, InputState* input, u32 ticks)
 {
 
   Effect effect;
   effect.update_effect = 0;
-  effect.render_data   = *get_render_data_by_name("cone of cold");
+  effect.render_data   = *get_render_data_by_name("pillar of flame");
   Entity  entity       = entities[player.entity];
 
   Mat44   view         = camera->get_view_matrix().mul(projection);
@@ -1450,29 +1441,39 @@ bool use_ability_cone_of_cold(Camera* camera, InputState* input, u32 ticks)
   return true;
 }
 
+bool (*use_ability_function_ptrs[])(Camera* camera, InputState* input, u32 ticks) = {
+    use_ability_fireball,       //
+    use_ability_blink,          //
+    use_ability_pillar_of_flame //
+};
+Ability* abilities;
+u32      ability_count;
+
+Ability  get_ability_by_name(const char* name)
+{
+  for (u32 i = 0; i < ability_count; i++)
+  {
+    if (compare_strings(abilities[i].name, name))
+    {
+      return abilities[i];
+    }
+  }
+  logger.error("Didn't find ability '%s'", name);
+  assert(!"Didn't find ability!");
+}
+
 void read_abilities(Ability* abilities)
 {
-  abilities[0].name           = "Fireball";
-  abilities[0].cooldown_ticks = 1000;
-  abilities[0].cooldown       = 0;
-  abilities[0].use_ability    = use_ability_fireball;
-
-  abilities[1].name           = "Blink";
-  abilities[1].cooldown_ticks = 5000;
-  abilities[1].cooldown       = 0;
-  abilities[1].use_ability    = use_ability_blink;
-
-  abilities[2].name           = "Cone of Cold";
-  abilities[2].cooldown_ticks = 2000;
-  abilities[2].cooldown       = 0;
-  abilities[2].use_ability    = use_ability_cone_of_cold;
+  abilities[0] = get_ability_by_name("Fireball");
+  abilities[1] = get_ability_by_name("Blink");
+  abilities[2] = get_ability_by_name("Pillar of flame");
 }
 
 void handle_enemy_movement(Enemy* enemy, Vector2 target_position)
 {
   const static f32 ms         = 0.005f;
   Entity*          entity     = &entities[enemy->entity];
-  u32              tile_count = get_tile_count_per_row(entity->r);
+  u32              tile_count = get_tile_count_per_row();
 
   // enemy->path.path_count = 0;
   // find_path(&enemy->path, target_position, entity->position);
@@ -1489,8 +1490,8 @@ void handle_enemy_movement(Enemy* enemy, Vector2 target_position)
   f32     movement_remaining = ms;
   while (true)
   {
-    f32 x = tile_position_to_game(path.path[path_idx] >> 8, entity->r);
-    f32 y = tile_position_to_game(path.path[path_idx] & 0xFF, entity->r);
+    f32 x = tile_position_to_game(path.path[path_idx] >> 8);
+    f32 y = tile_position_to_game(path.path[path_idx] & 0xFF);
     path_idx++;
     if (compare_float(x, curr.x) && compare_float(y, curr.y))
     {
@@ -1824,7 +1825,7 @@ bool load_wave_from_file(Wave* wave, const char* filename)
     entity->r                   = enemy_data.radius;
     entity->velocity            = Vector2(0, 0);
 
-    u32 tile_count              = get_tile_count_per_row(entity->r);
+    u32 tile_count              = get_tile_count_per_row();
     enemy->path.path            = sta_allocate_struct(u16, tile_count * tile_count);
 
     CommandSpawnEnemyData* data = sta_allocate_struct(CommandSpawnEnemyData, 1);
@@ -1891,7 +1892,34 @@ bool load_entity_render_data_from_file(const char* file_location)
 
 static f32 p = PI;
 
-bool       load_data()
+bool       load_ability_from_file(const char* file_location)
+{
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, file_location))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+
+  int count     = parse_int_from_string(lines.strings[0]);
+  abilities     = sta_allocate_struct(Ability, count);
+  ability_count = count;
+
+  for (u32 i = 0, string_index = 1; i < count; i++)
+  {
+    char* name                  = lines.strings[string_index++];
+    u32   use_ability_index     = parse_int_from_string(lines.strings[string_index++]);
+    u32   cooldown              = parse_int_from_string(lines.strings[string_index++]);
+    abilities[i].name           = name;
+    abilities[i].cooldown_ticks = cooldown;
+    abilities[i].use_ability    = use_ability_function_ptrs[use_ability_index];
+    abilities[i].cooldown       = 0;
+  }
+  return true;
+}
+
+bool load_data()
 {
 
   const static char* enemy_data_location = "./data/formats/enemy.txt";
@@ -1946,6 +1974,12 @@ bool       load_data()
   if (!load_map_from_file(map_data_location))
   {
     logger.error("Failed to read map data from '%s'", map_data_location);
+    return false;
+  }
+  const static char* ability_data_location = "./data/formats/abilities.txt";
+  if (!load_ability_from_file(ability_data_location))
+  {
+    logger.error("Failed to read ability data from '%s'", ability_data_location);
     return false;
   }
   return true;
@@ -2073,7 +2107,6 @@ void render_entities()
       shader->set_vec3("viewPos", camera.translation);
       shader->set_mat4("projection", projection);
       shader->set_mat4("light_space_matrix", light_space_matrix);
-      // shader->set_vec3("viewPos", camera.translation);
       renderer.render_buffer(render_data->buffer_id);
 
       renderer.draw_circle(entity->position, entity->r, 1, RED, camera.get_view_matrix(), projection);
@@ -2272,10 +2305,10 @@ void render_paths(Wave* wave)
     for (u32 j = 0; j < path.path_count - 1; j++)
     {
       f32 x1, y1, x2, y2;
-      x1 = tile_position_to_game(path.path[j] >> 8, entities[wave->enemies[i].entity].r);
-      y1 = tile_position_to_game(path.path[j] & 0xFF, entities[wave->enemies[i].entity].r);
-      x2 = tile_position_to_game(path.path[j + 1] >> 8, entities[wave->enemies[i].entity].r);
-      y2 = tile_position_to_game(path.path[j + 1] & 0xFF, entities[wave->enemies[i].entity].r);
+      x1 = tile_position_to_game(path.path[j] >> 8);
+      y1 = tile_position_to_game(path.path[j] & 0xFF);
+      x2 = tile_position_to_game(path.path[j + 1] >> 8);
+      y2 = tile_position_to_game(path.path[j + 1] & 0xFF);
 
       renderer.draw_circle(entities[wave->enemies[i].entity].position, entities[wave->enemies[i].entity].r, 1, RED, m, m);
       renderer.draw_line(x1, y1, x2, y2, 1, BLUE);
@@ -2285,16 +2318,18 @@ void render_paths(Wave* wave)
 
 void debug_render_map_grid()
 {
-  u32 tile_count = 20;
-  f32 tile_size  = 0.1f;
+  u32 tile_count = get_tile_count_per_row();
+  f32 tile_size  = get_tile_size();
   for (u32 x = 0; x < tile_count; x++)
   {
-    f32 x0 = x * tile_size * 2.0f - 1.0f, x1 = x0 + tile_size * 2.0f;
+    f32 x0 = tile_position_to_game2(x);
+    f32 x1 = x0 + tile_size;
     for (u32 y = 0; y < tile_count; y++)
     {
       if (is_tile_in_map(x, y, tile_size))
       {
-        f32 y0 = y * tile_size * 2.0f - 1.0f, y1 = y0 + tile_size * 2.0f;
+        f32 y0 = tile_position_to_game2(y);
+        f32 y1 = y0 + tile_size;
         renderer.draw_line(x0, y0, x0, y1, 1, BLUE);
         renderer.draw_line(x1, y0, x1, y1, 1, BLUE);
         renderer.draw_line(x0, y1, x1, y1, 1, BLUE);
@@ -2456,9 +2491,6 @@ int main()
         render_static_geometry();
         render_entities();
         render_effects(game_running_ticks);
-        // render_paths(&wave);
-        // debug_render_map_grid();
-        // debug_render_everything(&wave);
         if (render_circle_on_mouse)
         {
           i32 sdl_x, sdl_y;
@@ -2469,7 +2501,7 @@ int main()
           Entity e = entities[player.entity];
           Mat44  m = {};
           m.identity();
-          renderer.draw_circle(Vector2(x, y), 0.1f, 2, BLUE, m, m);
+          renderer.draw_circle(Vector2(x, y), 0.05f, 2, BLUE, m, m);
         }
         if (debug_render)
         {
