@@ -146,8 +146,6 @@ struct StaticGeometry
   u32               count;
 };
 
-StaticGeometry    static_geometry;
-
 Camera            camera(Vector3(), -20.0f, -3.0f);
 Hero              player = {};
 Mat44             projection;
@@ -220,33 +218,6 @@ EntityRenderData* get_render_data_by_name(const char* name)
   }
   logger.error("Couldn't find render data with name '%s'", name);
   assert(!"Couldn't find render data!");
-}
-
-bool load_static_geometry_from_file(const char* filename)
-{
-  Buffer      buffer = {};
-  StringArray lines  = {};
-  if (!sta_read_file(&buffer, filename))
-  {
-    return false;
-  }
-  split_buffer_by_newline(&lines, &buffer);
-  static_geometry.count       = parse_int_from_string(lines.strings[0]);
-  static_geometry.position    = (Vector3*)sta_allocate_struct(Vector3, static_geometry.count);
-  static_geometry.models      = (Model*)sta_allocate_struct(Model, static_geometry.count);
-  static_geometry.render_data = (EntityRenderData*)sta_allocate_struct(EntityRenderData, static_geometry.count);
-  logger.info("Found %d static geometry items", static_geometry.count);
-  for (u32 i = 0, string_index = 1; i < static_geometry.count; i++)
-  {
-    static_geometry.render_data[i] = *get_render_data_by_name(lines.strings[string_index++]);
-    static_geometry.models[i]      = *get_model_by_name(lines.strings[string_index++]);
-    static_geometry.position[i].x  = parse_float_from_string(lines.strings[string_index++]);
-    static_geometry.position[i].y  = parse_float_from_string(lines.strings[string_index++]);
-    static_geometry.position[i].z  = parse_float_from_string(lines.strings[string_index++]);
-    logger.info("Item %d: '%s' at (%f, %f, %f)", i, static_geometry.render_data[i].name, static_geometry.position[i].x, static_geometry.position[i].y, static_geometry.position[i].z);
-  }
-
-  return true;
 }
 
 bool load_models_from_files(const char* file_location)
@@ -443,46 +414,19 @@ Vector2          closest_point_triangle(Triangle triangle, Vector2 p)
   return Vector2(x, y);
 }
 
-bool collides_with_static_geometry(Vector2& closest_point, Vector2 position, f32 r)
-{
-  for (u32 i = 0; i < static_geometry.count; i++)
-  {
-    Model*   model    = &static_geometry.models[i];
-    f32      scale    = static_geometry.render_data[i].scale;
-    Vector3  pos      = static_geometry.position[i];
-
-    Vector3* vertices = model->vertices;
-    u32*     indices  = model->indices;
-    for (u32 j = 0; j < model->index_count; j += 3)
-    {
-      Triangle t;
-      t.points[0].x = vertices[indices[j]].x * scale + pos.x;
-      t.points[0].y = vertices[indices[j]].y * scale + pos.y;
-      t.points[1].x = vertices[indices[j + 1]].x * scale + pos.x;
-      t.points[1].y = vertices[indices[j + 1]].y * scale + pos.y;
-      t.points[2].x = vertices[indices[j + 2]].x * scale + pos.x;
-      t.points[2].y = vertices[indices[j + 2]].y * scale + pos.y;
-      closest_point = closest_point_triangle(t, position);
-      if (closest_point.sub(position).len() < r)
-      {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
+bool collides_with_static_geometry(Vector2& closest_point, Vector2 position, f32 r);
 struct Map
 {
 public:
   Map()
   {
   }
-  u32*     indices;
-  Vector2* vertices;
-  u32      index_count;
-  u32      vertex_count;
-  void     init_map(Model* model)
+  u32*           indices;
+  Vector2*       vertices;
+  u32            index_count;
+  u32            vertex_count;
+  StaticGeometry static_geometry;
+  void           init_map(Model* model)
   {
     this->index_count    = model->vertex_count;
     this->vertex_count   = model->vertex_count;
@@ -552,7 +496,82 @@ public:
     assert(!"Was out of bounds!\n");
   }
 };
-Map map;
+Map  map;
+bool collides_with_static_geometry(Vector2& closest_point, Vector2 position, f32 r)
+{
+  for (u32 i = 0; i < map.static_geometry.count; i++)
+  {
+    Model*   model    = &map.static_geometry.models[i];
+    f32      scale    = map.static_geometry.render_data[i].scale;
+    Vector3  pos      = map.static_geometry.position[i];
+
+    Vector3* vertices = model->vertices;
+    u32*     indices  = model->indices;
+    for (u32 j = 0; j < model->index_count; j += 3)
+    {
+      Triangle t;
+      t.points[0].x = vertices[indices[j]].x * scale + pos.x;
+      t.points[0].y = vertices[indices[j]].y * scale + pos.y;
+      t.points[1].x = vertices[indices[j + 1]].x * scale + pos.x;
+      t.points[1].y = vertices[indices[j + 1]].y * scale + pos.y;
+      t.points[2].x = vertices[indices[j + 2]].x * scale + pos.x;
+      t.points[2].y = vertices[indices[j + 2]].y * scale + pos.y;
+      closest_point = closest_point_triangle(t, position);
+      if (closest_point.sub(position).len() < r)
+      {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+bool load_static_geometry_from_file(const char* filename)
+{
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, filename))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+  map.static_geometry.count       = parse_int_from_string(lines.strings[0]);
+  map.static_geometry.position    = (Vector3*)sta_allocate_struct(Vector3, map.static_geometry.count);
+  map.static_geometry.models      = (Model*)sta_allocate_struct(Model, map.static_geometry.count);
+  map.static_geometry.render_data = (EntityRenderData*)sta_allocate_struct(EntityRenderData, map.static_geometry.count);
+  logger.info("Found %d static geometry items", map.static_geometry.count);
+  for (u32 i = 0, string_index = 1; i < map.static_geometry.count; i++)
+  {
+    map.static_geometry.render_data[i] = *get_render_data_by_name(lines.strings[string_index++]);
+    map.static_geometry.models[i]      = *get_model_by_name(lines.strings[string_index++]);
+    map.static_geometry.position[i].x  = parse_float_from_string(lines.strings[string_index++]);
+    map.static_geometry.position[i].y  = parse_float_from_string(lines.strings[string_index++]);
+    map.static_geometry.position[i].z  = parse_float_from_string(lines.strings[string_index++]);
+    logger.info("Item %d: '%s' at (%f, %f, %f)", i, map.static_geometry.render_data[i].name, map.static_geometry.position[i].x, map.static_geometry.position[i].y, map.static_geometry.position[i].z);
+  }
+
+  return true;
+}
+
+bool load_map_from_file(const char* filename)
+{
+  Buffer      buffer = {};
+  StringArray lines  = {};
+  if (!sta_read_file(&buffer, filename))
+  {
+    return false;
+  }
+  split_buffer_by_newline(&lines, &buffer);
+
+  Model* model = get_model_by_name(lines.strings[0]);
+  f32    scale = parse_float_from_string(lines.strings[1]);
+  if (!load_static_geometry_from_file(lines.strings[2]))
+  {
+    logger.error("Failed to read static geometry data from '%s'", lines.strings[2]);
+    return false;
+  }
+  map.init_map(model);
+  return true;
+}
 
 struct HeapNode
 {
@@ -1895,10 +1914,10 @@ bool       load_data()
     logger.error("Failed to read render data from '%s'", render_data_location);
     return false;
   }
-  const static char* static_map_data_location = "./data/maps/map01_static.txt";
-  if (!load_static_geometry_from_file(static_map_data_location))
+  const static char* map_data_location = "./data/maps/map01.txt";
+  if (!load_map_from_file(map_data_location))
   {
-    logger.error("Failed to read static geometry data from '%s'", static_map_data_location);
+    logger.error("Failed to read map data from '%s'", map_data_location);
     return false;
   }
   return true;
@@ -2190,11 +2209,11 @@ void render_effects(u32 ticks)
 void render_static_geometry()
 {
   // load the static geometry that exists outside of the plane/map
-  for (u32 i = 0; i < static_geometry.count; i++)
+  for (u32 i = 0; i < map.static_geometry.count; i++)
   {
 
-    EntityRenderData* render_data = &static_geometry.render_data[i];
-    Vector3           cube_pos    = static_geometry.position[i];
+    EntityRenderData* render_data = &map.static_geometry.render_data[i];
+    Vector3           cube_pos    = map.static_geometry.position[i];
 
     Mat44             m           = {};
     m.identity();
@@ -2246,8 +2265,6 @@ int main()
     logger.error("Failed to parse wave!");
     return 1;
   }
-
-  map.init_map(get_model_by_name("model_map_with_hole"));
 
   u32      ticks        = 0;
   u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0;
