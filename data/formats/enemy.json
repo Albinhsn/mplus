@@ -1,1 +1,12 @@
-{"enemy_melee": {"type": 0, "hp": 1, "radius": 0.05}, "enemy_ranged": {"type": 1, "hp": 1, "radius": 0.05}}
+{
+  "enemy_melee": {
+    "type": 0,
+    "hp": 1,
+    "radius": 0.05
+  },
+  "enemy_ranged": {
+    "type": 1,
+    "hp": 1,
+    "radius": 0.05
+  }
+}

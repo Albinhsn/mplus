@@ -216,23 +216,31 @@ EntityRenderData* get_render_data_by_name(const char* name)
 bool load_models_from_files(const char* file_location)
 {
 
-  Buffer      buffer = {};
-  StringArray lines  = {};
+  Buffer buffer = {};
   if (!sta_read_file(&buffer, file_location))
   {
     return false;
   }
-  split_buffer_by_newline(&lines, &buffer);
+  Json json = {};
+  if (!sta_json_deserialize_from_string(&buffer, &json))
+  {
+    return false;
+  };
+  assert(json.headType == JSON_OBJECT && "Expected head to be object");
+  JsonObject* head  = &json.obj;
 
-  model_count = parse_int_from_string(lines.strings[0]);
+  u32         count = head->size;
 
-  models      = sta_allocate_struct(Model, model_count);
+  model_count       = count;
+
+  models            = sta_allocate_struct(Model, model_count);
   logger.info("Found %d models", model_count);
   for (u32 i = 0, string_index = 1; i < model_count; i++)
   {
     // ToDo free the loaded memory?
-    char*               model_name     = lines.strings[string_index++];
-    char*               model_location = lines.strings[string_index++];
+    JsonObject*         json_data      = head->values[i].obj;
+    char*               model_name     = head->keys[i];
+    char*               model_location = json_data->lookup_value("location")->string;
     ModelFileExtensions extension      = get_model_file_extension(model_location);
     Model*              model          = &models[i];
     model->name                        = model_name;
@@ -1755,25 +1763,34 @@ EnemyData  get_enemy_data_from_type(EnemyType type)
 
 bool load_enemies_from_file(const char* filename)
 {
-  Buffer      buffer = {};
-  StringArray lines  = {};
+  Buffer buffer = {};
   if (!sta_read_file(&buffer, filename))
   {
     return false;
   }
-  split_buffer_by_newline(&lines, &buffer);
+  Json json = {};
+  if (!sta_json_deserialize_from_string(&buffer, &json))
+  {
+    return false;
+  };
 
-  u32 count        = parse_int_from_string(lines.strings[0]);
-  enemy_data_count = count;
-  enemy_data       = sta_allocate_struct(EnemyData, count);
+  assert(json.headType == JSON_OBJECT && "Expected head to be object");
+  JsonObject* head  = &json.obj;
+
+  u32         count = head->size;
+  enemy_data_count  = count;
+  enemy_data        = sta_allocate_struct(EnemyData, count);
 
   for (u32 i = 0, string_index = 1; i < count; i++)
   {
-    EnemyData* data        = &enemy_data[i];
-    data->type             = (EnemyType)parse_int_from_string(lines.strings[string_index++]);
-    data->hp               = parse_int_from_string(lines.strings[string_index++]);
-    data->radius           = parse_float_from_string(lines.strings[string_index++]);
-    data->render_data_name = lines.strings[string_index++];
+    EnemyData*  data       = &enemy_data[i];
+    JsonObject* json_data  = head->values[i].obj;
+
+    data->type             = (EnemyType)json_data->lookup_value("type")->number;
+    data->hp               = json_data->lookup_value("hp")->number;
+    data->radius           = json_data->lookup_value("radius")->number;
+
+    data->render_data_name = head->keys[i];
     logger.info("Found enemy %d: %d %f %s", data->type, data->hp, data->radius, data->render_data_name);
   }
 
@@ -1928,7 +1945,7 @@ bool load_hero_from_file(const char* file_location)
     }
     hero->damage_taken_cd      = 0;
     hero->can_take_damage_tick = 0;
-    hero->name          = name;
+    hero->name                 = name;
 
     u32     entity_index       = get_new_entity();
     Entity* entity             = &entities[entity_index];
@@ -1975,14 +1992,14 @@ bool load_ability_from_file(const char* file_location)
 bool load_data()
 {
 
-  const static char* enemy_data_location = "./data/formats/enemy.txt";
+  const static char* enemy_data_location = "./data/formats/enemy.json";
   if (!load_enemies_from_file(enemy_data_location))
   {
     logger.error("Failed to read models from '%s'", enemy_data_location);
     return false;
   }
 
-  const static char* model_locations = "./data/formats/models.txt";
+  const static char* model_locations = "./data/formats/models.json";
   if (!load_models_from_files(model_locations))
   {
     logger.error("Failed to read models from '%s'", model_locations);
