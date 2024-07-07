@@ -852,6 +852,44 @@ bool       is_valid_tile(Vector2 position)
   }
   return false;
 }
+bool is_out_of_map_bounds(Vector2& closest_point, Vector2 position, f32 r)
+{
+  f32 distance = FLT_MAX;
+  for (u32 i = 0; i < map.vertex_count - 2; i += 3)
+  {
+    Triangle t;
+    t.points[0].x = map.vertices[map.indices[i]].x;
+    t.points[0].y = map.vertices[map.indices[i]].y;
+    t.points[1].x = map.vertices[map.indices[i + 1]].x;
+    t.points[1].y = map.vertices[map.indices[i + 1]].y;
+    t.points[2].x = map.vertices[map.indices[i + 2]].x;
+    t.points[2].y = map.vertices[map.indices[i + 2]].y;
+    Vector2 cp    = closest_point_triangle(t, position);
+    f32     len   = cp.sub(position).len();
+    if (len < r)
+    {
+      return false;
+    }
+    if (len < distance)
+    {
+      closest_point = cp;
+      distance      = len;
+    }
+  }
+  return true;
+}
+
+bool is_valid_position(Vector2 position, f32 r)
+{
+  Vector2 closest;
+  return is_out_of_map_bounds(closest, position, r) || collides_with_static_geometry(closest, position, r);
+}
+
+bool is_valid_position(Vector2& closest_position, Vector2 position, f32 r)
+{
+
+  return is_out_of_map_bounds(closest_position, position, r) || collides_with_static_geometry(closest_position, position, r);
+}
 
 Vector2 get_random_position(u32 tick, u32 enemy_counter, f32 r)
 {
@@ -881,7 +919,7 @@ Vector2 get_random_position(u32 tick, u32 enemy_counter, f32 r)
 
     distance_to_player = position.sub(player_position).len();
 
-  } while (!is_valid_tile(position) || collides_with_static_geometry(p, position, r) || distance_to_player < min_valid_distance);
+  } while (!is_valid_tile(position) || distance_to_player < min_valid_distance);
 
   return position;
 }
@@ -1166,42 +1204,6 @@ void handle_player_movement(Camera& camera, InputState* input, u32 tick)
   entities[player.entity].render_data->texture = renderer.get_texture(player.can_take_damage_tick >= SDL_GetTicks() ? "blue_texture" : "black_texture");
 }
 
-bool is_out_of_map_bounds(Vector2* closest_point, Map* map, Vector2 position)
-{
-  f32 distance = FLT_MAX;
-  for (u32 i = 0; i < map->vertex_count - 2; i += 3)
-  {
-    Triangle t;
-    t.points[0].x = map->vertices[map->indices[i]].x;
-    t.points[0].y = map->vertices[map->indices[i]].y;
-    t.points[1].x = map->vertices[map->indices[i + 1]].x;
-    t.points[1].y = map->vertices[map->indices[i + 1]].y;
-    t.points[2].x = map->vertices[map->indices[i + 2]].x;
-    t.points[2].y = map->vertices[map->indices[i + 2]].y;
-    if (point_in_triangle_2d(t, position))
-    {
-      return false;
-    }
-    Vector2 v   = closest_point_triangle(t, position);
-    f32     len = v.sub(position).len();
-    if (len < distance)
-    {
-      *closest_point = v;
-      distance       = len;
-    }
-  }
-  return true;
-}
-
-void detect_collision_out_of_bounds(Map* map, Vector2& position)
-{
-  Vector2 closest_point = {};
-  if (is_out_of_map_bounds(&closest_point, map, position))
-  {
-    position = closest_point;
-  }
-}
-
 static inline bool on_cooldown(Ability ability, u32 tick)
 {
   return tick < ability.cooldown;
@@ -1241,7 +1243,7 @@ bool use_ability_blink(Camera* camera, InputState* input, u32 ticks)
     position.y += direction.y;
     Vector2 closest_point = {};
     // ToDo This does not take into account the radius?
-    if (is_out_of_map_bounds(&closest_point, &map, position))
+    if (is_out_of_map_bounds(closest_point, position, player_entity.r))
     {
       position = closest_point;
       break;
@@ -1521,7 +1523,7 @@ bool player_is_visible(f32& angle, Vector2 position)
     position.y += direction.y * step_size;
     Vector2 closest_point = {};
     // ToDo this needs to change after geometry change
-    if (is_out_of_map_bounds(&closest_point, &map, position))
+    if (is_out_of_map_bounds(closest_point, position, player_entity.r) || collides_with_static_geometry(closest_point, position, player_entity.r))
     {
       return false;
     }
@@ -1668,7 +1670,7 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
         entity->position.y -= entity->velocity.y * diff;
       }
 
-      if (is_out_of_map_bounds(&closest_point, &map, entity->position))
+      if (is_out_of_map_bounds(closest_point, entity->position, entity->r))
       {
         if (entity->type == ENTITY_PLAYER_PROJECTILE || entity->type == ENTITY_ENEMY_PROJECTILE)
         {

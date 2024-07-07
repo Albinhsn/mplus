@@ -1,5 +1,6 @@
-hp
-render_data
-number of abilities
-ability 1
-ability 2
+1
+player
+5
+fireball
+blink
+cone of cold
