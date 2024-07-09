@@ -203,7 +203,6 @@ void InputState::update()
     case SDL_MOUSEWHEEL:
     {
       SDL_MouseWheelEvent e = event.wheel;
-      logger.info("Wheel: x:%d, y:%d, dir:%d, px:%f, py:%f, mx:%d, my:%d", e.x, e.y, e.direction, e.preciseX, e.preciseY, e.mouseX, e.mouseY);
       this->mouse_wheel_direction = e.preciseY;
       break;
     }

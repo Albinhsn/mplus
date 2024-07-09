@@ -50,6 +50,7 @@ Logger logger;
 #include "input.cpp"
 #include "renderer.cpp"
 #include "gltf.cpp"
+
 struct Sphere
 {
   Vector2 position;
@@ -144,29 +145,29 @@ struct StaticGeometry
   Vector3*          position;
   u32               count;
 };
+struct GameState
+{
+  u32                 score;
+  Camera              camera;
+  Mat44               projection;
+  Renderer            renderer;
+  Model*              models;
+  u32                 model_count;
+  RenderBuffer*       buffers;
+  u32                 buffer_count;
+  EntityRenderData*   render_data;
+  u32                 render_data_count;
+  Hero                player;
+  Entity*             entities;
+  u32                 entity_capacity;
+  u32                 entity_count;
+  bool                god;
+  AnimationController animation_controllers[50];
+  u32                 animation_controller_count;
+};
+GameState game_state;
 
-Camera              camera(Vector3(), 0.0f, -3.0f);
-Hero                player = {};
-Mat44               projection;
-Renderer            renderer;
-u32                 score;
-
-Model*              models;
-u32                 model_count;
-RenderBuffer*       buffers;
-u32                 buffer_count;
-EntityRenderData*   render_data;
-u32                 render_data_count;
-
-Entity*             entities;
-u32                 entity_capacity = 2;
-u32                 entity_count    = 0;
-bool                god             = false;
-
-AnimationController animation_controllers[50];
-u32                 animation_controller_count;
-
-void                set_animation(AnimationController* controller, u32 animation_index, u32 tick)
+void      set_animation(AnimationController* controller, u32 animation_index, u32 tick)
 {
   AnimationData* data                      = controller->animation_data;
 
@@ -212,7 +213,7 @@ void update_animation_to_idling(AnimationController* controller, u32 tick)
 
 AnimationController* animation_controller_create(AnimationData* data)
 {
-  AnimationController* controller          = &animation_controllers[animation_controller_count++];
+  AnimationController* controller          = &game_state.animation_controllers[game_state.animation_controller_count++];
   controller->current_animation_start_tick = 0;
   controller->current_animation            = 0;
   controller->transforms                   = sta_allocate_struct(Mat44, data->skeleton.joint_count);
@@ -224,9 +225,9 @@ AnimationController* animation_controller_create(AnimationData* data)
 
 void update_animations(u32 tick)
 {
-  for (u32 i = 0; i < animation_controller_count; i++)
+  for (u32 i = 0; i < game_state.animation_controller_count; i++)
   {
-    AnimationController* controller        = &animation_controllers[i];
+    AnimationController* controller        = &game_state.animation_controllers[i];
     Animation*           current_animation = &controller->animation_data->animations[controller->current_animation];
 
     assert(tick >= controller->current_animation_start_tick && "How did you manage this");
@@ -234,6 +235,7 @@ void update_animations(u32 tick)
     {
       if (controller->next_animation_index == -1)
       {
+        // ToDo interpolate between changes in poses
         set_animation(controller, "idle", tick);
       }
       else
@@ -252,11 +254,11 @@ void update_animations(u32 tick)
 
 u32 get_buffer_by_name(const char* filename)
 {
-  for (u32 i = 0; i < buffer_count; i++)
+  for (u32 i = 0; i < game_state.buffer_count; i++)
   {
-    if (compare_strings(buffers[i].model_name, filename))
+    if (compare_strings(game_state.buffers[i].model_name, filename))
     {
-      return buffers[i].buffer_id;
+      return game_state.buffers[i].buffer_id;
     }
   }
   logger.error("Couldn't find buffer '%s'", filename);
@@ -283,11 +285,11 @@ ModelFileExtensions get_model_file_extension(char* file_name)
 }
 Model* get_model_by_name(const char* filename)
 {
-  for (u32 i = 0; i < model_count; i++)
+  for (u32 i = 0; i < game_state.model_count; i++)
   {
-    if (compare_strings(filename, models[i].name))
+    if (compare_strings(filename, game_state.models[i].name))
     {
-      return &models[i];
+      return &game_state.models[i];
     }
   }
   logger.error("Didn't find model '%s'", filename);
@@ -296,11 +298,11 @@ Model* get_model_by_name(const char* filename)
 
 EntityRenderData* get_render_data_by_name(const char* name)
 {
-  for (u32 i = 0; i < render_data_count; i++)
+  for (u32 i = 0; i < game_state.render_data_count; i++)
   {
-    if (compare_strings(render_data[i].name, name))
+    if (compare_strings(game_state.render_data[i].name, name))
     {
-      return &render_data[i];
+      return &game_state.render_data[i];
     }
   }
   logger.error("Couldn't find render data with name '%s'", name);
@@ -321,22 +323,22 @@ bool load_models_from_files(const char* file_location)
     return false;
   };
   assert(json.headType == JSON_OBJECT && "Expected head to be object");
-  JsonObject* head  = &json.obj;
+  JsonObject* head       = &json.obj;
 
-  u32         count = head->size;
+  u32         count      = head->size;
 
-  model_count       = count;
+  game_state.model_count = count;
 
-  models            = sta_allocate_struct(Model, model_count);
-  logger.info("Found %d models", model_count);
-  for (u32 i = 0; i < model_count; i++)
+  game_state.models      = sta_allocate_struct(Model, game_state.model_count);
+  logger.info("Found %d models", game_state.model_count);
+  for (u32 i = 0; i < game_state.model_count; i++)
   {
     // ToDo free the loaded memory?
     JsonObject*         json_data      = head->values[i].obj;
     char*               model_name     = head->keys[i];
     char*               model_location = json_data->lookup_value("location")->string;
     ModelFileExtensions extension      = get_model_file_extension(model_location);
-    Model*              model          = &models[i];
+    Model*              model          = &game_state.models[i];
     model->name                        = model_name;
     switch (extension)
     {
@@ -439,12 +441,12 @@ bool load_buffers_from_files(const char* file_location)
     return false;
   };
   assert(json.headType == JSON_OBJECT && "Expected head to be object");
-  JsonObject* head  = &json.obj;
+  JsonObject* head        = &json.obj;
 
-  u32         count = head->size;
+  u32         count       = head->size;
 
-  buffers           = (RenderBuffer*)sta_allocate_struct(RenderBuffer, count);
-  buffer_count      = count;
+  game_state.buffers      = (RenderBuffer*)sta_allocate_struct(RenderBuffer, count);
+  game_state.buffer_count = count;
 
   for (u32 i = 0; i < count; i++)
   {
@@ -459,17 +461,17 @@ bool load_buffers_from_files(const char* file_location)
       attributes[j].count = attributes_json->values[j].obj->lookup_value("count")->number;
       attributes[j].type  = (BufferAttributeType)attributes_json->values[j].obj->lookup_value("type")->number;
     }
-    buffers[i].model_name = model_name;
-    buffers[i].buffer_id  = renderer.create_buffer_from_model(model, attributes, buffer_attribute_count);
-    logger.info("Loaded buffer '%s', id: %d", model_name, buffers[i].buffer_id);
+    game_state.buffers[i].model_name = model_name;
+    game_state.buffers[i].buffer_id  = game_state.renderer.create_buffer_from_model(model, attributes, buffer_attribute_count);
+    logger.info("Loaded buffer '%s', id: %d", model_name, game_state.buffers[i].buffer_id);
   }
   return true;
 }
 
 u32 get_new_entity()
 {
-  RESIZE_ARRAY(entities, Entity, entity_count, entity_capacity);
-  return entity_count++;
+  RESIZE_ARRAY(game_state.entities, Entity, game_state.entity_count, game_state.entity_capacity);
+  return game_state.entity_count++;
 }
 
 Vector2 closest_point_triangle(Triangle triangle, Vector2 p)
@@ -1095,7 +1097,7 @@ Vector2 get_random_position(u32 tick, u32 enemy_counter, f32 r)
 
   Vector2 position           = {};
 
-  Vector2 player_position    = entities[player.entity].position;
+  Vector2 player_position    = game_state.entities[game_state.player.entity].position;
 
   f32     distance_to_player;
   Vector2 p;
@@ -1201,7 +1203,7 @@ void add_command(CommandType type, void* data, u32 tick);
 void spawn(Wave* wave, u32 enemy_index)
 {
   Enemy*  enemy  = &wave->enemies[enemy_index];
-  Entity* entity = &entities[enemy->entity];
+  Entity* entity = &game_state.entities[enemy->entity];
   wave->spawn_count |= enemy_index == 0 ? 1 : ((u64)1 << (u64)enemy_index);
   wave->enemies_alive++;
   EntityRenderData* render_data = entity->render_data;
@@ -1248,17 +1250,17 @@ void run_command_explode_pillar_of_flame(void* data)
   pof_sphere.position = pof_data->position;
   pof_sphere.r        = 0.2f;
   // iterate over the entities
-  for (u32 i = 0; i < entity_count; i++)
+  for (u32 i = 0; i < game_state.entity_count; i++)
   {
-    if (entities[i].type == ENTITY_ENEMY && entities[i].hp > 0)
+    if (game_state.entities[i].type == ENTITY_ENEMY && game_state.entities[i].hp > 0)
     {
       Sphere enemy_sphere;
-      enemy_sphere.position = entities[i].position;
-      enemy_sphere.r        = entities[i].r;
+      enemy_sphere.position = game_state.entities[i].position;
+      enemy_sphere.r        = game_state.entities[i].r;
       if (sphere_sphere_collision(pof_sphere, enemy_sphere))
       {
-        score += 100;
-        entities[i].hp = 0;
+        game_state.score += 100;
+        game_state.entities[i].hp = 0;
       }
     }
   }
@@ -1282,14 +1284,14 @@ void run_command_find_path(void* data)
   const u32            next_tick    = 75;
   CommandFindPathData* path_data    = (CommandFindPathData*)data;
   path_data->enemy->path.path_count = 0;
-  find_path(&path_data->enemy->path, entities[player.entity].position, entities[path_data->enemy->entity].position, entities[path_data->enemy->entity].r);
+  find_path(&path_data->enemy->path, game_state.entities[game_state.player.entity].position, game_state.entities[path_data->enemy->entity].position, game_state.entities[path_data->enemy->entity].r);
   path_data->tick += next_tick;
   add_command(CMD_FIND_PATH, (void*)path_data, path_data->tick);
 }
 
 void run_command_stop_charge()
 {
-  player.can_move = true;
+  game_state.player.can_move = true;
 }
 
 void run_commands(u32 ticks)
@@ -1356,10 +1358,10 @@ void run_commands(u32 ticks)
 
 void handle_player_movement(Camera& camera, InputState* input, u32 tick)
 {
-  Entity*              entity      = &entities[player.entity];
+  Entity*              entity      = &game_state.entities[game_state.player.entity];
   EntityRenderData*    render_data = entity->render_data;
   AnimationController* controller  = render_data->animation_controller;
-  if (player.can_move)
+  if (game_state.player.can_move)
   {
     entity->velocity = {};
     f32 MS           = 0.01f;
@@ -1390,12 +1392,12 @@ void handle_player_movement(Camera& camera, InputState* input, u32 tick)
     }
   }
 
-  f32* mouse_pos                               = input->mouse_position;
-  entity->angle                                = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
+  f32* mouse_pos                                                     = input->mouse_position;
+  entity->angle                                                      = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
 
-  camera.translation                           = Vector3(-entity->position.x, -entity->position.y, 0.0);
+  camera.translation                                                 = Vector3(-entity->position.x, -entity->position.y, 0.0);
 
-  entities[player.entity].render_data->texture = renderer.get_texture("mutant_diffuse_texture");
+  game_state.entities[game_state.player.entity].render_data->texture = game_state.renderer.get_texture("mutant_diffuse_texture");
 }
 
 static inline bool on_cooldown(Ability ability, u32 tick)
@@ -1408,9 +1410,9 @@ void handle_abilities(Camera camera, InputState* input, u32 tick)
   const char keybinds[] = {'1', '2', '3', '4'};
   for (u32 i = 0; i < ArrayCount(keybinds); i++)
   {
-    if (input->is_key_pressed(keybinds[i]) && !on_cooldown(player.abilities[i], tick))
+    if (input->is_key_pressed(keybinds[i]) && !on_cooldown(game_state.player.abilities[i], tick))
     {
-      Ability* ability = &player.abilities[i];
+      Ability* ability = &game_state.player.abilities[i];
       if (ability->use_ability(&camera, input, tick))
       {
         ability->cooldown = tick + ability->cooldown_ticks;
@@ -1422,7 +1424,7 @@ void handle_abilities(Camera camera, InputState* input, u32 tick)
 bool use_ability_blink(Camera* camera, InputState* input, u32 ticks)
 {
 
-  Entity    player_entity = entities[player.entity];
+  Entity    player_entity = game_state.entities[game_state.player.entity];
   Vector2   position      = player_entity.position;
   f32       angle         = player_entity.angle;
 
@@ -1449,7 +1451,7 @@ bool use_ability_blink(Camera* camera, InputState* input, u32 ticks)
       break;
     }
   }
-  entities[player.entity].position = position;
+  game_state.entities[game_state.player.entity].position = position;
   return true;
 }
 
@@ -1458,13 +1460,13 @@ bool use_ability_fireball(Camera* camera, InputState* input, u32 ticks)
   // ToDo this can reuse dead fireballs?
 
   u32     entity_index = get_new_entity();
-  Entity* e            = &entities[entity_index];
+  Entity* e            = &game_state.entities[entity_index];
   e->type              = ENTITY_PLAYER_PROJECTILE;
 
   f32    ms            = 0.02;
 
-  Entity player_entity = entities[player.entity];
-  e->position          = entities[player.entity].position;
+  Entity player_entity = game_state.entities[game_state.player.entity];
+  e->position          = game_state.entities[game_state.player.entity].position;
   e->velocity          = Vector2(cosf(player_entity.angle) * ms, sinf(player_entity.angle) * ms);
   e->angle             = player_entity.angle;
   e->r                 = 0.03f;
@@ -1552,7 +1554,7 @@ bool use_ability_coc(Camera* camera, InputState* input, u32 ticks)
 
   // position is just the angle of the mouse, from our radius and outwards with half the length
   // the translation distance can be hardcoded
-  Entity player_entity = entities[player.entity];
+  Entity player_entity = game_state.entities[game_state.player.entity];
 
   effect.position      = player_entity.position;
   effect.position.x += cosf(player_entity.angle) * 0.25f;
@@ -1578,9 +1580,9 @@ bool use_ability_coc(Camera* camera, InputState* input, u32 ticks)
     vertices[i].y = effect.position.y + model->vertices[i].y * scale;
   }
 
-  for (u32 i = 0; i < entity_count; i++)
+  for (u32 i = 0; i < game_state.entity_count; i++)
   {
-    Entity* entity = &entities[i];
+    Entity* entity = &game_state.entities[i];
     if (entity->hp > 0 && entity->type == ENTITY_ENEMY)
     {
       for (u32 i = 0; i < model->index_count; i += 3)
@@ -1614,9 +1616,9 @@ bool use_ability_pillar_of_flame(Camera* camera, InputState* input, u32 ticks)
   Effect effect;
   effect.update_effect = 0;
   effect.render_data   = *get_render_data_by_name("pillar of flame");
-  Entity  entity       = entities[player.entity];
+  Entity  entity       = game_state.entities[game_state.player.entity];
 
-  Mat44   view         = camera->get_view_matrix().mul(projection);
+  Mat44   view         = camera->get_view_matrix().mul(game_state.projection);
 
   Vector2 point        = {};
   if (!find_cursor_position_on_map(point, input->mouse_position, view))
@@ -1652,7 +1654,7 @@ bool use_ability_melee(Camera* camera, InputState* input, u32 ticks)
 
   // position is just the angle of the mouse, from our radius and outwards with half the length
   // the translation distance can be hardcoded
-  Entity player_entity = entities[player.entity];
+  Entity player_entity = game_state.entities[game_state.player.entity];
 
   effect.position      = player_entity.position;
   effect.position.x += cosf(player_entity.angle) * 0.05f;
@@ -1678,9 +1680,9 @@ bool use_ability_melee(Camera* camera, InputState* input, u32 ticks)
     vertices[i].y = effect.position.y + model->vertices[i].y * scale;
   }
 
-  for (u32 i = 0; i < entity_count; i++)
+  for (u32 i = 0; i < game_state.entity_count; i++)
   {
-    Entity* entity = &entities[i];
+    Entity* entity = &game_state.entities[i];
     if (entity->hp > 0 && entity->type == ENTITY_ENEMY)
     {
       for (u32 i = 0; i < model->index_count; i += 3)
@@ -1714,10 +1716,10 @@ bool use_ability_melee(Camera* camera, InputState* input, u32 ticks)
 }
 bool use_ability_charge(Camera* camera, InputState* input, u32 ticks)
 {
-  player.can_move = false;
-  Entity* p       = &entities[player.entity];
-  p->velocity.x   = cosf(p->angle) * 0.1f;
-  p->velocity.y   = sinf(p->angle) * 0.1f;
+  game_state.player.can_move = false;
+  Entity* p                  = &game_state.entities[game_state.player.entity];
+  p->velocity.x              = cosf(p->angle) * 0.1f;
+  p->velocity.y              = sinf(p->angle) * 0.1f;
   add_command(CMD_STOP_CHARGE, 0, ticks + 150);
   AnimationController* controller = p->render_data->animation_controller;
   if (controller)
@@ -1732,7 +1734,7 @@ bool use_ability_thunderclap(Camera* camera, InputState* input, u32 ticks)
   Effect effect;
   effect.update_effect  = 0;
   effect.render_data    = *get_render_data_by_name("pillar of flame");
-  Entity entity         = entities[player.entity];
+  Entity entity         = game_state.entities[game_state.player.entity];
 
   effect.position       = entity.position;
 
@@ -1754,9 +1756,9 @@ bool use_ability_thunderclap(Camera* camera, InputState* input, u32 ticks)
     vertices[i].y = effect.position.y + model->vertices[i].y * scale;
   }
 
-  for (u32 i = 0; i < entity_count; i++)
+  for (u32 i = 0; i < game_state.entity_count; i++)
   {
-    Entity* entity = &entities[i];
+    Entity* entity = &game_state.entities[i];
     if (entity->hp > 0 && entity->type == ENTITY_ENEMY)
     {
       for (u32 i = 0; i < model->index_count; i += 3)
@@ -1829,7 +1831,7 @@ void read_abilities(Ability* abilities)
 void handle_enemy_movement(Enemy* enemy, Vector2 target_position)
 {
   const static f32 ms         = 0.005f;
-  Entity*          entity     = &entities[enemy->entity];
+  Entity*          entity     = &game_state.entities[enemy->entity];
   u32              tile_count = get_tile_count_per_row();
 
   // enemy->path.path_count = 0;
@@ -1889,7 +1891,7 @@ bool player_is_visible(f32& angle, Vector2 position)
 {
 
   const f32 step_size     = 0.005f;
-  Entity    player_entity = entities[player.entity];
+  Entity    player_entity = game_state.entities[game_state.player.entity];
   // ToDo this also just checks for the origin of the player and not the hitbox
   Vector2 direction = player_entity.position.sub(position);
 
@@ -1925,18 +1927,18 @@ void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
 
   Sphere player_sphere;
 
-  player_sphere.r        = entities[player.entity].r;
-  player_sphere.position = entities[player.entity].position;
+  player_sphere.r        = game_state.entities[game_state.player.entity].r;
+  player_sphere.position = game_state.entities[game_state.player.entity].position;
 
   // check if we spawn
 
-  Vector2 player_position = entities[player.entity].position;
+  Vector2 player_position = game_state.entities[game_state.player.entity].position;
   u32     spawn_count     = __builtin_popcountll(wave->spawn_count);
   assert(spawn_count <= wave->enemy_count && "More spawning then enemies?");
   for (u32 i = 0; i < spawn_count; i++)
   {
     Enemy*  enemy  = &wave->enemies[i];
-    Entity* entity = &entities[enemy->entity];
+    Entity* entity = &game_state.entities[enemy->entity];
     if (entity->hp > 0)
     {
       if (enemy->can_move)
@@ -1959,11 +1961,11 @@ void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
         if (sphere_sphere_collision(player_sphere, enemy_sphere))
         {
           u32 tick = SDL_GetTicks();
-          if (tick >= player.can_take_damage_tick && !god)
+          if (tick >= game_state.player.can_take_damage_tick && !game_state.god)
           {
-            player.can_take_damage_tick = tick + player.damage_taken_cd;
+            game_state.player.can_take_damage_tick = tick + game_state.player.damage_taken_cd;
             // entities[player->entity].hp -= 1;
-            logger.info("Took damage, hp: %d %d %d", player.entity, enemy->entity, i);
+            logger.info("Took damage, hp: %d %d %d", game_state.player.entity, enemy->entity, i);
           }
         }
         break;
@@ -1985,8 +1987,8 @@ void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
             arrow_data->enemy                             = enemy;
             add_command(CMD_LET_RANGED_MOVE_AFTER_SHOOTING, (void*)arrow_data, tick + 300);
             u32     entity_index  = get_new_entity();
-            Entity* entity        = &entities[enemy->entity];
-            Entity* e             = &entities[entity_index];
+            Entity* entity        = &game_state.entities[enemy->entity];
+            Entity* e             = &game_state.entities[entity_index];
             e->type               = ENTITY_ENEMY_PROJECTILE;
 
             f32 ms                = 0.01;
@@ -2011,7 +2013,7 @@ void handle_collision(Entity* e1, Entity* e2, Wave* wave)
 {
   if ((e1->type == ENTITY_ENEMY && e2->type == ENTITY_PLAYER_PROJECTILE) || (e1->type == ENTITY_PLAYER_PROJECTILE && e2->type == ENTITY_ENEMY))
   {
-    score += 100;
+    game_state.score += 100;
     e1->hp = 0;
     e2->hp = 0;
     wave->enemies_alive -= 1;
@@ -2022,9 +2024,9 @@ void handle_collision(Entity* e1, Entity* e2, Wave* wave)
   }
   if ((e1->type == ENTITY_ENEMY && e2->type == ENTITY_PLAYER) || (e1->type == ENTITY_PLAYER && e2->type == ENTITY_ENEMY))
   {
-    if (!player.can_move)
+    if (!game_state.player.can_move)
     {
-      player.can_move = true;
+      game_state.player.can_move = true;
       if (e1->type == ENTITY_ENEMY)
       {
         e1->hp -= 1;
@@ -2061,9 +2063,9 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
         {
           entity->hp = 0;
         }
-        if (entity->type == ENTITY_PLAYER && !player.can_move)
+        if (entity->type == ENTITY_PLAYER && !game_state.player.can_move)
         {
-          player.can_move = true;
+          game_state.player.can_move = true;
         }
 
         entity->position.x -= entity->velocity.x * diff;
@@ -2076,9 +2078,9 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
         {
           entity->hp = 0;
         }
-        if (entity->type == ENTITY_PLAYER && !player.can_move)
+        if (entity->type == ENTITY_PLAYER && !game_state.player.can_move)
         {
-          player.can_move = true;
+          game_state.player.can_move = true;
         }
         entity->position = closest_point;
       }
@@ -2206,7 +2208,7 @@ bool load_wave_from_file(Wave* wave, const char* filename)
     u32 entity_idx              = get_new_entity();
     enemy->entity               = entity_idx;
 
-    Entity* entity              = &entities[entity_idx];
+    Entity* entity              = &game_state.entities[entity_idx];
     entity->render_data         = get_render_data_by_name(enemy_data.render_data_name);
     entity->type                = ENTITY_ENEMY;
     entity->angle               = 0.0f;
@@ -2241,15 +2243,15 @@ bool load_entity_render_data_from_file(const char* file_location)
     return false;
   };
   assert(json.headType == JSON_OBJECT && "Expected head to be object");
-  JsonObject* head  = &json.obj;
+  JsonObject* head             = &json.obj;
 
-  u32         count = head->size;
+  u32         count            = head->size;
 
-  render_data       = sta_allocate_struct(EntityRenderData, count);
-  render_data_count = count;
+  game_state.render_data       = sta_allocate_struct(EntityRenderData, count);
+  game_state.render_data_count = count;
   for (u32 i = 0; i < count; i++)
   {
-    EntityRenderData* data      = &render_data[i];
+    EntityRenderData* data      = &game_state.render_data[i];
     data->name                  = head->keys[i];
     JsonObject* render_data_obj = head->values[i].obj;
     if (render_data_obj->lookup_value("animation"))
@@ -2267,8 +2269,8 @@ bool load_entity_render_data_from_file(const char* file_location)
     const char* shader    = render_data_obj->lookup_value("shader")->string;
     f32         scale     = render_data_obj->lookup_value("scale")->number;
     const char* buffer_id = render_data_obj->lookup_value("buffer")->string;
-    data->texture         = renderer.get_texture(texture);
-    data->shader          = renderer.get_shader_by_name(shader);
+    data->texture         = game_state.renderer.get_texture(texture);
+    data->shader          = game_state.renderer.get_shader_by_name(shader);
     data->scale           = scale;
     data->buffer_id       = get_buffer_by_name(buffer_id);
     logger.info("Loaded render data for '%s': texture: %s, shader: %s, scale: %s,  buffer: %s", data->name, texture, shader, scale, buffer_id);
@@ -2333,7 +2335,7 @@ bool load_hero_from_file(const char* file_location)
 
     JsonObject* hero_obj       = head->values[i].obj;
     u32         entity_index   = get_new_entity();
-    Entity*     entity         = &entities[entity_index];
+    Entity*     entity         = &game_state.entities[entity_index];
     hero->entity               = entity_index;
     entity->type               = ENTITY_PLAYER;
     entity->render_data        = get_render_data_by_name("player");
@@ -2397,14 +2399,14 @@ bool load_data()
   }
 
   const static char* texture_locations = "./data/formats/textures.json";
-  if (!renderer.load_textures_from_files(texture_locations))
+  if (!game_state.renderer.load_textures_from_files(texture_locations))
   {
     logger.error("Failed to read textures from '%s'", texture_locations);
     return false;
   }
 
   const static char* shader_locations = "./data/formats/shader.json";
-  if (!renderer.load_shaders_from_files(shader_locations))
+  if (!game_state.renderer.load_shaders_from_files(shader_locations))
   {
     logger.error("Failed to read shaders from '%s'", shader_locations);
     return false;
@@ -2464,8 +2466,8 @@ void    render_to_depth_buffer(Vector3 light_position)
 {
 
   glCullFace(GL_FRONT);
-  renderer.change_viewport(renderer.shadow_width, renderer.shadow_height);
-  glBindFramebuffer(GL_FRAMEBUFFER, renderer.shadow_map_framebuffer);
+  game_state.renderer.change_viewport(game_state.renderer.shadow_width, game_state.renderer.shadow_height);
+  glBindFramebuffer(GL_FRAMEBUFFER, game_state.renderer.shadow_map_framebuffer);
   glClear(GL_DEPTH_BUFFER_BIT);
 
   static u32 vao = 0, vbo = 0, ebo = 0;
@@ -2486,13 +2488,13 @@ void    render_to_depth_buffer(Vector3 light_position)
 
     sta_glBindVertexArray(0);
   }
-  Shader depth_shader = *renderer.get_shader_by_index(renderer.get_shader_by_name("depth"));
+  Shader depth_shader = *game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("depth"));
   Mat44  m            = {};
   m.identity();
   depth_shader.use();
 
   Mat44 l            = Mat44::look_at(light_position, Vector3(0, 0, 0), Vector3(0, 1, 0));
-  Mat44 o            = Mat44::orthographic(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 7.5f);
+  Mat44 o            = Mat44::orthographic(-5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 7.5f);
   light_space_matrix = l.mul(o);
 
   // bind the light space matrix
@@ -2508,8 +2510,30 @@ void    render_to_depth_buffer(Vector3 light_position)
   sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * map_model->index_count, map_model->indices, GL_DYNAMIC_DRAW);
   glDrawElements(GL_TRIANGLES, map_model->index_count, GL_UNSIGNED_INT, 0);
 
+  for (u32 i = 0; i < game_state.entity_count; i++)
+  {
+    Entity*           entity      = &game_state.entities[i];
+    EntityRenderData* render_data = entity->render_data;
+    Model*            model       = get_model_by_name(game_state.buffers[entity->render_data->buffer_id].model_name);
+
+    m.identity();
+    m = m.scale(render_data->scale);
+    if (i == game_state.player.entity)
+    {
+      m = m.rotate_x(90);
+    }
+    m = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
+    m = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
+    depth_shader.set_mat4("model", m);
+    sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    sta_glBufferData(GL_ARRAY_BUFFER, sizeof(Vector3) * model->vertex_count, model->vertices, GL_DYNAMIC_DRAW);
+    sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * model->index_count, model->indices, GL_DYNAMIC_DRAW);
+    glDrawElements(GL_TRIANGLES, model->index_count, GL_UNSIGNED_INT, 0);
+  }
+
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  renderer.reset_viewport_to_screen_size();
+  game_state.renderer.reset_viewport_to_screen_size();
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glCullFace(GL_BACK);
 }
@@ -2517,7 +2541,7 @@ void    render_to_depth_buffer(Vector3 light_position)
 void render_map(u32 map_shader_index, u32 map_texture, u32 map_buffer, Vector3 view_position)
 {
 
-  Shader* map_shader = renderer.get_shader_by_index(map_shader_index);
+  Shader* map_shader = game_state.renderer.get_shader_by_index(map_shader_index);
 
   map_shader->use();
   Mat44   m;
@@ -2527,55 +2551,55 @@ void render_map(u32 map_shader_index, u32 map_texture, u32 map_buffer, Vector3 v
   map_shader->set_vec3("light_position", light_position);
   map_shader->set_mat4("light_space_matrix", light_space_matrix);
   map_shader->set_mat4("model", m);
-  map_shader->set_mat4("view", camera.get_view_matrix());
-  map_shader->set_mat4("projection", projection);
-  map_shader->set_vec3("viewPos", Vector3(-camera.translation.x, -camera.translation.y, -camera.z));
+  map_shader->set_mat4("view", game_state.camera.get_view_matrix());
+  map_shader->set_mat4("projection", game_state.projection);
+  map_shader->set_vec3("viewPos", Vector3(-game_state.camera.translation.x, -game_state.camera.translation.y, -game_state.camera.z));
 
   // render map
-  renderer.bind_texture(*map_shader, "texture1", map_texture);
-  renderer.bind_texture(*map_shader, "shadow_map", renderer.depth_texture);
+  game_state.renderer.bind_texture(*map_shader, "texture1", map_texture);
+  game_state.renderer.bind_texture(*map_shader, "shadow_map", game_state.renderer.depth_texture);
   // map_shader->set_vec3("viewPos", view_position);
-  renderer.render_buffer(map_buffer);
+  game_state.renderer.render_buffer(map_buffer);
 }
 
 void render_entities(u32 game_running_ticks)
 {
-  for (u32 i = 0; i < entity_count; i++)
+  for (u32 i = 0; i < game_state.entity_count; i++)
   {
-    Entity* entity = &entities[i];
+    Entity* entity = &game_state.entities[i];
     if (entity->hp > 0)
     {
       EntityRenderData* render_data = entity->render_data;
-      Shader*           shader      = renderer.get_shader_by_index(render_data->shader);
+      Shader*           shader      = game_state.renderer.get_shader_by_index(render_data->shader);
       shader->use();
       Mat44 m = {};
 
       m.identity();
       m = m.scale(render_data->scale);
-      if (i == player.entity)
+      if (i == game_state.player.entity)
       {
         m = m.rotate_x(90);
       }
       m = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
       m = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
 
-      renderer.bind_texture(*shader, "texture1", render_data->texture);
-      renderer.bind_texture(*shader, "shadow_map", renderer.depth_texture);
+      game_state.renderer.bind_texture(*shader, "texture1", render_data->texture);
+      game_state.renderer.bind_texture(*shader, "shadow_map", game_state.renderer.depth_texture);
       Vector3 ambient_lighting(0.25, 0.25, 0.25);
       shader->set_vec3("ambient_lighting", ambient_lighting);
       shader->set_mat4("model", m);
-      shader->set_mat4("view", camera.get_view_matrix());
-      shader->set_vec3("viewPos", camera.translation);
-      shader->set_mat4("projection", projection);
+      shader->set_mat4("view", game_state.camera.get_view_matrix());
+      shader->set_vec3("viewPos", game_state.camera.translation);
+      shader->set_mat4("projection", game_state.projection);
       shader->set_mat4("light_space_matrix", light_space_matrix);
       if (render_data->animation_controller)
       {
         shader->set_mat4("jointTransforms", render_data->animation_controller->transforms, render_data->animation_controller->animation_data->skeleton.joint_count);
       }
 
-      renderer.render_buffer(render_data->buffer_id);
+      game_state.renderer.render_buffer(render_data->buffer_id);
 
-      renderer.draw_circle(entity->position, entity->r, 1, RED, camera.get_view_matrix(), projection);
+      game_state.renderer.draw_circle(entity->position, entity->r, 1, RED, game_state.camera.get_view_matrix(), game_state.projection);
     }
   }
 }
@@ -2593,23 +2617,23 @@ void render_console(Hero* player, InputState* input_state, char* console_buf, u3
       u32 spawn_count     = __builtin_popcountll(wave->spawn_count);
       for (u32 i = 0; i < spawn_count; i++)
       {
-        Entity* e = &entities[wave->enemies[i].entity];
+        Entity* e = &game_state.entities[wave->enemies[i].entity];
         e->hp     = 0;
       }
-      wave->spawn_count           = 0;
-      game_running_ticks          = 0;
-      entities[player->entity].hp = 3;
-      score                       = 0;
+      wave->spawn_count                      = 0;
+      game_running_ticks                     = 0;
+      game_state.entities[player->entity].hp = 3;
+      game_state.score                       = 0;
     }
     else if (compare_strings("vsync", console_buf))
     {
-      renderer.toggle_vsync();
-      logger.info("toggled vsync to %d!\n", renderer.vsync);
+      game_state.renderer.toggle_vsync();
+      logger.info("toggled vsync to %d!\n", game_state.renderer.vsync);
     }
     else if (compare_strings("god", console_buf))
     {
-      god = !god;
-      logger.info("godmode toggled to %d!\n", god);
+      game_state.god = !game_state.god;
+      logger.info("godmode toggled to %d!\n", game_state.god);
     }
     else if (compare_strings("debug", console_buf))
     {
@@ -2622,7 +2646,7 @@ void render_console(Hero* player, InputState* input_state, char* console_buf, u3
     }
     else if (compare_strings("reload", console_buf))
     {
-      renderer.reload_shaders();
+      game_state.renderer.reload_shaders();
     }
     memset(console_buf, 0, console_buf_size);
   }
@@ -2640,7 +2664,7 @@ void update(Wave* wave, Camera& camera, InputState* input_state, u32 game_runnin
   handle_abilities(camera, input_state, game_running_ticks);
   handle_player_movement(camera, input_state, game_running_ticks);
   run_commands(game_running_ticks);
-  update_entities(entities, entity_count, wave, tick_difference);
+  update_entities(game_state.entities, game_state.entity_count, wave, tick_difference);
   update_enemies(wave, tick_difference, game_running_ticks);
 
   update_animations(game_running_ticks);
@@ -2654,11 +2678,11 @@ inline bool handle_wave_over(Wave* wave)
 
 void debug_render_depth_texture()
 {
-  Shader q_shader = *renderer.get_shader_by_index(renderer.get_shader_by_name("quad"));
+  Shader q_shader = *game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("quad"));
   q_shader.use();
 
-  renderer.bind_texture(q_shader, "texture1", renderer.depth_texture);
-  renderer.enable_2d_rendering();
+  game_state.renderer.bind_texture(q_shader, "texture1", game_state.renderer.depth_texture);
+  game_state.renderer.enable_2d_rendering();
   static u32 vao = 0, vbo = 0, ebo = 0;
 
   if (vao == 0)
@@ -2689,7 +2713,7 @@ void debug_render_depth_texture()
 
   sta_glBindVertexArray(vao);
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-  renderer.disable_2d_rendering();
+  game_state.renderer.disable_2d_rendering();
 }
 
 void render_effects(u32 ticks)
@@ -2719,7 +2743,7 @@ void render_effects(u32 ticks)
       }
     }
     EntityRenderData* render_data = &effect.render_data;
-    Shader*           shader      = renderer.get_shader_by_index(render_data->shader);
+    Shader*           shader      = game_state.renderer.get_shader_by_index(render_data->shader);
     shader->use();
     Mat44 m = {};
     m.identity();
@@ -2727,11 +2751,11 @@ void render_effects(u32 ticks)
     m = m.rotate_z(RADIANS_TO_DEGREES(effect.angle) + 90);
     m = m.translate(Vector3(effect.position.x, effect.position.y, 0.0f));
 
-    renderer.bind_texture(*shader, "texture1", render_data->texture);
+    game_state.renderer.bind_texture(*shader, "texture1", render_data->texture);
     shader->set_mat4("model", m);
-    shader->set_mat4("view", camera.get_view_matrix());
-    shader->set_mat4("projection", projection);
-    renderer.render_buffer(render_data->buffer_id);
+    shader->set_mat4("view", game_state.camera.get_view_matrix());
+    shader->set_mat4("projection", game_state.projection);
+    game_state.renderer.render_buffer(render_data->buffer_id);
 
     node = node->next;
   }
@@ -2750,15 +2774,15 @@ void render_static_geometry()
     m.identity();
     m              = m.scale(render_data->scale).translate(cube_pos);
 
-    Shader* shader = renderer.get_shader_by_index(render_data->shader);
-    renderer.bind_texture(*shader, "texture1", render_data->texture);
-    renderer.bind_texture(*shader, "shadow_map", renderer.depth_texture);
+    Shader* shader = game_state.renderer.get_shader_by_index(render_data->shader);
+    game_state.renderer.bind_texture(*shader, "texture1", render_data->texture);
+    game_state.renderer.bind_texture(*shader, "shadow_map", game_state.renderer.depth_texture);
     shader->set_mat4("model", m);
-    shader->set_mat4("view", camera.get_view_matrix());
-    shader->set_vec3("viewPos", camera.translation);
-    shader->set_mat4("projection", projection);
+    shader->set_mat4("view", game_state.camera.get_view_matrix());
+    shader->set_vec3("viewPos", game_state.camera.translation);
+    shader->set_mat4("projection", game_state.projection);
     shader->set_mat4("light_space_matrix", light_space_matrix);
-    renderer.render_buffer(render_data->buffer_id);
+    game_state.renderer.render_buffer(render_data->buffer_id);
   }
 }
 
@@ -2778,8 +2802,8 @@ void render_paths(Wave* wave)
       x2 = tile_position_to_game(path.path[j + 1] >> 8);
       y2 = tile_position_to_game(path.path[j + 1] & 0xFF);
 
-      renderer.draw_circle(entities[wave->enemies[i].entity].position, entities[wave->enemies[i].entity].r, 1, RED, m, m);
-      renderer.draw_line(x1, y1, x2, y2, 1, BLUE);
+      game_state.renderer.draw_circle(game_state.entities[wave->enemies[i].entity].position, game_state.entities[wave->enemies[i].entity].r, 1, RED, m, m);
+      game_state.renderer.draw_line(x1, y1, x2, y2, 1, BLUE);
     }
   }
 }
@@ -2798,10 +2822,10 @@ void debug_render_map_grid()
       {
         f32 y0 = tile_position_to_game2(y);
         f32 y1 = y0 + tile_size;
-        renderer.draw_line(x0, y0, x0, y1, 1, BLUE);
-        renderer.draw_line(x1, y0, x1, y1, 1, BLUE);
-        renderer.draw_line(x0, y1, x1, y1, 1, BLUE);
-        renderer.draw_line(x0, y0, x1, y0, 1, BLUE);
+        game_state.renderer.draw_line(x0, y0, x0, y1, 1, BLUE);
+        game_state.renderer.draw_line(x1, y0, x1, y1, 1, BLUE);
+        game_state.renderer.draw_line(x0, y1, x1, y1, 1, BLUE);
+        game_state.renderer.draw_line(x0, y0, x1, y0, 1, BLUE);
       }
     }
   }
@@ -2814,42 +2838,45 @@ void debug_render_everything(Wave* wave)
   m.identity();
   debug_render_map_grid();
   render_paths(wave);
-  renderer.draw_circle(entities[player.entity].position, entities[player.entity].r, 1, YELLOW, m, m);
+  game_state.renderer.draw_circle(game_state.entities[game_state.player.entity].position, game_state.entities[game_state.player.entity].r, 1, YELLOW, m, m);
 }
 
 int main()
 {
 
-  animation_controller_count = 0;
+  game_state.camera                     = Camera(Vector3(0, 0, 0), -30, -3);
+
+  game_state.animation_controller_count = 0;
 
   effects.pool.init(sta_allocate(sizeof(EffectNode) * 25), sizeof(EffectNode), 25);
   command_queue.pool.init(sta_allocate(sizeof(CommandNode) * 300), sizeof(CommandNode), 300);
-  command_queue.cmds     = 0;
+  command_queue.cmds         = 0;
 
-  entities               = (Entity*)sta_allocate_struct(Entity, entity_capacity);
+  game_state.entity_capacity = 2;
+  game_state.entities        = (Entity*)sta_allocate_struct(Entity, game_state.entity_capacity);
 
   const int screen_width = 620, screen_height = 480;
-  renderer = Renderer(screen_width, screen_height, &logger, true);
+  game_state.renderer = Renderer(screen_width, screen_height, &logger, true);
 
-  InputState input_state(renderer.window);
+  InputState input_state(game_state.renderer.window);
 
   if (!load_data())
   {
     return 1;
   }
 
-  renderer.init_depth_texture();
+  game_state.renderer.init_depth_texture();
 
-  projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
+  game_state.projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
 
-  init_imgui(renderer.window, renderer.context);
+  init_imgui(game_state.renderer.window, game_state.renderer.context);
 
-  u32    map_shader  = renderer.get_shader_by_name("model2");
+  u32    map_shader  = game_state.renderer.get_shader_by_name("model2");
   Model* map_model   = get_model_by_name("model_map_with_pillar");
   u32    map_buffer  = get_buffer_by_name("model_map_with_pillar");
-  u32    map_texture = renderer.get_texture("dirt_texture");
+  u32    map_texture = game_state.renderer.get_texture("dirt_texture");
 
-  init_player(&player);
+  init_player(&game_state.player);
 
   Wave wave = {};
   if (!load_wave_from_file(&wave, "./data/waves/wave01.txt"))
@@ -2868,7 +2895,7 @@ int main()
   memset(console_buf, 0, ArrayCount(console_buf));
 
   // ToDo make this work when game over is implemented
-  score             = 0;
+  game_state.score  = 0;
 
   bool debug_render = false;
 
@@ -2885,19 +2912,19 @@ int main()
         break;
       }
 
-      camera.z += input_state.mouse_wheel_direction * 0.1f;
-      camera.z = MAX(MIN(-1.5, camera.z), -4.5);
+      game_state.camera.z += input_state.mouse_wheel_direction * 0.1f;
+      game_state.camera.z = MAX(MIN(-1.5, game_state.camera.z), -4.5);
       if (input_state.is_key_pressed('q'))
       {
-        camera.z_rotation += 0.1f;
+        game_state.camera.z_rotation += 0.1f;
       }
       if (input_state.is_key_pressed('e'))
       {
-        camera.z_rotation -= 0.1f;
+        game_state.camera.z_rotation -= 0.1f;
       }
 
-      renderer.clear_framebuffer();
-      if (entities[player.entity].hp == 0)
+      game_state.renderer.clear_framebuffer();
+      if (game_state.entities[game_state.player.entity].hp == 0)
       {
         // ToDo Game over
         logger.info("Game over player died");
@@ -2913,8 +2940,8 @@ int main()
       }
       if (input_state.is_key_pressed('l'))
       {
-        camera.rotation -= 1;
-        logger.info("New rotation %f", camera.rotation);
+        game_state.camera.rotation -= 1;
+        logger.info("New rotation %f", game_state.camera.rotation);
       }
       if (input_state.is_key_released('x'))
       {
@@ -2929,7 +2956,7 @@ int main()
         continue;
       }
 
-      ui_state               = render_ui(ui_state, &player, ms, fps, update_ticks, render_ticks, game_running_ticks, screen_height);
+      ui_state               = render_ui(ui_state, &game_state.player, ms, fps, update_ticks, render_ticks, game_running_ticks, screen_height);
 
       u32 prior_render_ticks = 0;
       if (ui_state == UI_STATE_GAME_RUNNING)
@@ -2945,7 +2972,7 @@ int main()
         assert(SDL_GetTicks() - ticks > 0 && "How is this possible?");
         game_running_ticks += SDL_GetTicks() - ticks;
 
-        update(&wave, camera, &input_state, game_running_ticks, ticks, tick_difference);
+        update(&wave, game_state.camera, &input_state, game_running_ticks, ticks, tick_difference);
 
         if (handle_wave_over(&wave))
         {
@@ -2959,7 +2986,7 @@ int main()
 
         render_to_depth_buffer(light_position);
 
-        render_map(map_shader, map_texture, map_buffer, camera.translation);
+        render_map(map_shader, map_texture, map_buffer, game_state.camera.translation);
         render_static_geometry();
         render_entities(game_running_ticks);
         render_effects(game_running_ticks);
@@ -2970,10 +2997,10 @@ int main()
 
           f32    x = input_state.mouse_position[0];
           f32    y = input_state.mouse_position[1];
-          Entity e = entities[player.entity];
+          Entity e = game_state.entities[game_state.player.entity];
           Mat44  m = {};
           m.identity();
-          renderer.draw_circle(Vector2(x, y), 0.05f, 2, BLUE, m, m);
+          game_state.renderer.draw_circle(Vector2(x, y), 0.05f, 2, BLUE, m, m);
         }
         if (debug_render)
         {
@@ -2983,7 +3010,7 @@ int main()
 
       if (console)
       {
-        render_console(&player, &input_state, console_buf, ArrayCount(console_buf), &wave, game_running_ticks);
+        render_console(&game_state.player, &input_state, console_buf, ArrayCount(console_buf), &wave, game_running_ticks);
       }
 
       render_ui_frame();
@@ -2993,7 +3020,7 @@ int main()
       ms    = SDL_GetTicks() - ticks;
       fps   = 1 / (f32)MAX(ms, 0.0001);
       ticks = SDL_GetTicks();
-      renderer.swap_buffers();
+      game_state.renderer.swap_buffers();
     }
   }
 }

@@ -36,8 +36,8 @@ void render_game_running_ui(Hero* player, u32 ms, f32 fps, u32 update_ticks, u32
 
   ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 0, 0, 255));
   ImGui::Text("TIMER: %.2f", game_running_ticks / 1000.0f);
-  ImGui::Text("HP: %d ", entities[player->entity].hp);
-  ImGui::Text("Score:%d", (i32)score);
+  ImGui::Text("HP: %d ", game_state.entities[player->entity].hp);
+  ImGui::Text("Score:%d", (i32)game_state.score);
   ImGui::PopStyleColor();
 
   ImGui::GetFont()->Scale = old_size;
