@@ -1,5 +1,8 @@
-idle         Mutant.Idle 1
-walking      Mutant.Walking 0.75
-melee        Mutant.Punch 0.75
-charge       Mutant.Running 1
-thunder_clap Mutant.Hurricane 0.1
+idle          Mutant.Idle 1
+walking       Mutant.Walking 0.75
+walking_left  Mutant.Walk_Left 0.75
+walking_right Mutant.Walk_Right 0.75
+walking_back  Mutant.Walk_Back 0.75
+melee         Mutant.Punch 0.75
+charge        Mutant.Running 1
+thunder_clap  Mutant.Hurricane 0.1

@@ -1,7 +1,6 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <SDL2/SDL_mouse.h>
-#include <SDL2/SDL_timer.h>
 #include <strings.h>
 
 #include <sys/time.h>
@@ -112,11 +111,24 @@ struct Hero
 struct AnimationController;
 struct EntityRenderData
 {
+public:
+  Mat44 get_model_matrix()
+  {
+    Mat44 m = {};
+    m.identity();
+    m = m.scale(scale);
+    if (rotation_x)
+    {
+      m = m.rotate_x(rotation_x);
+    }
+    return m;
+  }
   char*                name;
   AnimationController* animation_controller;
   u32                  texture;
   u32                  shader;
   f32                  scale;
+  f32                  rotation_x;
   u32                  buffer_id;
 };
 
@@ -193,19 +205,40 @@ void set_animation(AnimationController* controller, const char* animation_name, 
   logger.error("Can't set animation of name '%s', couldn't find it!", animation_name);
   return;
 }
-void update_animation_to_walking(AnimationController* controller, u32 tick)
+
+bool is_walking_animation(const char* name)
 {
-  AnimationData* data = controller->animation_data;
-  if (compare_strings(data->animations[controller->current_animation].name, "idle"))
+  const char* walking_animations[] = {
+      "walking",
+      "walking_back",
+      "walking_left",
+      "walking_right",
+  };
+  for (u32 i = 0; i < ArrayCount(walking_animations); i++)
   {
-    set_animation(controller, "walking", tick);
+    if (compare_strings(walking_animations[i], name))
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void update_animation_to_walking(AnimationController* controller, u32 tick, const char* direction)
+{
+  AnimationData* data      = controller->animation_data;
+  char*          anim_name = data->animations[controller->current_animation].name;
+  if (compare_strings(anim_name, "idle") || is_walking_animation(anim_name))
+  {
+    set_animation(controller, direction, tick);
   }
 }
 
 void update_animation_to_idling(AnimationController* controller, u32 tick)
 {
   AnimationData* data = controller->animation_data;
-  if (compare_strings(data->animations[controller->current_animation].name, "walking"))
+  if (is_walking_animation(data->animations[controller->current_animation].name))
   {
     set_animation(controller, "idle", tick);
   }
@@ -1361,6 +1394,8 @@ void handle_player_movement(Camera& camera, InputState* input, u32 tick)
   Entity*              entity      = &game_state.entities[game_state.player.entity];
   EntityRenderData*    render_data = entity->render_data;
   AnimationController* controller  = render_data->animation_controller;
+  f32*                 mouse_pos   = input->mouse_position;
+  entity->angle                    = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
   if (game_state.player.can_move)
   {
     entity->velocity = {};
@@ -1382,18 +1417,40 @@ void handle_player_movement(Camera& camera, InputState* input, u32 tick)
     {
       entity->velocity.x += MS;
     }
-    if ((entity->velocity.x != 0 || entity->velocity.y != 0) && controller)
+
+    // split the "circle" around the player in 4 pieces, one for each movement, up,down,left,right
+
+    // The angle difference is the actual angle as you'd think it'd be
+
+    if (controller)
     {
-      update_animation_to_walking(controller, tick);
-    }
-    else if (controller)
-    {
-      update_animation_to_idling(controller, tick);
+      if (entity->velocity.x == 0 && entity->velocity.y == 0)
+      {
+        update_animation_to_idling(controller, tick);
+      }
+      else
+      {
+
+        f32 angle_difference = entity->angle - atan2f(entity->velocity.y, entity->velocity.x);
+        if (ABS(angle_difference) < PI / 4)
+        {
+          update_animation_to_walking(controller, tick, "walking");
+        }
+        else if (angle_difference > PI / 4 && angle_difference < (3.0f * PI) / 4.0f)
+        {
+          update_animation_to_walking(controller, tick, "walking_left");
+        }
+        else if (angle_difference < -PI / 4 && angle_difference > (-3.0f * PI) / 4.0f)
+        {
+          update_animation_to_walking(controller, tick, "walking_right");
+        }
+        else
+        {
+          update_animation_to_walking(controller, tick, "walking_back");
+        }
+      }
     }
   }
-
-  f32* mouse_pos                                                     = input->mouse_position;
-  entity->angle                                                      = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
 
   camera.translation                                                 = Vector3(-entity->position.x, -entity->position.y, 0.0);
 
@@ -2265,14 +2322,23 @@ bool load_entity_render_data_from_file(const char* file_location)
       data->animation_controller = 0;
     }
 
-    const char* texture   = render_data_obj->lookup_value("texture")->string;
-    const char* shader    = render_data_obj->lookup_value("shader")->string;
-    f32         scale     = render_data_obj->lookup_value("scale")->number;
-    const char* buffer_id = render_data_obj->lookup_value("buffer")->string;
-    data->texture         = game_state.renderer.get_texture(texture);
-    data->shader          = game_state.renderer.get_shader_by_name(shader);
-    data->scale           = scale;
-    data->buffer_id       = get_buffer_by_name(buffer_id);
+    const char* texture         = render_data_obj->lookup_value("texture")->string;
+    const char* shader          = render_data_obj->lookup_value("shader")->string;
+    f32         scale           = render_data_obj->lookup_value("scale")->number;
+    const char* buffer_id       = render_data_obj->lookup_value("buffer")->string;
+    JsonValue*  rotation_x_json = render_data_obj->lookup_value("rotation_x");
+    if (rotation_x_json)
+    {
+      data->rotation_x = rotation_x_json->number;
+    }
+    else
+    {
+      data->rotation_x = 0;
+    }
+    data->texture   = game_state.renderer.get_texture(texture);
+    data->shader    = game_state.renderer.get_shader_by_name(shader);
+    data->scale     = scale;
+    data->buffer_id = get_buffer_by_name(buffer_id);
     logger.info("Loaded render data for '%s': texture: %s, shader: %s, scale: %s,  buffer: %s", data->name, texture, shader, scale, buffer_id);
   }
 
@@ -2572,16 +2638,10 @@ void render_entities(u32 game_running_ticks)
       EntityRenderData* render_data = entity->render_data;
       Shader*           shader      = game_state.renderer.get_shader_by_index(render_data->shader);
       shader->use();
-      Mat44 m = {};
+      Mat44 m = render_data->get_model_matrix();
 
-      m.identity();
-      m = m.scale(render_data->scale);
-      if (i == game_state.player.entity)
-      {
-        m = m.rotate_x(90);
-      }
-      m = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
-      m = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
+      m       = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
+      m       = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
 
       game_state.renderer.bind_texture(*shader, "texture1", render_data->texture);
       game_state.renderer.bind_texture(*shader, "shadow_map", game_state.renderer.depth_texture);
@@ -2745,11 +2805,9 @@ void render_effects(u32 ticks)
     EntityRenderData* render_data = &effect.render_data;
     Shader*           shader      = game_state.renderer.get_shader_by_index(render_data->shader);
     shader->use();
-    Mat44 m = {};
-    m.identity();
-    m = m.scale(render_data->scale);
-    m = m.rotate_z(RADIANS_TO_DEGREES(effect.angle) + 90);
-    m = m.translate(Vector3(effect.position.x, effect.position.y, 0.0f));
+    Mat44 m = render_data->get_model_matrix();
+    m       = m.rotate_z(RADIANS_TO_DEGREES(effect.angle) + 90);
+    m       = m.translate(Vector3(effect.position.x, effect.position.y, 0.0f));
 
     game_state.renderer.bind_texture(*shader, "texture1", render_data->texture);
     shader->set_mat4("model", m);

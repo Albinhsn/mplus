@@ -228,6 +228,7 @@ bool parse_animation_file(AnimationModel* model, const char* filename, const cha
     Animation* animation = &model->animations[i];
 
     animation->name      = buffer.parse_string();
+    printf("Found animation '%s'\n", animation->name);
     buffer.skip_whitespace();
     animation->duration = buffer.parse_float();
     buffer.skip_whitespace();
@@ -280,7 +281,8 @@ bool parse_animation_file(AnimationModel* model, const char* filename, const cha
       buffer.skip_whitespace();
       char* original_name = buffer.parse_string();
       buffer.skip_whitespace();
-      f32 scaling = buffer.parse_float();
+      f32  scaling = buffer.parse_float();
+      bool found   = false;
       for (u32 i = 0; i < model->animation_count; i++)
       {
         if (compare_strings(model->animations[i].name, original_name))
@@ -288,8 +290,13 @@ bool parse_animation_file(AnimationModel* model, const char* filename, const cha
           printf("Swapped %s for %s\n", original_name, mapped_name);
           model->animations[i].name    = mapped_name;
           model->animations[i].scaling = scaling;
+          found                        = true;
           break;
         }
+      }
+      if (!found)
+      {
+        printf("Coulnd't swap '%s'\n", original_name);
       }
       buffer.skip_whitespace();
     }
