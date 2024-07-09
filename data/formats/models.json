@@ -2,6 +2,14 @@
   "model_map_with_hole": {
     "location": "./data/models/map_with_hole.obj"
   },
+  "model_enemy_melee": {
+    "location": "./data/models/enemy_melee.anim"
+    "mapping": "./data/animation/enemy_melee.txt"
+  },
+  "model_enemy_ranged": {
+    "location": "./data/models/enemy_ranged.anim"
+    "mapping": "./data/animation/enemy_ranged.txt"
+  },
   "mutant": {
     "location": "./data/models/mutant.anim"
     "mapping": "./data/animation/mutant.txt"
@@ -9,9 +17,6 @@
   "mage": {
     "location": "./data/models/mage.anim"
     "mapping": "./data/animation/mage.txt"
-  },
-  "mage_obj": {
-    "location": "./data/models/mage.obj"
   },
   "model_coc": {
     "location": "./data/models/coc.obj"
@@ -21,9 +26,6 @@
   },
   "model_fireball": {
     "location": "./data/models/fireball2.obj"
-  },
-  "model_enemy": {
-    "location": "./data/models/enemy2.obj"
   },
   "model_pillar": {
     "location": "./data/models/pillar.obj"

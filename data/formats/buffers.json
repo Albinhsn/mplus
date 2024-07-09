@@ -1,5 +1,5 @@
 {
-  "mutant": {
+  "model_enemy_melee": {
     "attributes": [
       {
         "count": 3,
@@ -23,7 +23,7 @@
       }
     ]
   },
-  "mage_obj": {
+  "model_enemy_ranged": {
     "attributes": [
       {
         "count": 3,
@@ -36,6 +36,38 @@
       {
         "count": 3,
         "type": 0
+      },
+      {
+        "count": 4,
+        "type": 0
+      },
+      {
+        "count": 4,
+        "type": 1
+      }
+    ]
+  },
+  "mutant": {
+    "attributes": [
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 2,
+        "type": 0
+      },
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 4,
+        "type": 0
+      },
+      {
+        "count": 4,
+        "type": 1
       }
     ]
   },
@@ -64,22 +96,6 @@
     ]
   },
   "model_fireball": {
-    "attributes": [
-      {
-        "count": 3,
-        "type": 0
-      },
-      {
-        "count": 2,
-        "type": 0
-      },
-      {
-        "count": 3,
-        "type": 0
-      }
-    ]
-  },
-  "model_enemy": {
     "attributes": [
       {
         "count": 3,

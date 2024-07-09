@@ -1,9 +1,17 @@
 {
   "enemy_melee": {
-    "texture": "blue_texture",
-    "shader": "model2",
-    "scale": 0.05,
-    "buffer": "model_enemy"
+    "texture": "enemy_melee_diffuse_texture",
+    "shader": "animation",
+    "scale": 0.0015,
+    "rotation_x": 90,
+    "buffer": "model_enemy_melee"
+  },
+  "enemy_ranged": {
+    "texture": "enemy_ranged_diffuse_texture",
+    "shader": "animation",
+    "scale": 0.0015,
+    "rotation_x": 90,
+    "buffer": "model_enemy_ranged"
   },
   "fireball": {
     "texture": "green_texture",
@@ -12,7 +20,7 @@
     "buffer": "model_fireball"
   },
   "player": {
-    "animation": "mage", 
+    "animation": "mage",
     "texture": "mage_diffuse_texture",
     "shader": "animation",
     "scale": 0.0015,
@@ -48,12 +56,6 @@
     "shader": "model2",
     "scale": 0.03,
     "buffer": "model_fireball"
-  },
-  "enemy_ranged": {
-    "texture": "blue_texture",
-    "shader": "model2",
-    "scale": 0.05,
-    "buffer": "model_enemy"
   },
   "cube": {
     "texture": "green_texture",

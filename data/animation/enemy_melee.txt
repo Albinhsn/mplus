@@ -1,0 +1,2 @@
+walking       Enemy.Melee.Running 1
+melee         Enemy.Melee.Attack 1

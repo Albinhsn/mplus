@@ -5,6 +5,12 @@
   "mage_diffuse_texture": {
     "location": "./data/textures/mage_diffuse.tga"
   },
+  "enemy_ranged_diffuse_texture": {
+    "location": "./data/textures/enemy_ranged_diffuse.tga"
+  },
+  "enemy_melee_diffuse_texture": {
+    "location": "./data/textures/enemy_melee_diffuse.tga"
+  },
   "blizzard_texture": {
     "location": "./data/textures/blizzard.tga"
   },
