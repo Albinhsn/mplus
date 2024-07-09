@@ -6,7 +6,7 @@ layout (location = 2) in vec3 aNormal;
 layout (location = 3) in vec4 weight;
 layout (location = 4) in ivec4 indices;
 
-const int MAX_JOINTS = 50;
+const int MAX_JOINTS = 100;
 
 out vec2 TexCoord;
 out vec3 FragPos;

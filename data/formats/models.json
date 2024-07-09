@@ -6,6 +6,13 @@
     "location": "./data/models/mutant.anim"
     "mapping": "./data/animation/mutant.txt"
   },
+  "mage": {
+    "location": "./data/models/mage.anim"
+    "mapping": "./data/animation/mage.txt"
+  },
+  "mage_obj": {
+    "location": "./data/models/mage.obj"
+  },
   "model_coc": {
     "location": "./data/models/coc.obj"
   },

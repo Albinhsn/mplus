@@ -12,12 +12,12 @@
     "buffer": "model_fireball"
   },
   "player": {
-    "animation": "mutant", 
-    "texture": "mutant_diffuse_texture",
+    "animation": "mage", 
+    "texture": "mage_diffuse_texture",
     "shader": "animation",
     "scale": 0.0015,
     "rotation_x": 90,
-    "buffer": "mutant"
+    "buffer": "mage"
   },
   "pillar": {
     "texture": "stone",

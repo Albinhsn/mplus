@@ -188,6 +188,10 @@ bool parse_animation_file(AnimationModel* model, const char* filename, const cha
     buffer.skip_whitespace();
 
     // joint indices
+    if (jw_count == 0)
+    {
+      assert(0 && "How");
+    }
     for (u32 i = 0; i < jw_count; i++)
     {
       vertex->joint_index[i] = buffer.parse_int();
@@ -287,7 +291,7 @@ bool parse_animation_file(AnimationModel* model, const char* filename, const cha
       {
         if (compare_strings(model->animations[i].name, original_name))
         {
-          printf("Swapped %s for %s\n", original_name, mapped_name);
+          logger.info("Swapped %s for %s", original_name, mapped_name);
           model->animations[i].name    = mapped_name;
           model->animations[i].scaling = scaling;
           found                        = true;
@@ -296,14 +300,14 @@ bool parse_animation_file(AnimationModel* model, const char* filename, const cha
       }
       if (!found)
       {
-        printf("Coulnd't swap '%s'\n", original_name);
+        logger.warning("Coulnd't swap '%s'", original_name);
       }
       buffer.skip_whitespace();
     }
   }
   else
   {
-    logger.warning("Found no mapping for '%s'!\n", filename);
+    logger.warning("Found no mapping for '%s'!", filename);
   }
 
   return true;

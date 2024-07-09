@@ -386,9 +386,9 @@ bool load_models_from_files(const char* file_location)
       model->index_count  = model_data.vertex_count;
       model->vertex_count = model_data.vertex_count;
       model->vertices     = sta_allocate_struct(Vector3, model_data.vertex_count);
-      for (u32 i = 0; i < model_data.vertex_count; i++)
+      for (u32 j = 0; j < model_data.vertex_count; j++)
       {
-        model->vertices[i] = model_data.vertices[i].vertex;
+        model->vertices[j] = model_data.vertices[j].vertex;
       }
       model->indices          = model_data.indices;
       model->animation_data   = 0;
@@ -410,9 +410,9 @@ bool load_models_from_files(const char* file_location)
       model->vertex_data      = (void*)model_data.vertices;
       model->vertices         = sta_allocate_struct(Vector3, model_data.vertex_count);
 
-      for (u32 i = 0; i < model_data.vertex_count; i++)
+      for (u32 j = 0; j < model_data.vertex_count; j++)
       {
-        model->vertices[i] = model_data.vertices[i].position;
+        model->vertices[j] = model_data.vertices[j].position;
       }
       model->animation_data           = (AnimationData*)sta_allocate_struct(AnimationData, 1);
       model->animation_data->skeleton = model_data.skeleton;
@@ -431,6 +431,7 @@ bool load_models_from_files(const char* file_location)
       if (!parse_animation_file(&model_data, model_location, loc))
       {
         logger.error("Failed to read anim from '%s'", model_location);
+        continue;
       }
       model->indices          = model_data.indices;
       model->index_count      = model_data.index_count;
@@ -439,9 +440,9 @@ bool load_models_from_files(const char* file_location)
       model->vertex_data      = (void*)model_data.vertices;
       model->vertices         = sta_allocate_struct(Vector3, model_data.vertex_count);
 
-      for (u32 i = 0; i < model_data.vertex_count; i++)
+      for (u32 j = 0; j < model_data.vertex_count; j++)
       {
-        model->vertices[i] = model_data.vertices[i].position;
+        model->vertices[j] = model_data.vertices[j].position;
       }
       model->animation_data           = (AnimationData*)sta_allocate_struct(AnimationData, 1);
       model->animation_data->skeleton = model_data.skeleton;
@@ -1452,9 +1453,7 @@ void handle_player_movement(Camera& camera, InputState* input, u32 tick)
     }
   }
 
-  camera.translation                                                 = Vector3(-entity->position.x, -entity->position.y, 0.0);
-
-  game_state.entities[game_state.player.entity].render_data->texture = game_state.renderer.get_texture("mutant_diffuse_texture");
+  camera.translation = Vector3(-entity->position.x, -entity->position.y, 0.0);
 }
 
 static inline bool on_cooldown(Ability ability, u32 tick)
@@ -2339,7 +2338,7 @@ bool load_entity_render_data_from_file(const char* file_location)
     data->shader    = game_state.renderer.get_shader_by_name(shader);
     data->scale     = scale;
     data->buffer_id = get_buffer_by_name(buffer_id);
-    logger.info("Loaded render data for '%s': texture: %s, shader: %s, scale: %s,  buffer: %s", data->name, texture, shader, scale, buffer_id);
+    logger.info("Loaded render data for '%s': texture: %s %d, shader: %s %d, scale: %f,  buffer: %s %d", data->name, texture, data->texture, shader, data->shader, scale, buffer_id, data->buffer_id);
   }
 
   return true;
@@ -2522,8 +2521,10 @@ bool load_data()
 void init_player(Hero* player)
 {
 
-  *player          = get_hero_by_name("Warrior");
-  player->can_move = true;
+  *player             = get_hero_by_name("Warrior");
+  player->can_move    = true;
+  EntityRenderData rd = *game_state.entities[player->entity].render_data;
+  logger.info("Inited player %d", rd.texture);
 }
 
 Mat44   light_space_matrix;
@@ -2635,13 +2636,18 @@ void render_entities(u32 game_running_ticks)
     Entity* entity = &game_state.entities[i];
     if (entity->hp > 0)
     {
+      if (i != game_state.player.entity)
+      {
+        continue;
+      }
       EntityRenderData* render_data = entity->render_data;
-      Shader*           shader      = game_state.renderer.get_shader_by_index(render_data->shader);
+      Shader*           shader      = game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("animation"));
+
       shader->use();
       Mat44 m = render_data->get_model_matrix();
 
-      m       = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
-      m       = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
+      m = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
+      m = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
 
       game_state.renderer.bind_texture(*shader, "texture1", render_data->texture);
       game_state.renderer.bind_texture(*shader, "shadow_map", game_state.renderer.depth_texture);
@@ -2956,6 +2962,7 @@ int main()
   game_state.score  = 0;
 
   bool debug_render = false;
+  logger.info("Inited player %d", game_state.entities[game_state.player.entity].render_data->texture);
 
   while (true)
   {

@@ -24,7 +24,7 @@ void main()
     local_pos            += pose_position * weight[i];
   }
 
-  gl_Position = local_pos * model;
+  gl_Position = vec4(aPos, 1.0) * model + local_pos * 0.001;
 
   TexCoord          = aTexCoord;
 }
