@@ -13,9 +13,9 @@
   },
   "player": {
     "animation": "mutant", 
-    "texture": "black_texture",
+    "texture": "mutant_diffuse_texture",
     "shader": "animation",
-    "scale": 0.15,
+    "scale": 0.0015,
     "buffer": "mutant"
   },
   "pillar": {

@@ -28,14 +28,6 @@ public:
   u32    step_count;
 };
 
-struct Animation
-{
-  char*      name;
-  f32        duration;
-  JointPose* poses;
-  u32        joint_count;
-};
-
 struct SkinnedVertex
 {
   Vector3 position;
@@ -53,6 +45,15 @@ struct SkinnedVertex
   }
 };
 
+struct Animation
+{
+  char*      name;
+  f32        duration;
+  f32        scaling;
+  JointPose* poses;
+  u32        joint_count;
+};
+
 struct AnimationModel
 {
 public:
@@ -65,9 +66,10 @@ public:
   u64            index_count;
   void           debug();
 };
+
 void calculate_new_pose(Mat44* poses, u32 count, Animation* animation, u32 ticks);
-void update_animation(Skeleton* skeleton, Animation* animation, Shader shader, u32 ticks);
-bool parse_animation_file(AnimationModel* model, const char* filename);
+void update_animation(Skeleton* skeleton, Animation* animation, Mat44* transforms, u32 ticks);
+bool parse_animation_file(AnimationModel* model, const char* filename, const char* mapping_location);
 
 enum ModelType
 {
@@ -87,11 +89,24 @@ struct Model
   const char*    name;
   void*          vertex_data;
   u32*           indices;
+  i32            animation_controller_index;
   AnimationData* animation_data;
   Vector3*       vertices;
   u32            vertex_data_size;
   u32            index_count;
   u32            vertex_count;
+};
+// essentially be able to queue/start an animation at some point in time
+// what queue/start really is is just change the current one
+//  the current one will have a next otherwise it's looping
+//
+struct AnimationController
+{
+  AnimationData* animation_data;
+  u32            current_animation;
+  u32            current_animation_start_tick;
+  i32            next_animation_index;
+  Mat44*         transforms;
 };
 
 #endif

@@ -2,7 +2,6 @@
 #include "common.h"
 #include "files.h"
 #include "platform.h"
-#include "shader.h"
 #include "vector.h"
 #include <cassert>
 #include <cctype>
@@ -29,8 +28,9 @@ void AnimationModel::debug()
 
 void calculate_new_pose(Mat44* poses, u32 count, Animation* animation, u32 ticks)
 {
+
   const f32 EPSILON   = 0.0001f;
-  u64       loop_time = (u64)(1000 * animation->duration);
+  u64       loop_time = (u64)(1000 * animation->duration * animation->scaling);
   f32       time      = (ticks % loop_time) / (f32)loop_time;
   if (time == 0)
   {
@@ -60,9 +60,8 @@ void calculate_new_pose(Mat44* poses, u32 count, Animation* animation, u32 ticks
   }
 }
 
-void update_animation(Skeleton* skeleton, Animation* animation, Shader shader, u32 ticks)
+void update_animation(Skeleton* skeleton, Animation* animation, Mat44* transforms, u32 ticks)
 {
-  Mat44 transforms[skeleton->joint_count];
   Mat44 current_poses[skeleton->joint_count];
   calculate_new_pose(current_poses, skeleton->joint_count, animation, ticks);
 
@@ -86,24 +85,9 @@ void update_animation(Skeleton* skeleton, Animation* animation, Shader shader, u
     }
 
     Mat44 current_transform = current_local.mul(parent_transform);
-    // printf("Parent:\n");
-    // parent_transform.debug();
-    // printf("-\nCurrent\n");
-    // current_transform.debug();
-    // printf("-\nInv\n");
-    // joint->m_invBindPose.debug();
-    // printf("-\nFinal\n");
-    parent_transforms[i] = current_transform;
-    transforms[i]        = joint->m_invBindPose.mul(current_transform);
-    // transforms[i].debug();
-    // printf("---\n");
-    // if (i > 3)
-    // {
-    //   exit(1);
-    // }
+    parent_transforms[i]    = current_transform;
+    transforms[i]           = joint->m_invBindPose.mul(current_transform);
   }
-  // exit(1);
-  shader.set_mat4("jointTransforms", &transforms[0].m[0], skeleton->joint_count);
 }
 
 static u8 get_joint_index_from_id(char** names, u32 count, char* name, u64 length)
@@ -129,7 +113,7 @@ static u8 get_joint_index_from_id(Skeleton* skeleton, char* name, u64 length)
   assert(0 && "Couldn't find joint by this name?");
 }
 
-bool parse_animation_file(AnimationModel* model, const char* filename)
+bool parse_animation_file(AnimationModel* model, const char* filename, const char* animation_mapping_location)
 {
 
   assert(strlen(filename) > 4 && compare_strings("anim", &filename[strlen(filename) - 4]) && "Expected .anim file!");
@@ -278,6 +262,41 @@ bool parse_animation_file(AnimationModel* model, const char* filename)
         }
       }
     }
+  }
+
+  if (animation_mapping_location)
+  {
+    buffer       = {};
+    buffer.index = 0;
+
+    if (!sta_read_file(&buffer, animation_mapping_location))
+    {
+      return false;
+    }
+
+    while (!buffer.is_out_of_bounds())
+    {
+      char* mapped_name = buffer.parse_string();
+      buffer.skip_whitespace();
+      char* original_name = buffer.parse_string();
+      buffer.skip_whitespace();
+      f32 scaling = buffer.parse_float();
+      for (u32 i = 0; i < model->animation_count; i++)
+      {
+        if (compare_strings(model->animations[i].name, original_name))
+        {
+          printf("Swapped %s for %s\n", original_name, mapped_name);
+          model->animations[i].name    = mapped_name;
+          model->animations[i].scaling = scaling;
+          break;
+        }
+      }
+      buffer.skip_whitespace();
+    }
+  }
+  else
+  {
+    logger.warning("Found no mapping for '%s'!\n", filename);
   }
 
   return true;

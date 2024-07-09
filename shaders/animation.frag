@@ -34,8 +34,8 @@ void main()
 
   vec3 norm = normalize(normal);
   vec3 lightDir = normalize(light_position - FragPos);
-  float diff = max(dot(normal, lightDir), 0.0);
-  vec3 diffuse = diff * vec3(1.0, 1.0, 1.0);
+  float diff = max(dot(norm, lightDir), 0.0);
+  vec3 diffuse = vec3(diff, diff, diff);
 
   float specularStrength = 0.5;
   vec3 viewDir = normalize(viewPos - FragPos);
@@ -45,7 +45,7 @@ void main()
 
   float shadow = shadow_calc(FragPosLightSpace);
 
-  vec3 c = (ambient_lighting + (1.0 - shadow) * (diffuse + specular)) * texture(texture1, TexCoord).rgb;
-  FragColor = 0.001*vec4(c, 1.0) + vec4(color.rgb, 1.0);
+  vec3 c = (ambient_lighting + (1.0 - shadow) * (diffuse + specular));
+  FragColor = vec4(c, 1.0) * texture(texture1, TexCoord);
 
 }

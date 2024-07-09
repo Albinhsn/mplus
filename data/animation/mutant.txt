@@ -1,0 +1,5 @@
+idle         Mutant.Idle 1
+walking      Mutant.Walking 0.75
+melee        Mutant.Punch 0.75
+charge       Mutant.Running 1
+thunder_clap Mutant.Hurricane 0.1

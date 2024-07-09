@@ -4,6 +4,7 @@
   },
   "mutant": {
     "location": "./data/models/mutant.anim"
+    "mapping": "./data/animation/mutant.txt"
   },
   "model_coc": {
     "location": "./data/models/coc.obj"

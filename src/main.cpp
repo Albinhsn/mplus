@@ -108,15 +108,15 @@ struct Hero
 // basically we don't want to update the players movement/velocity
 // and just let the thing run until we hit something or some time/distance has passed? i.e just a command queue thing?
 
+struct AnimationController;
 struct EntityRenderData
 {
-  char*          name;
-  AnimationData* model;
-  u32            texture;
-  u32            shader;
-  f32            scale;
-  u32            buffer_id;
-  i32            animation_tick_start;
+  char*                name;
+  AnimationController* animation_controller;
+  u32                  texture;
+  u32                  shader;
+  f32                  scale;
+  u32                  buffer_id;
 };
 
 enum EntityType
@@ -145,23 +145,107 @@ struct StaticGeometry
   u32               count;
 };
 
-Camera            camera(Vector3(), 0.0f, -3.0f);
-Hero              player = {};
-Mat44             projection;
-Renderer          renderer;
-u32               score;
+Camera              camera(Vector3(), 0.0f, -3.0f);
+Hero                player = {};
+Mat44               projection;
+Renderer            renderer;
+u32                 score;
 
-Model*            models;
-u32               model_count;
-RenderBuffer*     buffers;
-u32               buffer_count;
-EntityRenderData* render_data;
-u32               render_data_count;
+Model*              models;
+u32                 model_count;
+RenderBuffer*       buffers;
+u32                 buffer_count;
+EntityRenderData*   render_data;
+u32                 render_data_count;
 
-Entity*           entities;
-u32               entity_capacity = 2;
-u32               entity_count    = 0;
-bool              god             = false;
+Entity*             entities;
+u32                 entity_capacity = 2;
+u32                 entity_count    = 0;
+bool                god             = false;
+
+AnimationController animation_controllers[50];
+u32                 animation_controller_count;
+
+void                set_animation(AnimationController* controller, u32 animation_index, u32 tick)
+{
+  AnimationData* data                      = controller->animation_data;
+
+  controller->current_animation            = animation_index;
+  controller->current_animation_start_tick = tick;
+}
+void set_animation(AnimationController* controller, const char* animation_name, u32 tick)
+{
+  AnimationData* data = controller->animation_data;
+  for (u32 i = 0; i < data->animation_count; i++)
+  {
+    if (compare_strings(data->animations[i].name, animation_name))
+    {
+      if (controller->current_animation != i)
+      {
+        controller->current_animation            = i;
+        controller->next_animation_index         = -1;
+        controller->current_animation_start_tick = tick;
+      }
+      return;
+    }
+  }
+  logger.error("Can't set animation of name '%s', couldn't find it!", animation_name);
+  return;
+}
+void update_animation_to_walking(AnimationController* controller, u32 tick)
+{
+  AnimationData* data = controller->animation_data;
+  if (compare_strings(data->animations[controller->current_animation].name, "idle"))
+  {
+    set_animation(controller, "walking", tick);
+  }
+}
+
+void update_animation_to_idling(AnimationController* controller, u32 tick)
+{
+  AnimationData* data = controller->animation_data;
+  if (compare_strings(data->animations[controller->current_animation].name, "walking"))
+  {
+    set_animation(controller, "idle", tick);
+  }
+}
+
+AnimationController* animation_controller_create(AnimationData* data)
+{
+  AnimationController* controller          = &animation_controllers[animation_controller_count++];
+  controller->current_animation_start_tick = 0;
+  controller->current_animation            = 0;
+  controller->transforms                   = sta_allocate_struct(Mat44, data->skeleton.joint_count);
+  controller->next_animation_index         = -1;
+  controller->animation_data               = data;
+  set_animation(controller, "idle", 0);
+  return controller;
+}
+
+void update_animations(u32 tick)
+{
+  for (u32 i = 0; i < animation_controller_count; i++)
+  {
+    AnimationController* controller        = &animation_controllers[i];
+    Animation*           current_animation = &controller->animation_data->animations[controller->current_animation];
+
+    assert(tick >= controller->current_animation_start_tick && "How did you manage this");
+    if (current_animation->scaling * current_animation->duration * 1000 < tick - controller->current_animation_start_tick)
+    {
+      if (controller->next_animation_index == -1)
+      {
+        set_animation(controller, "idle", tick);
+      }
+      else
+      {
+        set_animation(controller, controller->next_animation_index, tick);
+      }
+      controller->next_animation_index         = -1;
+      controller->current_animation_start_tick = tick;
+    }
+    update_animation(&controller->animation_data->skeleton, current_animation, controller->transforms, tick - controller->current_animation_start_tick);
+  }
+}
 
 #include "ui.cpp"
 #include "ui.h"
@@ -306,8 +390,10 @@ bool load_models_from_files(const char* file_location)
     }
     case MODEL_FILE_ANIM:
     {
-      AnimationModel model_data = {};
-      if (!parse_animation_file(&model_data, model_location))
+      AnimationModel model_data       = {};
+      JsonValue*     mapping_location = json_data->lookup_value("mapping");
+      char*          loc              = mapping_location ? mapping_location->string : 0;
+      if (!parse_animation_file(&model_data, model_location, loc))
       {
         logger.error("Failed to read anim from '%s'", model_location);
       }
@@ -317,12 +403,6 @@ bool load_models_from_files(const char* file_location)
       model->vertex_data_size = sizeof(SkinnedVertex);
       model->vertex_data      = (void*)model_data.vertices;
       model->vertices         = sta_allocate_struct(Vector3, model_data.vertex_count);
-
-      for (u32 i = 0; i < model_data.vertex_count; i++)
-      {
-        model_data.vertices[i].debug();
-        printf("-\n");
-      }
 
       for (u32 i = 0; i < model_data.vertex_count; i++)
       {
@@ -1276,7 +1356,9 @@ void run_commands(u32 ticks)
 
 void handle_player_movement(Camera& camera, InputState* input, u32 tick)
 {
-  Entity* entity = &entities[player.entity];
+  Entity*              entity      = &entities[player.entity];
+  EntityRenderData*    render_data = entity->render_data;
+  AnimationController* controller  = render_data->animation_controller;
   if (player.can_move)
   {
     entity->velocity = {};
@@ -1298,41 +1380,22 @@ void handle_player_movement(Camera& camera, InputState* input, u32 tick)
     {
       entity->velocity.x += MS;
     }
-  }
-
-  f32* mouse_pos                   = input->mouse_position;
-  entity->angle                    = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
-
-  EntityRenderData* render_data    = entity->render_data;
-  Shader*           shader         = renderer.get_shader_by_index(render_data->shader);
-  AnimationData*    animation_data = render_data->model;
-  if (animation_data)
-  {
-    shader->use();
-    // if (entity->velocity.x != 0 || entity->velocity.y != 0)
-    // {
-    //   if (render_data->animation_tick_start == -1)
-    //   {
-    //     render_data->animation_tick_start = tick;
-    //   }
-    //   tick -= render_data->animation_tick_start;
-    //   update_animation(&animation_data->skeleton, &animation_data->animations[0], *shader, tick);
-    // }
-    // else
+    if ((entity->velocity.x != 0 || entity->velocity.y != 0) && controller)
     {
-      Mat44 joint_transforms[animation_data->skeleton.joint_count];
-      for (u32 i = 0; i < animation_data->skeleton.joint_count; i++)
-      {
-        joint_transforms[i].identity();
-      }
-      shader->set_mat4("jointTransforms", joint_transforms, animation_data->skeleton.joint_count);
-      render_data->animation_tick_start = -1;
+      update_animation_to_walking(controller, tick);
+    }
+    else if (controller)
+    {
+      update_animation_to_idling(controller, tick);
     }
   }
 
+  f32* mouse_pos                               = input->mouse_position;
+  entity->angle                                = atan2f(mouse_pos[1] - entity->position.y - camera.translation.y, mouse_pos[0] - entity->position.x - camera.translation.x);
+
   camera.translation                           = Vector3(-entity->position.x, -entity->position.y, 0.0);
 
-  entities[player.entity].render_data->texture = renderer.get_texture(player.can_take_damage_tick >= SDL_GetTicks() ? "blue_texture" : "black_texture");
+  entities[player.entity].render_data->texture = renderer.get_texture("mutant_diffuse_texture");
 }
 
 static inline bool on_cooldown(Ability ability, u32 tick)
@@ -1640,6 +1703,11 @@ bool use_ability_melee(Camera* camera, InputState* input, u32 ticks)
         }
       }
     }
+    AnimationController* controller = player_entity.render_data->animation_controller;
+    if (controller)
+    {
+      set_animation(controller, "melee", ticks);
+    }
   }
 
   return true;
@@ -1651,6 +1719,11 @@ bool use_ability_charge(Camera* camera, InputState* input, u32 ticks)
   p->velocity.x   = cosf(p->angle) * 0.1f;
   p->velocity.y   = sinf(p->angle) * 0.1f;
   add_command(CMD_STOP_CHARGE, 0, ticks + 150);
+  AnimationController* controller = p->render_data->animation_controller;
+  if (controller)
+  {
+    set_animation(controller, "charge", ticks);
+  }
   return true;
 }
 bool use_ability_thunderclap(Camera* camera, InputState* input, u32 ticks)
@@ -1705,6 +1778,11 @@ bool use_ability_thunderclap(Camera* camera, InputState* input, u32 ticks)
           break;
         }
       }
+    }
+    AnimationController* controller = entity->render_data->animation_controller;
+    if (controller)
+    {
+      set_animation(controller, "thunder_clap", ticks);
     }
   }
 
@@ -2178,22 +2256,21 @@ bool load_entity_render_data_from_file(const char* file_location)
     {
       Model* model = get_model_by_name(render_data_obj->lookup_value("animation")->string);
       assert(model->animation_data && "No animation data for the model!");
-      data->model = model->animation_data;
+      data->animation_controller = animation_controller_create(model->animation_data);
     }
     else
     {
-      data->model = 0;
+      data->animation_controller = 0;
     }
 
-    const char* texture        = render_data_obj->lookup_value("texture")->string;
-    const char* shader         = render_data_obj->lookup_value("shader")->string;
-    f32         scale          = render_data_obj->lookup_value("scale")->number;
-    const char* buffer_id      = render_data_obj->lookup_value("buffer")->string;
-    data->texture              = renderer.get_texture(texture);
-    data->shader               = renderer.get_shader_by_name(shader);
-    data->scale                = scale;
-    data->buffer_id            = get_buffer_by_name(buffer_id);
-    data->animation_tick_start = 0;
+    const char* texture   = render_data_obj->lookup_value("texture")->string;
+    const char* shader    = render_data_obj->lookup_value("shader")->string;
+    f32         scale     = render_data_obj->lookup_value("scale")->number;
+    const char* buffer_id = render_data_obj->lookup_value("buffer")->string;
+    data->texture         = renderer.get_texture(texture);
+    data->shader          = renderer.get_shader_by_name(shader);
+    data->scale           = scale;
+    data->buffer_id       = get_buffer_by_name(buffer_id);
     logger.info("Loaded render data for '%s': texture: %s, shader: %s, scale: %s,  buffer: %s", data->name, texture, shader, scale, buffer_id);
   }
 
@@ -2452,8 +2529,6 @@ void render_map(u32 map_shader_index, u32 map_texture, u32 map_buffer, Vector3 v
   map_shader->set_mat4("model", m);
   map_shader->set_mat4("view", camera.get_view_matrix());
   map_shader->set_mat4("projection", projection);
-  // map_shader->set_mat4("view", m);
-  // map_shader->set_mat4("projection", m);
   map_shader->set_vec3("viewPos", Vector3(-camera.translation.x, -camera.translation.y, -camera.z));
 
   // render map
@@ -2474,28 +2549,30 @@ void render_entities(u32 game_running_ticks)
       Shader*           shader      = renderer.get_shader_by_index(render_data->shader);
       shader->use();
       Mat44 m = {};
+
       m.identity();
       m = m.scale(render_data->scale);
+      if (i == player.entity)
+      {
+        m = m.rotate_x(90);
+      }
       m = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
       m = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
 
-      // if (render_data->model)
-      // {
-      //   Mat44 transforms[render_data->model->skeleton.joint_count];
-      //   for (u32 i = 0; i < render_data->model->skeleton.joint_count; i++)
-      //   {
-      //     transforms[i].identity();
-      //   }
-      //   shader->set_mat4("jointTransforms", transforms, render_data->model->skeleton.joint_count);
-      // }
-
       renderer.bind_texture(*shader, "texture1", render_data->texture);
       renderer.bind_texture(*shader, "shadow_map", renderer.depth_texture);
+      Vector3 ambient_lighting(0.25, 0.25, 0.25);
+      shader->set_vec3("ambient_lighting", ambient_lighting);
       shader->set_mat4("model", m);
       shader->set_mat4("view", camera.get_view_matrix());
       shader->set_vec3("viewPos", camera.translation);
       shader->set_mat4("projection", projection);
       shader->set_mat4("light_space_matrix", light_space_matrix);
+      if (render_data->animation_controller)
+      {
+        shader->set_mat4("jointTransforms", render_data->animation_controller->transforms, render_data->animation_controller->animation_data->skeleton.joint_count);
+      }
+
       renderer.render_buffer(render_data->buffer_id);
 
       renderer.draw_circle(entity->position, entity->r, 1, RED, camera.get_view_matrix(), projection);
@@ -2557,14 +2634,16 @@ void render_console(Hero* player, InputState* input_state, char* console_buf, u3
   ImGui::End();
 }
 
-void update(Wave* wave, Camera& camera, InputState* input_state, u32& game_running_ticks, u32 ticks, u32 tick_difference)
+void update(Wave* wave, Camera& camera, InputState* input_state, u32 game_running_ticks, u32 ticks, u32 tick_difference)
 {
 
   handle_abilities(camera, input_state, game_running_ticks);
-  handle_player_movement(camera, input_state, ticks);
+  handle_player_movement(camera, input_state, game_running_ticks);
   run_commands(game_running_ticks);
   update_entities(entities, entity_count, wave, tick_difference);
   update_enemies(wave, tick_difference, game_running_ticks);
+
+  update_animations(game_running_ticks);
 }
 
 inline bool handle_wave_over(Wave* wave)
@@ -2741,6 +2820,7 @@ void debug_render_everything(Wave* wave)
 int main()
 {
 
+  animation_controller_count = 0;
 
   effects.pool.init(sta_allocate(sizeof(EffectNode) * 25), sizeof(EffectNode), 25);
   command_queue.pool.init(sta_allocate(sizeof(CommandNode) * 300), sizeof(CommandNode), 300);
@@ -2757,43 +2837,6 @@ int main()
   {
     return 1;
   }
-
-  init_imgui(renderer.window, renderer.context);
-
-  Model*  model  = get_model_by_name("mutant");
-  u32     buffer = get_buffer_by_name("mutant");
-  Shader* shader = renderer.get_shader_by_index(renderer.get_shader_by_name("animation2"));
-  shader->use();
-  renderer.bind_texture(*shader, "texture1", renderer.get_texture("mutant_diffuse_texture"));
-  Mat44 m = {};
-  m.identity();
-  m = m.scale(0.005f);
-  m = m.translate(Vector3(0, -0.5f, 0));
-  shader->set_mat4("model", m);
-  AnimationData* animation_data = model->animation_data;
-  Mat44          joint_transforms[animation_data->skeleton.joint_count];
-  for (u32 i = 0; i < animation_data->skeleton.joint_count; i++)
-  {
-    joint_transforms[i].identity();
-  }
-
-  // shader->set_mat4("jointTransforms", joint_transforms, animation_data->skeleton.joint_count);
-
-  while (true)
-  {
-    renderer.clear_framebuffer();
-    input_state.update();
-    renderer.render_buffer(buffer);
-    if (input_state.should_quit())
-    {
-      break;
-    }
-    update_animation(&animation_data->skeleton, animation_data->animations, *shader, SDL_GetTicks());
-    m = m.rotate_y(0.5f);
-    shader->set_mat4("model", m);
-    renderer.swap_buffers();
-  }
-  return 1;
 
   renderer.init_depth_texture();
 
@@ -2899,6 +2942,7 @@ int main()
         p -= 0.01f;
         light_position = Vector3(cosf(p) * 2, sinf(p) * 2, 1);
 
+        assert(SDL_GetTicks() - ticks > 0 && "How is this possible?");
         game_running_ticks += SDL_GetTicks() - ticks;
 
         update(&wave, camera, &input_state, game_running_ticks, ticks, tick_difference);
@@ -2909,7 +2953,6 @@ int main()
           // logger.info("Wave is over!");
           // return 0;
         }
-        // logger.info("CMDS: %d", command_queue.cmds);
 
         update_ticks       = SDL_GetTicks() - start_tick;
         prior_render_ticks = SDL_GetTicks();
