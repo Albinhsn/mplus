@@ -1,5 +1,5 @@
 {
-  "model_unarmed_man": {
+  "Mutant": {
     "attributes": [
       {
         "count": 3,
@@ -23,7 +23,7 @@
       }
     ]
   },
-  "model_player": {
+  "mutant": {
     "attributes": [
       {
         "count": 3,

@@ -189,6 +189,10 @@ ModelFileExtensions get_model_file_extension(char* file_name)
   {
     return MODEL_FILE_GLB;
   }
+  if (len > 5 && compare_strings("anim", &file_name[len - 4]))
+  {
+    return MODEL_FILE_ANIM;
+  }
 
   return MODEL_FILE_UNKNOWN;
 }
@@ -285,6 +289,7 @@ bool load_models_from_files(const char* file_location)
       model->vertex_data_size = sizeof(SkinnedVertex);
       model->vertex_data      = (void*)model_data.vertices;
       model->vertices         = sta_allocate_struct(Vector3, model_data.vertex_count);
+
       for (u32 i = 0; i < model_data.vertex_count; i++)
       {
         model->vertices[i] = model_data.vertices[i].position;
@@ -294,7 +299,35 @@ bool load_models_from_files(const char* file_location)
       // ToDo this should change once you fixed the parser
       model->animation_data->animation_count = 1;
       model->animation_data->animations      = (Animation*)sta_allocate_struct(Animation, model->animation_data->animation_count);
-      model->animation_data->animations[0]   = model_data.animations;
+      model->animation_data->animations      = model_data.animations;
+      model->animation_data->animation_count = model_data.animation_count;
+      break;
+    }
+    case MODEL_FILE_ANIM:
+    {
+      AnimationModel model_data = {};
+      if (!parse_animation_file(&model_data, model_location))
+      {
+        logger.error("Failed to read anim from '%s'", model_location);
+      }
+      model->indices          = model_data.indices;
+      model->index_count      = model_data.index_count;
+      model->vertex_count     = model_data.vertex_count;
+      model->vertex_data_size = sizeof(SkinnedVertex);
+      model->vertex_data      = (void*)model_data.vertices;
+      model->vertices         = sta_allocate_struct(Vector3, model_data.vertex_count);
+
+      for (u32 i = 0; i < model_data.vertex_count; i++)
+      {
+        model->vertices[i] = model_data.vertices[i].position;
+      }
+      model->animation_data           = (AnimationData*)sta_allocate_struct(AnimationData, 1);
+      model->animation_data->skeleton = model_data.skeleton;
+      // ToDo this should change once you fixed the parser
+      model->animation_data->animation_count = 1;
+      model->animation_data->animations      = (Animation*)sta_allocate_struct(Animation, model->animation_data->animation_count);
+      model->animation_data->animations      = model_data.animations;
+      model->animation_data->animation_count = model_data.animation_count;
       break;
     }
     case MODEL_FILE_UNKNOWN:
@@ -1270,16 +1303,17 @@ void handle_player_movement(Camera& camera, InputState* input, u32 tick)
   AnimationData*    animation_data = render_data->model;
   if (animation_data)
   {
-    if (entity->velocity.x != 0 || entity->velocity.y != 0)
-    {
-      if (render_data->animation_tick_start == -1)
-      {
-        render_data->animation_tick_start = tick;
-      }
-      tick -= render_data->animation_tick_start;
-      update_animation(&animation_data->skeleton, &animation_data->animations[0], *shader, tick);
-    }
-    else
+    shader->use();
+    // if (entity->velocity.x != 0 || entity->velocity.y != 0)
+    // {
+    //   if (render_data->animation_tick_start == -1)
+    //   {
+    //     render_data->animation_tick_start = tick;
+    //   }
+    //   tick -= render_data->animation_tick_start;
+    //   update_animation(&animation_data->skeleton, &animation_data->animations[0], *shader, tick);
+    // }
+    // else
     {
       Mat44 joint_transforms[animation_data->skeleton.joint_count];
       for (u32 i = 0; i < animation_data->skeleton.joint_count; i++)
@@ -1553,8 +1587,8 @@ bool use_ability_melee(Camera* camera, InputState* input, u32 ticks)
   Entity player_entity = entities[player.entity];
 
   effect.position      = player_entity.position;
-  effect.position.x += cosf(player_entity.angle) * 0.1f;
-  effect.position.y += sinf(player_entity.angle) * 0.1f;
+  effect.position.x += cosf(player_entity.angle) * 0.05f;
+  effect.position.y += sinf(player_entity.angle) * 0.05f;
   f32 scale = effect.render_data.scale;
   effect.position.x -= sinf(player_entity.angle) * scale * 0.5f;
   effect.position.y += cosf(player_entity.angle) * scale * 0.5f;
@@ -1673,6 +1707,7 @@ bool use_ability_thunderclap(Camera* camera, InputState* input, u32 ticks)
 }
 bool use_ability_slam(Camera* camera, InputState* input, u32 ticks)
 {
+  return true;
 }
 
 bool (*use_ability_function_ptrs[])(Camera* camera, InputState* input, u32 ticks) = {
@@ -1901,6 +1936,21 @@ void handle_collision(Entity* e1, Entity* e2, Wave* wave)
   // ToDo physics sim?
   if (e1->type == ENTITY_ENEMY && e2->type == ENTITY_ENEMY)
   {
+  }
+  if ((e1->type == ENTITY_ENEMY && e2->type == ENTITY_PLAYER) || (e1->type == ENTITY_PLAYER && e2->type == ENTITY_ENEMY))
+  {
+    if (!player.can_move)
+    {
+      player.can_move = true;
+      if (e1->type == ENTITY_ENEMY)
+      {
+        e1->hp -= 1;
+      }
+      else if (e2->type == ENTITY_ENEMY)
+      {
+        e2->hp -= 1;
+      }
+    }
   }
   if ((e1->type == ENTITY_PLAYER && e2->type == ENTITY_ENEMY_PROJECTILE) || (e1->type == ENTITY_ENEMY_PROJECTILE && e2->type == ENTITY_PLAYER))
   {
@@ -2408,7 +2458,7 @@ void render_map(u32 map_shader_index, u32 map_texture, u32 map_buffer, Vector3 v
   renderer.render_buffer(map_buffer);
 }
 
-void render_entities()
+void render_entities(u32 game_running_ticks)
 {
   for (u32 i = 0; i < entity_count; i++)
   {
@@ -2423,6 +2473,16 @@ void render_entities()
       m = m.scale(render_data->scale);
       m = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
       m = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
+
+      // if (render_data->model)
+      // {
+      //   Mat44 transforms[render_data->model->skeleton.joint_count];
+      //   for (u32 i = 0; i < render_data->model->skeleton.joint_count; i++)
+      //   {
+      //     transforms[i].identity();
+      //   }
+      //   shader->set_mat4("jointTransforms", transforms, render_data->model->skeleton.joint_count);
+      // }
 
       renderer.bind_texture(*shader, "texture1", render_data->texture);
       renderer.bind_texture(*shader, "shadow_map", renderer.depth_texture);
@@ -2676,6 +2736,11 @@ void debug_render_everything(Wave* wave)
 int main()
 {
 
+  AnimationModel model = {};
+  parse_animation_file(&model, "./test.anim");
+
+  return 1;
+
   effects.pool.init(sta_allocate(sizeof(EffectNode) * 25), sizeof(EffectNode), 25);
   command_queue.pool.init(sta_allocate(sizeof(CommandNode) * 300), sizeof(CommandNode), 300);
   command_queue.cmds     = 0;
@@ -2684,9 +2749,34 @@ int main()
 
   const int screen_width = 620, screen_height = 480;
   renderer = Renderer(screen_width, screen_height, &logger, true);
+
+  InputState input_state(renderer.window);
+
   if (!load_data())
   {
     return 1;
+  }
+  init_imgui(renderer.window, renderer.context);
+  u32 buffer = get_buffer_by_name("test");
+  printf("%d\n", buffer);
+  Shader* shader = renderer.get_shader_by_index(renderer.get_shader_by_name("model"));
+  shader->use();
+  renderer.bind_texture(*shader, "texture1", renderer.get_texture("blue_texture"));
+  Mat44 m = {};
+  m.identity();
+  shader->set_mat4("model", m);
+  shader->set_mat4("view", m);
+  shader->set_mat4("projection", m);
+
+  while (true)
+  {
+    input_state.update();
+    renderer.render_buffer(buffer);
+    if (input_state.should_quit())
+    {
+      break;
+    }
+    renderer.swap_buffers();
   }
 
   renderer.init_depth_texture();
@@ -2717,7 +2807,6 @@ int main()
   bool     console = false, render_circle_on_mouse = false;
   char     console_buf[1024];
   memset(console_buf, 0, ArrayCount(console_buf));
-  InputState input_state(renderer.window);
 
   // ToDo make this work when game over is implemented
   score             = 0;
@@ -2813,7 +2902,7 @@ int main()
 
         render_map(map_shader, map_texture, map_buffer, camera.translation);
         render_static_geometry();
-        render_entities();
+        render_entities(game_running_ticks);
         render_effects(game_running_ticks);
         if (render_circle_on_mouse)
         {

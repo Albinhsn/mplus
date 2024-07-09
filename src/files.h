@@ -56,6 +56,7 @@ public:
   void  parse_int_array(i32* array, u64 count);
   bool  match(char c);
   void  skip_whitespace();
+  char * parse_string();
   bool  is_out_of_bounds()
   {
     return this->len <= this->index;
@@ -334,5 +335,6 @@ int   parse_int_from_string(Buffer* buffer);
 float parse_float_from_string(Buffer* buffer);
 void  skip_whitespace(Buffer* buffer);
 bool  match(Buffer* buffer, char target);
+
 
 #endif

@@ -18,6 +18,23 @@ bool Buffer::match(char c)
 {
   return this->current_char() == c;
 }
+
+char* Buffer::parse_string()
+{
+
+  u32 start_index = this->index;
+  while (!this->is_out_of_bounds() && !((this->match(' ') || this->match('\n') || this->match('\t'))))
+  {
+    this->advance();
+  }
+
+  u32   len = this->index - start_index + 1;
+  char* s   = sta_allocate_struct(char, len);
+  strncpy(s, &this->buffer[start_index], len - 1);
+  s[len - 1] = '\0';
+
+  return s;
+}
 int Buffer::parse_int()
 {
   if (this->is_out_of_bounds())
@@ -1177,7 +1194,7 @@ static bool json_parse_value(JsonValue* value, Buffer* buffer)
   }
   case 'f':
   {
-    if (strncmp(&buffer->buffer[buffer->index + 1], "alse", 4))
+    if (strncmp(&buffer->buffer[buffer->index + 1], "alse", 4) == 0)
     {
       value->type = JSON_BOOL;
       value->b    = false;

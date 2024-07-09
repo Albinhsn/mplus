@@ -192,8 +192,8 @@ Vector3 interpolate_translation(Vector3 v0, Vector3 v1, f32 t)
 
 Mat44 interpolate_transforms(Mat44 first, Mat44 second, f32 time)
 {
-  Vector3    first_translation(first.rc[3][0], first.rc[3][1], first.rc[3][2]);
-  Vector3    second_translation(second.rc[3][0], second.rc[3][1], second.rc[3][2]);
+  Vector3    first_translation(Vector3(first.rc[0][3], first.rc[1][3], first.rc[2][3]));
+  Vector3    second_translation(Vector3(second.rc[0][3], second.rc[1][3], second.rc[2][3]));
 
   Vector3    final_translation = interpolate_translation(first_translation, second_translation, time);
 
@@ -203,9 +203,11 @@ Mat44 interpolate_transforms(Mat44 first, Mat44 second, f32 time)
 
   Mat44      res               = {};
   res.identity();
+  Mat44 r = {};
+  r.identity();
+  r   = r.rotate(final_q);
+  res = res.mul(r);
   res = res.translate(final_translation);
-  res.transpose();
-  res = res.rotate(final_q);
 
   return res;
 }

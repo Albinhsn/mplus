@@ -4,7 +4,6 @@ LDFLAGS := -lm -lGL -lSDL2
 TARGET = main
 
 
-
 c:
 	$(CC) $(CFLAGS) src/main.cpp -o main $(LDFLAGS) && ./main
 d:

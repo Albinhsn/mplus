@@ -19,6 +19,7 @@ enum ModelFileExtensions
 {
   MODEL_FILE_OBJ,
   MODEL_FILE_GLB,
+  MODEL_FILE_ANIM,
   MODEL_FILE_UNKNOWN,
 };
 

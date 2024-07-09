@@ -205,7 +205,6 @@ void Renderer::swap_buffers()
 
 u32 Renderer::create_buffer_from_model(Model* model, BufferAttributes* attributes, u32 attribute_count)
 {
-
   return this->create_buffer_indices(model->vertex_data_size * model->vertex_count, model->vertex_data, model->index_count, model->indices, attributes, attribute_count);
 }
 

@@ -2,6 +2,9 @@
   "model_map_with_hole": {
     "location": "./data/models/map_with_hole.obj"
   },
+  "model_mutant": {
+    "location": "./data/models/mutant.anim"
+  },
   "model_coc": {
     "location": "./data/models/coc.obj"
   },
@@ -14,14 +17,8 @@
   "model_enemy": {
     "location": "./data/models/enemy2.obj"
   },
-  "model_player": {
-    "location": "./data/models/model.glb"
-  },
   "model_pillar": {
     "location": "./data/models/pillar.obj"
-  },
-  "model_unarmed_man": {
-    "location": "./data/models/unarmed.glb"
   },
   "model_circle": {
     "location": "./data/models/circle.obj"
