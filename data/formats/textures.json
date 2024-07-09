@@ -1,4 +1,7 @@
 {
+  "mutant_diffuse_texture": {
+    "location": "./data/textures/mutant_diffuse.tga"
+  },
   "blizzard_texture": {
     "location": "./data/textures/blizzard.tga"
   },

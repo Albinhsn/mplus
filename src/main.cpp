@@ -1,6 +1,7 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <SDL2/SDL_mouse.h>
+#include <SDL2/SDL_timer.h>
 #include <strings.h>
 
 #include <sys/time.h>
@@ -319,13 +320,17 @@ bool load_models_from_files(const char* file_location)
 
       for (u32 i = 0; i < model_data.vertex_count; i++)
       {
+        model_data.vertices[i].debug();
+        printf("-\n");
+      }
+
+      for (u32 i = 0; i < model_data.vertex_count; i++)
+      {
         model->vertices[i] = model_data.vertices[i].position;
       }
       model->animation_data           = (AnimationData*)sta_allocate_struct(AnimationData, 1);
       model->animation_data->skeleton = model_data.skeleton;
-      // ToDo this should change once you fixed the parser
-      model->animation_data->animation_count = 1;
-      model->animation_data->animations      = (Animation*)sta_allocate_struct(Animation, model->animation_data->animation_count);
+      // ToDo if we free the memory :)
       model->animation_data->animations      = model_data.animations;
       model->animation_data->animation_count = model_data.animation_count;
       break;
@@ -2736,10 +2741,6 @@ void debug_render_everything(Wave* wave)
 int main()
 {
 
-  AnimationModel model = {};
-  parse_animation_file(&model, "./test.anim");
-
-  return 1;
 
   effects.pool.init(sta_allocate(sizeof(EffectNode) * 25), sizeof(EffectNode), 25);
   command_queue.pool.init(sta_allocate(sizeof(CommandNode) * 300), sizeof(CommandNode), 300);
@@ -2756,28 +2757,43 @@ int main()
   {
     return 1;
   }
+
   init_imgui(renderer.window, renderer.context);
-  u32 buffer = get_buffer_by_name("test");
-  printf("%d\n", buffer);
-  Shader* shader = renderer.get_shader_by_index(renderer.get_shader_by_name("model"));
+
+  Model*  model  = get_model_by_name("mutant");
+  u32     buffer = get_buffer_by_name("mutant");
+  Shader* shader = renderer.get_shader_by_index(renderer.get_shader_by_name("animation2"));
   shader->use();
-  renderer.bind_texture(*shader, "texture1", renderer.get_texture("blue_texture"));
+  renderer.bind_texture(*shader, "texture1", renderer.get_texture("mutant_diffuse_texture"));
   Mat44 m = {};
   m.identity();
+  m = m.scale(0.005f);
+  m = m.translate(Vector3(0, -0.5f, 0));
   shader->set_mat4("model", m);
-  shader->set_mat4("view", m);
-  shader->set_mat4("projection", m);
+  AnimationData* animation_data = model->animation_data;
+  Mat44          joint_transforms[animation_data->skeleton.joint_count];
+  for (u32 i = 0; i < animation_data->skeleton.joint_count; i++)
+  {
+    joint_transforms[i].identity();
+  }
+
+  // shader->set_mat4("jointTransforms", joint_transforms, animation_data->skeleton.joint_count);
 
   while (true)
   {
+    renderer.clear_framebuffer();
     input_state.update();
     renderer.render_buffer(buffer);
     if (input_state.should_quit())
     {
       break;
     }
+    update_animation(&animation_data->skeleton, animation_data->animations, *shader, SDL_GetTicks());
+    m = m.rotate_y(0.5f);
+    shader->set_mat4("model", m);
     renderer.swap_buffers();
   }
+  return 1;
 
   renderer.init_depth_texture();
 

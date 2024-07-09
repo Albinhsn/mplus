@@ -8,10 +8,10 @@
 struct Joint
 {
 public:
-  Mat44  m_invBindPose;
-  char*  m_name;
-  u32    m_name_length;
-  i8     m_iParent;
+  Mat44 m_invBindPose;
+  char* m_name;
+  u32   m_name_length;
+  i8    m_iParent;
 };
 
 struct Skeleton
@@ -20,13 +20,12 @@ struct Skeleton
   Joint* joints;
 };
 
-
 struct JointPose
 {
 public:
   Mat44* local_transforms;
-  f32* steps;
-  u32  step_count;
+  f32*   steps;
+  u32    step_count;
 };
 
 struct Animation
@@ -44,6 +43,14 @@ struct SkinnedVertex
   Vector3 normal;
   float   joint_weight[4];
   u32     joint_index[4];
+  void    debug()
+  {
+    position.debug();
+    uv.debug();
+    normal.debug();
+    printf("%d %d %d %d\n", joint_index[0], joint_index[1], joint_index[2], joint_index[3]);
+    printf("%f %f %f %f\n", joint_weight[0], joint_weight[1], joint_weight[2], joint_weight[3]);
+  }
 };
 
 struct AnimationModel
@@ -56,7 +63,7 @@ public:
   Skeleton       skeleton;
   u64            vertex_count;
   u64            index_count;
-  void debug();
+  void           debug();
 };
 void calculate_new_pose(Mat44* poses, u32 count, Animation* animation, u32 ticks);
 void update_animation(Skeleton* skeleton, Animation* animation, Shader shader, u32 ticks);

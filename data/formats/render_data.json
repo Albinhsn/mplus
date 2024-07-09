@@ -12,7 +12,7 @@
     "buffer": "model_fireball"
   },
   "player": {
-    "animation": "model_mutant", 
+    "animation": "mutant", 
     "texture": "black_texture",
     "shader": "animation",
     "scale": 0.15,

@@ -2,7 +2,7 @@
   "model_map_with_hole": {
     "location": "./data/models/map_with_hole.obj"
   },
-  "model_mutant": {
+  "mutant": {
     "location": "./data/models/mutant.anim"
   },
   "model_coc": {

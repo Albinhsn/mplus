@@ -9,6 +9,16 @@
       "location": "./shaders/model.frag"
     }
   ],
+  "animation2": [
+    {
+      "type": 0,
+      "location": "./shaders/animation2.vert"
+    },
+    {
+      "type": 1,
+      "location": "./shaders/animation2.frag"
+    }
+  ],
   "animation": [
     {
       "type": 0,

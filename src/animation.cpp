@@ -13,8 +13,13 @@
 
 void AnimationModel::debug()
 {
+
   printf("Joints: %d\n", this->skeleton.joint_count);
   printf("Vertex count: %ld\nIndex count: %ld\n", this->vertex_count, this->index_count);
+  for (u32 i = 0; i < this->vertex_count; i++)
+  {
+    this->vertices[i].debug();
+  }
   printf("Animations: %d\n", this->animation_count);
   for (u32 i = 0; i < this->animation_count; i++)
   {
@@ -31,7 +36,6 @@ void calculate_new_pose(Mat44* poses, u32 count, Animation* animation, u32 ticks
   {
     time += EPSILON;
   }
-  time = 0;
 
   for (u32 i = 0; i < animation->joint_count; i++)
   {
@@ -65,30 +69,41 @@ void update_animation(Skeleton* skeleton, Animation* animation, Shader shader, u
   Mat44 parent_transforms[skeleton->joint_count];
   for (u32 i = 0; i < skeleton->joint_count; i++)
   {
+    // current_poses[i].debug();
     parent_transforms[i].identity();
   }
 
   for (u32 i = 0; i < skeleton->joint_count; i++)
   {
-    Joint* joint             = &skeleton->joints[i];
+    Joint* joint            = &skeleton->joints[i];
 
-    Mat44  current_local     = current_poses[i];
-    Mat44  parent_transform  = parent_transforms[joint->m_iParent];
+    Mat44  current_local    = current_poses[i];
+    Mat44  parent_transform = {};
+    parent_transform.identity();
+    if (joint->m_iParent != -1)
+    {
+      parent_transform = parent_transforms[joint->m_iParent];
+    }
 
-    Mat44  current_transform = current_local.mul(parent_transform);
-    parent_transforms[i]     = current_transform;
-    transforms[i]            = joint->m_invBindPose.mul(current_transform);
-    printf("%d\n", i);
-    printf("CURR:\n");
-    current_transform.debug();
-    printf("INV:\n");
-    joint->m_invBindPose.debug();
-    printf("FINAL:\n");
-    transforms[i].debug();
-    printf("-\n");
+    Mat44 current_transform = current_local.mul(parent_transform);
+    // printf("Parent:\n");
+    // parent_transform.debug();
+    // printf("-\nCurrent\n");
+    // current_transform.debug();
+    // printf("-\nInv\n");
+    // joint->m_invBindPose.debug();
+    // printf("-\nFinal\n");
+    parent_transforms[i] = current_transform;
+    transforms[i]        = joint->m_invBindPose.mul(current_transform);
+    // transforms[i].debug();
+    // printf("---\n");
+    // if (i > 3)
+    // {
+    //   exit(1);
+    // }
   }
+  // exit(1);
   shader.set_mat4("jointTransforms", &transforms[0].m[0], skeleton->joint_count);
-  exit(1);
 }
 
 static u8 get_joint_index_from_id(char** names, u32 count, char* name, u64 length)
@@ -171,7 +186,7 @@ bool parse_animation_file(AnimationModel* model, const char* filename)
     // uv
     vertex->uv.x = buffer.parse_float();
     buffer.skip_whitespace();
-    vertex->uv.y = buffer.parse_float();
+    vertex->uv.y = -buffer.parse_float();
     buffer.skip_whitespace();
 
     // normal
