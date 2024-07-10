@@ -1254,11 +1254,11 @@ void spawn(Wave* wave, u32 enemy_index)
   entity->hp                    = enemy->initial_hp;
   logger.info("Spawning enemy %d at (%f, %f) %d %ld %ld", enemy_index, entity->position.x, entity->position.y, wave->enemies_alive, wave->spawn_times[enemy_index],
               wave->enemies[enemy_index].path.path);
-  enemy->cooldown                = 1000;
+
   CommandFindPathData* path_data = sta_allocate_struct(CommandFindPathData, 1);
   path_data->enemy               = enemy;
   path_data->tick                = wave->spawn_times[enemy_index];
-  entity->visible               = true;
+  entity->visible                = true;
 
   add_command(CMD_FIND_PATH, (void*)path_data, path_data->tick);
 }
@@ -2227,6 +2227,7 @@ struct EnemyData
   EnemyType   type;
   u32         hp;
   f32         radius;
+  u32         cooldown;
   const char* render_data_name;
 };
 
@@ -2274,6 +2275,7 @@ bool load_enemies_from_file(const char* filename)
     data->type             = (EnemyType)json_data->lookup_value("type")->number;
     data->hp               = json_data->lookup_value("hp")->number;
     data->radius           = json_data->lookup_value("radius")->number;
+    data->cooldown         = json_data->lookup_value("cooldown")->number;
 
     data->render_data_name = head->keys[i];
     logger.info("Found enemy %d: %d %f %s", data->type, data->hp, data->radius, data->render_data_name);
@@ -2314,10 +2316,11 @@ bool load_wave_from_file(Wave* wave, const char* filename)
 
     Enemy* enemy                = &wave->enemies[i];
     enemy->can_move             = true;
-    enemy->cooldown_timer       = 0;
     enemy->type                 = (EnemyType)parse_int_from_string(lines.strings[string_index++]);
     EnemyData enemy_data        = get_enemy_data_from_type(enemy->type);
     enemy->initial_hp           = enemy_data.hp;
+    enemy->cooldown             = enemy_data.cooldown;
+    enemy->cooldown_timer       = 0;
 
     wave->spawn_times[i]        = parse_int_from_string(lines.strings[string_index++]);
     u32 entity_idx              = get_new_entity();
