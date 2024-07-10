@@ -32,10 +32,10 @@ float shadow_calc(vec4 pos){
 void main()
 {
 
-  vec3 norm = normalize(normal);
+  vec3 norm     = normalize(normal);
   vec3 lightDir = normalize(light_position - FragPos);
-  float diff = max(dot(norm, lightDir), 0.0);
-  vec3 diffuse = vec3(diff, diff, diff);
+  float diff    = max(dot(norm, lightDir), 0.0);
+  vec3 diffuse  = vec3(diff, diff, diff);
 
   float specularStrength = 0.5;
   vec3 viewDir = normalize(viewPos - FragPos);

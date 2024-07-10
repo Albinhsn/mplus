@@ -70,7 +70,7 @@ void Renderer::render_to_depth_texture(Vector3 light_position)
   glCullFace(GL_BACK);
 }
 
-void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection)
+void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection, Vector3 light_position)
 {
   Vector3 ambient_lighting(0.25, 0.25, 0.25);
 
@@ -78,6 +78,7 @@ void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection
   shader->use();
   this->bind_texture(*shader, "shadow_map", this->depth_texture);
   shader->set_vec3("ambient_lighting", ambient_lighting);
+  shader->set_vec3("light_position", light_position);
   shader->set_mat4("view", view);
   shader->set_vec3("viewPos", view_position);
   shader->set_mat4("projection", projection);
@@ -92,10 +93,11 @@ void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection
 
   shader = this->get_shader_by_index(this->get_shader_by_name("animation"));
   shader->use();
-  this->bind_texture(*shader, "shadow_map", this->depth_texture);
+  // this->bind_texture(*shader, "shadow_map", this->depth_texture);
   shader->set_vec3("ambient_lighting", ambient_lighting);
   shader->set_mat4("view", view);
   shader->set_vec3("viewPos", view_position);
+  shader->set_vec3("light_position", light_position);
   shader->set_mat4("projection", projection);
   shader->set_mat4("light_space_matrix", this->light_space_matrix);
   for (u32 i = 0; i < this->render_queue_animated_count; i++)

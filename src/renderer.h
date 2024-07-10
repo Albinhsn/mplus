@@ -110,7 +110,7 @@ public:
   void                     push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms, u32 joint_count, u32 texture);
   void                     push_render_item_static(u32 buffer, Mat44 m, u32 texture);
   void                     render_to_depth_texture(Vector3 light_position);
-  void                     render_queues(Mat44 view, Vector3 view_position, Mat44 projection);
+  void                     render_queues(Mat44 view, Vector3 view_position, Mat44 projection, Vector3 light_position);
 
   u32                      line_vao, line_vbo;
   u32                      shadow_width, shadow_height;

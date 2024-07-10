@@ -1137,7 +1137,6 @@ Vector2 get_random_position(u32 tick, u32 enemy_counter, f32 r)
     distance_to_player = position.sub(player_position).len();
 
   } while (!is_valid_position(position, r) || distance_to_player < min_valid_distance);
-  printf("%d %d\n", is_valid_position(position, r), distance_to_player < min_valid_distance);
 
   return position;
 }
@@ -1230,8 +1229,7 @@ void spawn(Wave* wave, u32 enemy_index)
   EntityRenderData* render_data = entity->render_data;
   entity->position              = get_random_position(wave->spawn_times[enemy_index], enemy_index, entity->r);
   entity->hp                    = enemy->initial_hp;
-  logger.info("Spawning enemy %d at (%f, %f) %d %ld %ld", enemy_index, entity->position.x, entity->position.y, wave->enemies_alive, wave->spawn_times[enemy_index],
-              wave->enemies[enemy_index].path.path);
+  logger.info("Spawning enemy %d at (%f, %f)", enemy_index, entity->position.x, entity->position.y);
 
   CommandFindPathData* path_data = sta_allocate_struct(CommandFindPathData, 1);
   path_data->enemy               = enemy;
@@ -2569,142 +2567,6 @@ void init_player(Hero* player)
   logger.info("Inited player %d", rd.texture);
 }
 
-Mat44   light_space_matrix;
-Vector3 light_position;
-void    render_to_depth_buffer(Vector3 light_position, u32 map_buffer)
-{
-
-  glCullFace(GL_FRONT);
-  game_state.renderer.change_viewport(game_state.renderer.shadow_width, game_state.renderer.shadow_height);
-  glBindFramebuffer(GL_FRAMEBUFFER, game_state.renderer.shadow_map_framebuffer);
-  glClear(GL_DEPTH_BUFFER_BIT);
-
-  Shader depth_shader           = *game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("depth"));
-  Shader depth_animation_shader = *game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("depth_animation"));
-
-  Mat44  l                      = Mat44::look_at(light_position, Vector3(0, 0, 0), Vector3(0, 1, 0));
-  Mat44  o                      = Mat44::orthographic(-5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 7.5f);
-  light_space_matrix            = l.mul(o);
-
-  // bind the light space matrix
-  depth_shader.use();
-  depth_shader.set_mat4("lightSpaceMatrix", light_space_matrix);
-
-  Mat44 m = Mat44::identity();
-  depth_shader.set_mat4("model", m);
-  game_state.renderer.render_buffer(map_buffer);
-
-  depth_animation_shader.use();
-  depth_animation_shader.set_mat4("lightSpaceMatrix", light_space_matrix);
-
-  for (u32 i = 0; i < game_state.entity_count; i++)
-  {
-    Entity*           entity      = &game_state.entities[i];
-    EntityRenderData* render_data = entity->render_data;
-    Model*            model       = get_model_by_name(game_state.buffers[entity->render_data->buffer_id].model_name);
-
-    Mat44             m           = {};
-    m                             = m.scale(render_data->scale);
-    m                             = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
-    m                             = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
-
-    if (render_data->animation_controller)
-    {
-      depth_animation_shader.use();
-      if (render_data->animation_controller)
-      {
-        depth_animation_shader.set_mat4("jointTransforms", render_data->animation_controller->transforms, render_data->animation_controller->animation_data->skeleton.joint_count);
-      }
-      depth_animation_shader.set_mat4("model", m);
-    }
-    else
-    {
-      depth_shader.use();
-      depth_shader.set_mat4("model", m);
-    }
-    game_state.renderer.render_buffer(render_data->buffer_id);
-  }
-
-  for (u32 i = 0; i < map.static_geometry.count; i++)
-  {
-
-    EntityRenderData* render_data = &map.static_geometry.render_data[i];
-    Vector3           cube_pos    = map.static_geometry.position[i];
-
-    Mat44             m           = Mat44::identity();
-    m                             = m.scale(render_data->scale).translate(cube_pos);
-    depth_shader.use();
-    depth_shader.set_mat4("model", m);
-
-    game_state.renderer.render_buffer(render_data->buffer_id);
-  }
-
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  game_state.renderer.reset_viewport_to_screen_size();
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  glCullFace(GL_BACK);
-}
-
-void render_map(u32 map_shader_index, u32 map_texture, u32 map_buffer, Vector3 view_position)
-{
-
-  Shader* map_shader = game_state.renderer.get_shader_by_index(map_shader_index);
-
-  map_shader->use();
-  Mat44   m = Mat44::identity();
-  Vector3 ambient_lighting(0.25, 0.25, 0.25);
-  map_shader->set_vec3("ambient_lighting", ambient_lighting);
-  map_shader->set_vec3("light_position", light_position);
-  map_shader->set_mat4("light_space_matrix", light_space_matrix);
-  map_shader->set_mat4("model", m);
-  map_shader->set_mat4("view", game_state.camera.get_view_matrix());
-  map_shader->set_mat4("projection", game_state.projection);
-  map_shader->set_vec3("viewPos", Vector3(-game_state.camera.translation.x, -game_state.camera.translation.y, -game_state.camera.z));
-
-  // render map
-  game_state.renderer.bind_texture(*map_shader, "texture1", map_texture);
-  game_state.renderer.bind_texture(*map_shader, "shadow_map", game_state.renderer.depth_texture);
-  // map_shader->set_vec3("viewPos", view_position);
-  game_state.renderer.render_buffer(map_buffer);
-}
-
-void render_entities(u32 game_running_ticks)
-{
-  for (u32 i = 0; i < game_state.entity_count; i++)
-  {
-    Entity* entity = &game_state.entities[i];
-    if (entity->visible)
-    {
-      EntityRenderData* render_data = entity->render_data;
-      Shader*           shader      = game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("animation"));
-
-      shader->use();
-      Mat44 m = render_data->get_model_matrix();
-
-      m       = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
-      m       = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
-
-      game_state.renderer.bind_texture(*shader, "texture1", render_data->texture);
-      game_state.renderer.bind_texture(*shader, "shadow_map", game_state.renderer.depth_texture);
-      Vector3 ambient_lighting(0.25, 0.25, 0.25);
-      shader->set_vec3("ambient_lighting", ambient_lighting);
-      shader->set_mat4("model", m);
-      shader->set_mat4("view", game_state.camera.get_view_matrix());
-      shader->set_vec3("viewPos", game_state.camera.translation);
-      shader->set_mat4("projection", game_state.projection);
-      shader->set_mat4("light_space_matrix", light_space_matrix);
-      if (render_data->animation_controller)
-      {
-        shader->set_mat4("jointTransforms", render_data->animation_controller->transforms, render_data->animation_controller->animation_data->skeleton.joint_count);
-      }
-
-      game_state.renderer.render_buffer(render_data->buffer_id);
-
-      game_state.renderer.draw_circle(entity->position, entity->r, 1, RED, game_state.camera.get_view_matrix(), game_state.projection);
-    }
-  }
-}
-
 void render_console(Hero* player, InputState* input_state, char* console_buf, u32 console_buf_size, Wave* wave, u32& game_running_ticks)
 {
 
@@ -2879,7 +2741,7 @@ void render_static_geometry()
     shader->set_mat4("view", game_state.camera.get_view_matrix());
     shader->set_vec3("viewPos", game_state.camera.translation);
     shader->set_mat4("projection", game_state.projection);
-    shader->set_mat4("light_space_matrix", light_space_matrix);
+    shader->set_mat4("light_space_matrix", game_state.renderer.light_space_matrix);
     game_state.renderer.render_buffer(render_data->buffer_id);
   }
 }
@@ -3041,10 +2903,11 @@ int main()
 
   init_imgui(game_state.renderer.window, game_state.renderer.context);
 
-  u32 map_shader  = game_state.renderer.get_shader_by_name("model2");
-  u32 map_buffer  = get_buffer_by_name("model_map_with_pillar");
-  u32 map_texture = game_state.renderer.get_texture("dirt_texture");
+  u32     map_shader  = game_state.renderer.get_shader_by_name("model2");
+  u32     map_buffer  = get_buffer_by_name("model_map_with_pillar");
+  u32     map_texture = game_state.renderer.get_texture("dirt_texture");
 
+  Vector3 light_position;
   init_player(&game_state.player);
 
   Wave wave = {};
@@ -3151,19 +3014,14 @@ int main()
           // return 0;
         }
 
-        update_ticks       = SDL_GetTicks() - start_tick;
+        update_ticks          = SDL_GetTicks() - start_tick;
+        prior_render_ticks    = SDL_GetTicks();
 
-        prior_render_ticks = SDL_GetTicks();
-        // push_render_items(map_buffer, game_running_ticks, map_texture);
-        // game_state.renderer.render_to_depth_texture(light_position);
-        // game_state.renderer.render_queues(game_state.camera.get_view_matrix(), game_state.camera.translation, game_state.projection);
+        Vector3 view_position = Vector3(-game_state.camera.translation.x, -game_state.camera.translation.y, -game_state.camera.z);
+        push_render_items(map_buffer, game_running_ticks, map_texture);
+        game_state.renderer.render_to_depth_texture(light_position);
+        game_state.renderer.render_queues(game_state.camera.get_view_matrix(), view_position, game_state.projection, light_position);
 
-        render_to_depth_buffer(light_position, map_buffer);
-
-        render_map(map_shader, map_texture, map_buffer, game_state.camera.translation);
-        render_static_geometry();
-        render_entities(game_running_ticks);
-        render_effects(game_running_ticks);
         if (render_circle_on_mouse)
         {
           i32 sdl_x, sdl_y;
