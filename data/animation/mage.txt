@@ -6,3 +6,4 @@ walking_back    Mage.Walk_Back 0.75
 blink           Mage.Blink 0.05
 fireball        Mage.Fireball 0.05
 pillar_of_flame Mage.PillarOfFlame 0.1
+cone_of_cold    Mage.Cone_Of_Cold 1.0

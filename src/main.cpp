@@ -1110,6 +1110,7 @@ void find_path(Path* path, Vector2 needle, Vector2 source, f32 r)
     free(curr.path);
   }
 
+  logger.error("Didn't find a path to player from (%d, %d) to (%d, %d), (%f, %f), (%f, %f)", source_x, source_y, needle_x, needle_y, source.x, source.y, needle.x, needle.y);
   assert(!"Didn't find a path to player!");
 }
 
@@ -1123,22 +1124,10 @@ bool sphere_sphere_collision(Sphere s0, Sphere s1)
 }
 TargaImage noise;
 
-bool       is_valid_tile(Vector2 position, f32 r)
-{
-  u32 tile_count = get_tile_count_per_row();
-  return is_out_of_map_bounds(position, r);
-}
-
-bool is_valid_position(Vector2 position, f32 r)
+bool       is_valid_position(Vector2 position, f32 r)
 {
   Vector2 closest;
-  return is_out_of_map_bounds(closest, position, r) || collides_with_static_geometry(closest, position, r);
-}
-
-bool is_valid_position(Vector2& closest_position, Vector2 position, f32 r)
-{
-
-  return is_out_of_map_bounds(closest_position, position, r) || collides_with_static_geometry(closest_position, position, r);
+  return !(is_out_of_map_bounds(closest, position, r) || collides_with_static_geometry(closest, position, r));
 }
 
 Vector2 get_random_position(u32 tick, u32 enemy_counter, f32 r)
@@ -1169,7 +1158,8 @@ Vector2 get_random_position(u32 tick, u32 enemy_counter, f32 r)
 
     distance_to_player = position.sub(player_position).len();
 
-  } while (!is_valid_tile(position, r) || distance_to_player < min_valid_distance);
+  } while (!is_valid_position(position, r) || distance_to_player < min_valid_distance);
+  printf("%d %d\n", is_valid_position(position, r), distance_to_player < min_valid_distance);
 
   return position;
 }
@@ -1268,6 +1258,7 @@ void spawn(Wave* wave, u32 enemy_index)
   CommandFindPathData* path_data = sta_allocate_struct(CommandFindPathData, 1);
   path_data->enemy               = enemy;
   path_data->tick                = wave->spawn_times[enemy_index];
+  entity->visible               = true;
 
   add_command(CMD_FIND_PATH, (void*)path_data, path_data->tick);
 }
@@ -1688,6 +1679,11 @@ bool use_ability_coc(Camera* camera, InputState* input, u32 ticks)
         }
       }
     }
+  }
+
+  if (player_entity.render_data->animation_controller)
+  {
+    set_animation(player_entity.render_data->animation_controller, "cone_of_cold", ticks);
   }
 
   return true;
@@ -2298,7 +2294,17 @@ bool load_wave_from_file(Wave* wave, const char* filename)
 
   assert(lines.count > 1 && "Only one line in wave file?");
   wave->enemy_count = parse_int_from_string(lines.strings[0]);
-  assert(wave->enemy_count * 2 + 1 == lines.count && "Mismatch in wave file, expected x enemies in wave and got y");
+  if (wave->enemy_count * 2 + 1 != lines.count)
+  {
+    u32 ec = wave->enemy_count;
+    if (lines.count < wave->enemy_count * 2 + 1)
+    {
+      ec = (lines.count - 1) / 2;
+    }
+
+    logger.error("Mismatch in wave file '%s', expected %d enemies (%d lines) but got %d lines, grabbing %d enemies", filename, wave->enemy_count, wave->enemy_count * 2 + 1, lines.count, ec);
+    wave->enemy_count = ec;
+  }
   wave->spawn_count   = 0;
   wave->enemies_alive = 0;
   wave->spawn_times   = sta_allocate_struct(u32, wave->enemy_count);
