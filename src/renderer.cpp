@@ -73,6 +73,7 @@ void Renderer::render_to_depth_texture(Vector3 light_position)
 void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection, Vector3 light_position)
 {
   Vector3 ambient_lighting(0.25, 0.25, 0.25);
+  Vector3 directional_light_direction(0, 1, -0.1);
 
   Shader* shader = this->get_shader_by_index(this->get_shader_by_name("model2"));
   shader->use();
@@ -81,6 +82,7 @@ void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection
   shader->set_vec3("light_position", light_position);
   shader->set_mat4("view", view);
   shader->set_vec3("viewPos", view_position);
+  shader->set_vec3("directional_light_direction", directional_light_direction);
   shader->set_mat4("projection", projection);
   shader->set_mat4("light_space_matrix", this->light_space_matrix);
   for (u32 i = 0; i < this->render_queue_static_count; i++)

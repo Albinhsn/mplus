@@ -2988,6 +2988,9 @@ int main()
 
   // animation_test_bed(input_state);
 
+  // light direction
+  //
+
   while (true)
   {
 
@@ -3005,11 +3008,7 @@ int main()
       game_state.camera.z = MAX(MIN(-1.5, game_state.camera.z), -4.5);
       if (input_state.is_key_pressed('q'))
       {
-        game_state.camera.z_rotation += 0.1f;
-      }
-      if (input_state.is_key_pressed('e'))
-      {
-        game_state.camera.z_rotation -= 0.1f;
+        game_state.renderer.reload_shaders();
       }
 
       if (game_state.entities[game_state.player.entity].hp == 0)
@@ -3091,6 +3090,7 @@ int main()
         point_light_shader->set_mat4("projection", game_state.projection);
         game_state.renderer.bind_texture(*point_light_shader, "texture1", point_light_texture);
         game_state.renderer.render_buffer(sphere_buffer);
+
         game_state.renderer.render_queues(game_state.camera.get_view_matrix(), view_position, game_state.projection, light_position);
 
         if (render_circle_on_mouse)
