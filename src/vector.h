@@ -209,7 +209,7 @@ public:
   Mat44        mul(Mat44 m);
   Vector4      mul(Vector4 v);
   Mat44        inverse();
-  void         identity();
+  static Mat44 identity();
   Mat44        translate(Vector3 v);
   Mat44        scale(Vector3 v);
   Mat44        scale(Vector4 v);

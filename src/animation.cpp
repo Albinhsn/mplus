@@ -47,7 +47,7 @@ void calculate_new_pose(Mat44* poses, u32 count, Animation* animation, u32 ticks
     JointPose* pose     = &animation->poses[i];
     if (pose->step_count == 0)
     {
-      poses[i].identity();
+      poses[i] = Mat44::identity();
       continue;
     }
     for (; pose_idx < pose->step_count && pose->steps[pose_idx] < time; pose_idx++)
@@ -68,8 +68,7 @@ void update_animation(Skeleton* skeleton, Animation* animation, Mat44* transform
   Mat44 parent_transforms[skeleton->joint_count];
   for (u32 i = 0; i < skeleton->joint_count; i++)
   {
-    // current_poses[i].debug();
-    parent_transforms[i].identity();
+    parent_transforms[i] = Mat44::identity();
   }
 
   for (u32 i = 0; i < skeleton->joint_count; i++)
@@ -78,7 +77,7 @@ void update_animation(Skeleton* skeleton, Animation* animation, Mat44* transform
 
     Mat44  current_local    = current_poses[i];
     Mat44  parent_transform = {};
-    parent_transform.identity();
+    parent_transform = Mat44::identity();
     if (joint->m_iParent != -1)
     {
       parent_transform = parent_transforms[joint->m_iParent];

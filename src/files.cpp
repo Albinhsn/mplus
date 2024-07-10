@@ -1484,8 +1484,7 @@ void change_obj_to_y_up(const char* filename, const char* outname)
     assert(!"Failed to parse the objects!");
   }
 
-  Mat44 m;
-  m.identity();
+  Mat44 m = Mat44::identity();
   m           = m.rotate_x(90);
   Mat44 m_inv = m.inverse();
   m_inv.transpose();

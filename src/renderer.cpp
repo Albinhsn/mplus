@@ -7,6 +7,110 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <SDL2/SDL_video.h>
+
+void Renderer::push_render_item_static(u32 buffer, Mat44 m, u32 texture)
+{
+  RenderQueueItemStatic item;
+  item.m       = m;
+  item.buffer  = buffer;
+  item.texture = texture;
+  RESIZE_ARRAY(this->render_queue_static_buffers, RenderQueueItemStatic, this->render_queue_static_count, this->render_queue_static_capacity);
+  this->render_queue_static_buffers[this->render_queue_static_count++] = item;
+}
+void Renderer::push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms, u32 joint_count, u32 texture)
+{
+  RenderQueueItemAnimated item;
+  item.m           = m;
+  item.buffer      = buffer;
+  item.transforms  = transforms;
+  item.joint_count = joint_count;
+  item.texture     = texture;
+  RESIZE_ARRAY(this->render_queue_animated_buffers, RenderQueueItemAnimated, this->render_queue_animated_count, this->render_queue_animated_capacity);
+  this->render_queue_animated_buffers[this->render_queue_animated_count++] = item;
+}
+
+void Renderer::render_to_depth_texture(Vector3 light_position)
+{
+
+  glCullFace(GL_FRONT);
+  this->change_viewport(this->shadow_width, this->shadow_height);
+  sta_glBindFramebuffer(GL_FRAMEBUFFER, this->shadow_map_framebuffer);
+  glClear(GL_DEPTH_BUFFER_BIT);
+
+  Mat44 l                  = Mat44::look_at(light_position, Vector3(0, 0, 0), Vector3(0, 1, 0));
+  Mat44 o                  = Mat44::orthographic(-5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 7.5f);
+  this->light_space_matrix = l.mul(o);
+
+  Shader depth_shader      = *this->get_shader_by_index(this->get_shader_by_name("depth"));
+  depth_shader.use();
+  depth_shader.set_mat4("lightSpaceMatrix", this->light_space_matrix);
+
+  for (u32 i = 0; i < this->render_queue_static_count; i++)
+  {
+    RenderQueueItemStatic item = this->render_queue_static_buffers[i];
+    depth_shader.set_mat4("model", item.m);
+    this->render_buffer(item.buffer);
+  }
+
+  Shader depth_animation_shader = *this->get_shader_by_index(this->get_shader_by_name("depth_animation"));
+  depth_animation_shader.use();
+  depth_animation_shader.set_mat4("lightSpaceMatrix", this->light_space_matrix);
+  for (u32 i = 0; i < this->render_queue_animated_count; i++)
+  {
+    RenderQueueItemAnimated item = this->render_queue_animated_buffers[i];
+    depth_animation_shader.set_mat4("model", item.m);
+    depth_animation_shader.set_mat4("jointTransforms", item.transforms, item.joint_count);
+
+    this->render_buffer(item.buffer);
+  }
+
+  sta_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  this->reset_viewport_to_screen_size();
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glCullFace(GL_BACK);
+}
+
+void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection)
+{
+  Vector3 ambient_lighting(0.25, 0.25, 0.25);
+
+  Shader* shader = this->get_shader_by_index(this->get_shader_by_name("model2"));
+  shader->use();
+  this->bind_texture(*shader, "shadow_map", this->depth_texture);
+  shader->set_vec3("ambient_lighting", ambient_lighting);
+  shader->set_mat4("view", view);
+  shader->set_vec3("viewPos", view_position);
+  shader->set_mat4("projection", projection);
+  shader->set_mat4("light_space_matrix", this->light_space_matrix);
+  for (u32 i = 0; i < this->render_queue_static_count; i++)
+  {
+    RenderQueueItemStatic item = this->render_queue_static_buffers[i];
+    this->bind_texture(*shader, "texture1", item.texture);
+    shader->set_mat4("model", item.m);
+    this->render_buffer(item.buffer);
+  }
+
+  shader = this->get_shader_by_index(this->get_shader_by_name("animation"));
+  shader->use();
+  this->bind_texture(*shader, "shadow_map", this->depth_texture);
+  shader->set_vec3("ambient_lighting", ambient_lighting);
+  shader->set_mat4("view", view);
+  shader->set_vec3("viewPos", view_position);
+  shader->set_mat4("projection", projection);
+  shader->set_mat4("light_space_matrix", this->light_space_matrix);
+  for (u32 i = 0; i < this->render_queue_animated_count; i++)
+  {
+    RenderQueueItemAnimated item = this->render_queue_animated_buffers[i];
+    this->bind_texture(*shader, "texture1", item.texture);
+    shader->set_mat4("model", item.m);
+    shader->set_mat4("jointTransforms", item.transforms, item.joint_count);
+    this->render_buffer(item.buffer);
+  }
+
+  this->render_queue_static_count   = 0;
+  this->render_queue_animated_count = 0;
+}
+
 void Renderer::enable_2d_rendering()
 {
   glDisable(GL_DEPTH_TEST);
@@ -205,7 +309,7 @@ void Renderer::swap_buffers()
 
 u32 Renderer::create_buffer_from_model(Model* model, BufferAttributes* attributes, u32 attribute_count)
 {
-  this->logger->info("%s: %d",model->name, model->vertex_data_size * model->vertex_count);
+  this->logger->info("%s: %d", model->name, model->vertex_data_size * model->vertex_count);
   return this->create_buffer_indices(model->vertex_data_size * model->vertex_count, model->vertex_data, model->index_count, model->indices, attributes, attribute_count);
 }
 
@@ -297,7 +401,7 @@ bool Renderer::load_shaders_from_files(const char* file_location)
     u64         log_index = 0;
     const char* name      = head->keys[i];
     assert(head->values[i].type == JSON_ARRAY && "Expected shader to be an array!");
-    JsonArray* shaders_json      = head->values[i].arr;
+    JsonArray* shaders_json = head->values[i].arr;
     u32        shader_count = shaders_json->arraySize;
     ShaderType types[shader_count];
     char*      shader_locations[shader_count];

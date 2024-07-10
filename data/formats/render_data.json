@@ -37,19 +37,19 @@
   },
   "pillar of flame": {
     "texture": "red_texture",
-    "shader": "model",
+    "shader": "model2",
     "scale": 0.2,
     "buffer": "model_circle"
   },
   "cone of cold": {
     "texture": "blue_texture",
-    "shader": "model",
+    "shader": "model2",
     "scale": 0.2,
     "buffer": "model_coc"
   },
   "melee": {
     "texture": "blue_texture",
-    "shader": "model",
+    "shader": "model2",
     "scale": 0.1,
     "buffer": "model_coc"
   },

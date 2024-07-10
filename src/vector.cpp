@@ -43,8 +43,7 @@ Quaternion Quaternion::from_mat(Mat44 m)
 }
 Mat44 Mat44::create_translation(f32 t[3])
 {
-  Mat44 out = {};
-  out.identity();
+  Mat44 out    = Mat44::identity();
   out.rc[3][0] = t[0];
   out.rc[3][1] = t[1];
   out.rc[3][2] = t[2];
@@ -53,8 +52,7 @@ Mat44 Mat44::create_translation(f32 t[3])
 
 Mat44 Mat44::create_translation(Vector3 t)
 {
-  Mat44 out = {};
-  out.identity();
+  Mat44 out    = Mat44::identity();
   out.rc[3][0] = t.x;
   out.rc[3][1] = t.y;
   out.rc[3][2] = t.z;
@@ -122,8 +120,7 @@ Mat44 Mat44::create_rotation(Quaternion q)
 }
 Mat44 Mat44::create_scale(f32 s[3])
 {
-  Mat44 out = {};
-  out.identity();
+  Mat44 out    = Mat44::identity();
   out.rc[0][0] = s[0];
   out.rc[1][1] = s[1];
   out.rc[2][2] = s[2];
@@ -131,8 +128,7 @@ Mat44 Mat44::create_scale(f32 s[3])
 }
 Mat44 Mat44::create_scale(Vector3 s)
 {
-  Mat44 out = {};
-  out.identity();
+  Mat44 out    = Mat44::identity();
   out.rc[0][0] = s.x;
   out.rc[1][1] = s.y;
   out.rc[2][2] = s.z;
@@ -201,13 +197,11 @@ Mat44 interpolate_transforms(Mat44 first, Mat44 second, f32 time)
   Quaternion second_q          = Quaternion::from_mat(second);
   Quaternion final_q           = Quaternion::interpolate_linear(first_q, second_q, time);
 
-  Mat44      res               = {};
-  res.identity();
-  Mat44 r = {};
-  r.identity();
-  r   = r.rotate(final_q);
-  res = res.mul(r);
-  res = res.translate(final_translation);
+  Mat44      res               = Mat44::identity();
+  Mat44      r                 = Mat44::identity();
+  r                            = r.rotate(final_q);
+  res                          = res.mul(r);
+  res                          = res.translate(final_translation);
 
   return res;
 }
@@ -330,8 +324,7 @@ Mat44 Mat44::inverse()
 Mat44 Mat44::rotate_x(f32 degrees)
 {
   float r = DEGREES_TO_RADIANS(degrees);
-  Mat44 m = {};
-  m.identity();
+  Mat44 m = Mat44::identity();
   m.rc[1][1] = cosf(r);
   m.rc[1][2] = -sinf(r);
   m.rc[2][1] = sinf(r);
@@ -371,8 +364,7 @@ Mat44 Mat44::scale(Vector3 v)
 Mat44 Mat44::rotate_y(f32 degrees)
 {
   float r = DEGREES_TO_RADIANS(degrees);
-  Mat44 m = {};
-  m.identity();
+  Mat44 m = Mat44::identity();
   m.rc[0][0] = cosf(r);
   m.rc[0][2] = sinf(r);
   m.rc[2][0] = -sinf(r);
@@ -555,8 +547,7 @@ Mat44 Mat44::look_at(Vector3 c, Vector3 l, Vector3 u_prime)
 
 Mat44 Mat44::translate(Vector3 v)
 {
-  Mat44 m = {};
-  m.identity();
+  Mat44 m    = Mat44::identity();
 
   m.rc[0][3] = v.x;
   m.rc[1][3] = v.y;
@@ -565,13 +556,14 @@ Mat44 Mat44::translate(Vector3 v)
   return this->mul(m);
 }
 
-void Mat44::identity()
+Mat44 Mat44::identity()
 {
-  memset(&this->m[0], 0, 16 * sizeof(float));
-  this->rc[0][0] = 1.0f;
-  this->rc[1][1] = 1.0f;
-  this->rc[2][2] = 1.0f;
-  this->rc[3][3] = 1.0f;
+  Mat44 m    = {};
+  m.rc[0][0] = 1.0f;
+  m.rc[1][1] = 1.0f;
+  m.rc[2][2] = 1.0f;
+  m.rc[3][3] = 1.0f;
+  return m;
 }
 
 float Mat44::determinant()

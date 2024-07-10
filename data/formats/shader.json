@@ -39,6 +39,16 @@
       "location": "./shaders/model2.frag"
     }
   ],
+  "depth_animation": [
+    {
+      "type": 0,
+      "location": "./shaders/depth_animation.vert"
+    },
+    {
+      "type": 1,
+      "location": "./shaders/depth.frag"
+    }
+  ],
   "depth": [
     {
       "type": 0,

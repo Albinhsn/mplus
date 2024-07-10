@@ -184,8 +184,7 @@ static void parse_skeleton(Skeleton* skeleton, JsonValue* skins, u32** node_inde
   skeleton->joints             = (Joint*)sta_allocate_struct(Joint, skeleton->joint_count);
   *node_index_to_joint_index   = (u32*)sta_allocate_struct(u32, skeleton->joint_count);
 
-  Mat44 m                      = {};
-  m.identity();
+  Mat44 m                      = Mat44::identity();
   m = m.rotate_x(90);
   for (u32 i = 0; i < joints_array->arraySize; i++)
   {
@@ -261,8 +260,7 @@ static void parse_mesh(AnimationModel* model, GLTF_Accessor* accessors, JsonValu
   model->vertex_count  = position_accessor.count;
   model->vertices      = (SkinnedVertex*)sta_allocate_struct(SkinnedVertex, model->vertex_count);
 
-  Mat44 m              = {};
-  m.identity();
+  Mat44 m              =Mat44::identity();
   m           = m.rotate_x(90);
 
   Mat44 m_inv = m.inverse();
@@ -416,8 +414,7 @@ static void parse_animations(AnimationModel* model, Skeleton* skeleton, JsonValu
     animation->poses       = sta_allocate_struct(JointPose, skeleton->joint_count);
     f32   duration         = -FLT_MAX;
 
-    Mat44 m                = {};
-    m.identity();
+    Mat44 m                = Mat44::identity();
     m = m.rotate_x(90);
     for (u32 j = 0; j < skeleton->joint_count; j++)
     {

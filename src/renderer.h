@@ -6,8 +6,31 @@
 #include "common.h"
 #include "files.h"
 #include "font.h"
+#include "platform.h"
 #include "sdl.h"
 #include "shader.h"
+
+struct EntityRenderData
+{
+public:
+  Mat44 get_model_matrix()
+  {
+    Mat44 m = Mat44::identity();
+    m = m.scale(scale);
+    if (rotation_x)
+    {
+      m = m.rotate_x(rotation_x);
+    }
+    return m;
+  }
+  char*                name;
+  AnimationController* animation_controller;
+  u32                  texture;
+  u32                  shader;
+  f32                  scale;
+  f32                  rotation_x;
+  u32                  buffer_id;
+};
 
 struct RenderBuffer
 {
@@ -56,37 +79,66 @@ struct Texture
   i32         unit;
 };
 
+struct RenderQueueItemAnimated
+{
+  u32    buffer;
+  Mat44  m;
+  Mat44* transforms;
+  u32    joint_count;
+  u32 texture;
+};
+struct RenderQueueItemStatic
+{
+  u32   buffer;
+  Mat44 m;
+  u32 texture;
+};
 
 struct Renderer
 {
 public:
-  u32            line_vao, line_vbo;
-  u32            shadow_width, shadow_height;
-  GLuint         shadow_map_framebuffer;
-  u32            depth_texture;
+  RenderQueueItemAnimated* render_queue_animated_buffers;
+  u32                      render_queue_animated_count;
+  u32                      render_queue_animated_capacity;
 
-  Texture*       textures;
-  u32            texture_count;
-  u32            texture_capacity;
-  RenderBuffer*  buffers;
-  u32            buffer_count;
-  Shader*        shaders;
-  u32            shader_count;
+  RenderQueueItemStatic*   render_queue_static_buffers;
+  u32                      render_queue_static_count;
+  u32                      render_queue_static_capacity;
 
-  Shader         circle_shader;
-  u64            used_texture_units;
+  Mat44                    light_space_matrix;
 
-  GLBufferIndex  circle_buffer;
-  GLBufferIndex* index_buffers;
-  u32            index_buffers_count;
-  u32            index_buffers_cap;
+  void                     push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms, u32 joint_count, u32 texture);
+  void                     push_render_item_static(u32 buffer, Mat44 m, u32 texture);
+  void                     render_to_depth_texture(Vector3 light_position);
+  void                     render_queues(Mat44 view, Vector3 view_position, Mat44 projection);
 
-  Logger*        logger;
+  u32                      line_vao, line_vbo;
+  u32                      shadow_width, shadow_height;
+  GLuint                   shadow_map_framebuffer;
+  u32                      depth_texture;
 
-  u32            screen_width, screen_height;
-  bool           vsync;
-  SDL_Window*    window;
-  SDL_GLContext  context;
+  Texture*                 textures;
+  u32                      texture_count;
+  u32                      texture_capacity;
+  RenderBuffer*            buffers;
+  u32                      buffer_count;
+  Shader*                  shaders;
+  u32                      shader_count;
+
+  Shader                   circle_shader;
+  u64                      used_texture_units;
+
+  GLBufferIndex            circle_buffer;
+  GLBufferIndex*           index_buffers;
+  u32                      index_buffers_count;
+  u32                      index_buffers_cap;
+
+  Logger*                  logger;
+
+  u32                      screen_width, screen_height;
+  bool                     vsync;
+  SDL_Window*              window;
+  SDL_GLContext            context;
   Renderer()
   {
   }
@@ -99,10 +151,16 @@ public:
     this->screen_height = screen_height;
     this->init_circle_buffer();
     this->init_line_buffer();
-    this->index_buffers_cap   = 0;
-    this->index_buffers_count = 0;
-    this->texture_count       = 0;
-    this->used_texture_units  = 0;
+    this->index_buffers_cap              = 0;
+    this->index_buffers_count            = 0;
+    this->texture_count                  = 0;
+    this->used_texture_units             = 0;
+    this->render_queue_static_count      = 0;
+    this->render_queue_static_capacity   = 2;
+    this->render_queue_static_buffers    = sta_allocate_struct(RenderQueueItemStatic, this->render_queue_static_capacity);
+    this->render_queue_animated_count    = 0;
+    this->render_queue_animated_capacity = 2;
+    this->render_queue_animated_buffers  = sta_allocate_struct(RenderQueueItemAnimated, this->render_queue_animated_capacity);
   }
 
   // manage some buffer

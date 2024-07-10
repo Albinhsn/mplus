@@ -1,6 +1,7 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <SDL2/SDL_mouse.h>
+#include <SDL2/SDL_timer.h>
 #include <strings.h>
 
 #include <sys/time.h>
@@ -73,8 +74,7 @@ public:
 public:
   Mat44 get_view_matrix()
   {
-    Mat44 camera_m = {};
-    camera_m.identity();
+    Mat44 camera_m = Mat44::identity();
     return camera_m.rotate_y(z_rotation).rotate_x(rotation).translate(Vector3(translation.x, translation.y, z));
   }
   Vector3 translation;
@@ -109,28 +109,6 @@ struct Hero
 // and just let the thing run until we hit something or some time/distance has passed? i.e just a command queue thing?
 
 struct AnimationController;
-struct EntityRenderData
-{
-public:
-  Mat44 get_model_matrix()
-  {
-    Mat44 m = {};
-    m.identity();
-    m = m.scale(scale);
-    if (rotation_x)
-    {
-      m = m.rotate_x(rotation_x);
-    }
-    return m;
-  }
-  char*                name;
-  AnimationController* animation_controller;
-  u32                  texture;
-  u32                  shader;
-  f32                  scale;
-  f32                  rotation_x;
-  u32                  buffer_id;
-};
 
 enum EntityType
 {
@@ -269,7 +247,7 @@ void update_animations(u32 tick)
       {
         for (u32 j = 0; j < controller->animation_data->skeleton.joint_count; j++)
         {
-          controller->transforms[j].identity();
+          controller->transforms[j] = Mat44::identity();
         }
       }
       continue;
@@ -2593,7 +2571,7 @@ void init_player(Hero* player)
 
 Mat44   light_space_matrix;
 Vector3 light_position;
-void    render_to_depth_buffer(Vector3 light_position)
+void    render_to_depth_buffer(Vector3 light_position, u32 map_buffer)
 {
 
   glCullFace(GL_FRONT);
@@ -2601,45 +2579,23 @@ void    render_to_depth_buffer(Vector3 light_position)
   glBindFramebuffer(GL_FRAMEBUFFER, game_state.renderer.shadow_map_framebuffer);
   glClear(GL_DEPTH_BUFFER_BIT);
 
-  static u32 vao = 0, vbo = 0, ebo = 0;
-  if (vao == 0)
-  {
-    sta_glGenVertexArrays(1, &vao);
-    sta_glGenBuffers(1, &vbo);
-    sta_glGenBuffers(1, &ebo);
-    sta_glBindVertexArray(vao);
-    f32 a[5] = {};
-    sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * ArrayCount(a), a, GL_DYNAMIC_DRAW);
-    sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * ArrayCount(a), a, GL_DYNAMIC_DRAW);
+  Shader depth_shader           = *game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("depth"));
+  Shader depth_animation_shader = *game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("depth_animation"));
 
-    sta_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(f32) * 3, (void*)(sizeof(f32) * 0));
-    sta_glEnableVertexAttribArray(0);
-
-    sta_glBindVertexArray(0);
-  }
-  Shader depth_shader = *game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("depth"));
-  Mat44  m            = {};
-  m.identity();
-  depth_shader.use();
-
-  Mat44 l            = Mat44::look_at(light_position, Vector3(0, 0, 0), Vector3(0, 1, 0));
-  Mat44 o            = Mat44::orthographic(-5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 7.5f);
-  light_space_matrix = l.mul(o);
+  Mat44  l                      = Mat44::look_at(light_position, Vector3(0, 0, 0), Vector3(0, 1, 0));
+  Mat44  o                      = Mat44::orthographic(-5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 7.5f);
+  light_space_matrix            = l.mul(o);
 
   // bind the light space matrix
+  depth_shader.use();
   depth_shader.set_mat4("lightSpaceMatrix", light_space_matrix);
+
+  Mat44 m = Mat44::identity();
   depth_shader.set_mat4("model", m);
+  game_state.renderer.render_buffer(map_buffer);
 
-  sta_glBindVertexArray(vao);
-
-  Model* map_model = get_model_by_name("model_map_with_pillar");
-  sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  sta_glBufferData(GL_ARRAY_BUFFER, sizeof(Vector3) * map_model->vertex_count, map_model->vertices, GL_DYNAMIC_DRAW);
-  sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-  sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * map_model->index_count, map_model->indices, GL_DYNAMIC_DRAW);
-  glDrawElements(GL_TRIANGLES, map_model->index_count, GL_UNSIGNED_INT, 0);
+  depth_animation_shader.use();
+  depth_animation_shader.set_mat4("lightSpaceMatrix", light_space_matrix);
 
   for (u32 i = 0; i < game_state.entity_count; i++)
   {
@@ -2647,20 +2603,40 @@ void    render_to_depth_buffer(Vector3 light_position)
     EntityRenderData* render_data = entity->render_data;
     Model*            model       = get_model_by_name(game_state.buffers[entity->render_data->buffer_id].model_name);
 
-    m.identity();
-    m = m.scale(render_data->scale);
-    if (i == game_state.player.entity)
+    Mat44             m           = {};
+    m                             = m.scale(render_data->scale);
+    m                             = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
+    m                             = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
+
+    if (render_data->animation_controller)
     {
-      m = m.rotate_x(90);
+      depth_animation_shader.use();
+      if (render_data->animation_controller)
+      {
+        depth_animation_shader.set_mat4("jointTransforms", render_data->animation_controller->transforms, render_data->animation_controller->animation_data->skeleton.joint_count);
+      }
+      depth_animation_shader.set_mat4("model", m);
     }
-    m = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
-    m = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
+    else
+    {
+      depth_shader.use();
+      depth_shader.set_mat4("model", m);
+    }
+    game_state.renderer.render_buffer(render_data->buffer_id);
+  }
+
+  for (u32 i = 0; i < map.static_geometry.count; i++)
+  {
+
+    EntityRenderData* render_data = &map.static_geometry.render_data[i];
+    Vector3           cube_pos    = map.static_geometry.position[i];
+
+    Mat44             m           = Mat44::identity();
+    m                             = m.scale(render_data->scale).translate(cube_pos);
+    depth_shader.use();
     depth_shader.set_mat4("model", m);
-    sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    sta_glBufferData(GL_ARRAY_BUFFER, sizeof(Vector3) * model->vertex_count, model->vertices, GL_DYNAMIC_DRAW);
-    sta_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    sta_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * model->index_count, model->indices, GL_DYNAMIC_DRAW);
-    glDrawElements(GL_TRIANGLES, model->index_count, GL_UNSIGNED_INT, 0);
+
+    game_state.renderer.render_buffer(render_data->buffer_id);
   }
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -2675,9 +2651,8 @@ void render_map(u32 map_shader_index, u32 map_texture, u32 map_buffer, Vector3 v
   Shader* map_shader = game_state.renderer.get_shader_by_index(map_shader_index);
 
   map_shader->use();
-  Mat44   m;
+  Mat44   m = Mat44::identity();
   Vector3 ambient_lighting(0.25, 0.25, 0.25);
-  m.identity();
   map_shader->set_vec3("ambient_lighting", ambient_lighting);
   map_shader->set_vec3("light_position", light_position);
   map_shader->set_mat4("light_space_matrix", light_space_matrix);
@@ -2894,11 +2869,10 @@ void render_static_geometry()
     EntityRenderData* render_data = &map.static_geometry.render_data[i];
     Vector3           cube_pos    = map.static_geometry.position[i];
 
-    Mat44             m           = {};
-    m.identity();
-    m              = m.scale(render_data->scale).translate(cube_pos);
+    Mat44             m           = Mat44::identity();
+    m                             = m.scale(render_data->scale).translate(cube_pos);
 
-    Shader* shader = game_state.renderer.get_shader_by_index(render_data->shader);
+    Shader* shader                = game_state.renderer.get_shader_by_index(render_data->shader);
     game_state.renderer.bind_texture(*shader, "texture1", render_data->texture);
     game_state.renderer.bind_texture(*shader, "shadow_map", game_state.renderer.depth_texture);
     shader->set_mat4("model", m);
@@ -2912,9 +2886,8 @@ void render_static_geometry()
 
 void render_paths(Wave* wave)
 {
-  Mat44 m = {};
-  m.identity();
-  u32 spawn_count = __builtin_popcountll(wave->spawn_count);
+  Mat44 m           = Mat44::identity();
+  u32   spawn_count = __builtin_popcountll(wave->spawn_count);
   for (u32 i = 0; i < spawn_count; i++)
   {
     Path path = wave->enemies[i].path;
@@ -2958,11 +2931,84 @@ void debug_render_map_grid()
 void debug_render_everything(Wave* wave)
 {
 
-  Mat44 m = {};
-  m.identity();
+  Mat44 m = Mat44::identity();
   debug_render_map_grid();
   render_paths(wave);
   game_state.renderer.draw_circle(game_state.entities[game_state.player.entity].position, game_state.entities[game_state.player.entity].r, 1, YELLOW, m, m);
+}
+
+void push_render_items(u32 map_buffer, u32 ticks, u32 map_texture)
+{
+
+  Renderer* renderer = &game_state.renderer;
+  renderer->push_render_item_static(map_buffer, Mat44::identity(), map_texture);
+
+  // load the static geometry that exists outside of the plane/map
+  for (u32 i = 0; i < map.static_geometry.count; i++)
+  {
+
+    EntityRenderData* render_data = &map.static_geometry.render_data[i];
+    Vector3           cube_pos    = map.static_geometry.position[i];
+
+    Mat44             m           = Mat44::identity();
+    m                             = m.scale(render_data->scale).translate(cube_pos);
+    renderer->push_render_item_static(render_data->buffer_id, m, render_data->texture);
+  }
+
+  for (u32 i = 0; i < game_state.entity_count; i++)
+  {
+    Entity* entity = &game_state.entities[i];
+    if (entity->visible)
+    {
+      EntityRenderData* render_data = entity->render_data;
+      Mat44             m           = render_data->get_model_matrix();
+
+      m                             = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
+      m                             = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
+      if (render_data->animation_controller)
+      {
+        renderer->push_render_item_animated(render_data->buffer_id, m, render_data->animation_controller->transforms, render_data->animation_controller->animation_data->skeleton.joint_count,
+                                            render_data->texture);
+      }
+      else
+      {
+        renderer->push_render_item_static(render_data->buffer_id, m, render_data->texture);
+      }
+    }
+  }
+
+  EffectNode* node = effects.head;
+  EffectNode* prev = 0;
+  while (node)
+  {
+
+    Effect effect = node->effect;
+    if (ticks > effect.effect_ends_at)
+    {
+      if (prev)
+      {
+        prev->next = node->next;
+      }
+      else
+      {
+        effects.head = 0;
+      }
+      EffectNode* next = node->next;
+      effects.pool.free((u64)node);
+      node = next;
+      if (!node)
+      {
+        break;
+      }
+    }
+    EntityRenderData* render_data = &effect.render_data;
+    Mat44             m           = render_data->get_model_matrix();
+    m                             = m.rotate_z(RADIANS_TO_DEGREES(effect.angle) + 90);
+    m                             = m.translate(Vector3(effect.position.x, effect.position.y, 0.0f));
+    renderer->push_render_item_static(render_data->buffer_id, m, render_data->texture);
+
+    node = node->next;
+  }
 }
 
 int main()
@@ -2995,10 +3041,9 @@ int main()
 
   init_imgui(game_state.renderer.window, game_state.renderer.context);
 
-  u32    map_shader  = game_state.renderer.get_shader_by_name("model2");
-  Model* map_model   = get_model_by_name("model_map_with_pillar");
-  u32    map_buffer  = get_buffer_by_name("model_map_with_pillar");
-  u32    map_texture = game_state.renderer.get_texture("dirt_texture");
+  u32 map_shader  = game_state.renderer.get_shader_by_name("model2");
+  u32 map_buffer  = get_buffer_by_name("model_map_with_pillar");
+  u32 map_texture = game_state.renderer.get_texture("dirt_texture");
 
   init_player(&game_state.player);
 
@@ -3048,7 +3093,6 @@ int main()
         game_state.camera.z_rotation -= 0.1f;
       }
 
-      game_state.renderer.clear_framebuffer();
       if (game_state.entities[game_state.player.entity].hp == 0)
       {
         // ToDo Game over
@@ -3081,6 +3125,7 @@ int main()
         continue;
       }
 
+      game_state.renderer.clear_framebuffer();
       ui_state               = render_ui(ui_state, &game_state.player, ms, fps, update_ticks, render_ticks, game_running_ticks, screen_height);
 
       u32 prior_render_ticks = 0;
@@ -3107,9 +3152,13 @@ int main()
         }
 
         update_ticks       = SDL_GetTicks() - start_tick;
-        prior_render_ticks = SDL_GetTicks();
 
-        render_to_depth_buffer(light_position);
+        prior_render_ticks = SDL_GetTicks();
+        // push_render_items(map_buffer, game_running_ticks, map_texture);
+        // game_state.renderer.render_to_depth_texture(light_position);
+        // game_state.renderer.render_queues(game_state.camera.get_view_matrix(), game_state.camera.translation, game_state.projection);
+
+        render_to_depth_buffer(light_position, map_buffer);
 
         render_map(map_shader, map_texture, map_buffer, game_state.camera.translation);
         render_static_geometry();
@@ -3123,8 +3172,7 @@ int main()
           f32    x = input_state.mouse_position[0];
           f32    y = input_state.mouse_position[1];
           Entity e = game_state.entities[game_state.player.entity];
-          Mat44  m = {};
-          m.identity();
+          Mat44  m = Mat44::identity();
           game_state.renderer.draw_circle(Vector2(x, y), 0.05f, 2, BLUE, m, m);
         }
         if (debug_render)
