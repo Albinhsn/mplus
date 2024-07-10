@@ -103,7 +103,7 @@ struct Model
 struct AnimationController
 {
   AnimationData* animation_data;
-  u32            current_animation;
+  i32            current_animation;
   u32            current_animation_start_tick;
   i32            next_animation_index;
   Mat44*         transforms;

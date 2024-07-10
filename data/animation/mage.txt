@@ -1,8 +1,8 @@
-idle          Mage.Idle 1
-walking       Mage.Running 0.75
-walking_left  Mage.Walk_Left 0.75
-walking_right Mage.Walk_Right 0.75
-walking_back  Mage.Walk_Back 0.75
-blink         Mage.Blink 1
-fireball      Mage.Fireball 1
-pillar_of_flame Mage.PillarOfFlame
+idle            Mage.Idle 1
+walking         Mage.Running 0.75
+walking_left    Mage.Walk_Left 0.75
+walking_right   Mage.Walk_Right 0.75
+walking_back    Mage.Walk_Back 0.75
+blink           Mage.Blink 0.05
+fireball        Mage.Fireball 0.05
+pillar_of_flame Mage.PillarOfFlame 0.1

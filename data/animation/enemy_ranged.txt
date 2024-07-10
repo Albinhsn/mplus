@@ -1,2 +1,3 @@
+idle          Enemy.Ranged.Running 1
 walking       Enemy.Ranged.Running 1
-melee         Enemy.Ranged.Throw 1
+shoot         Enemy.Ranged.Throw 0.20

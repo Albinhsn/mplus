@@ -149,6 +149,7 @@ struct Entity
   i32               hp;
   EntityRenderData* render_data;
   EntityType        type;
+  bool              visible;
 };
 struct StaticGeometry
 {
@@ -186,7 +187,7 @@ void      set_animation(AnimationController* controller, u32 animation_index, u3
   controller->current_animation            = animation_index;
   controller->current_animation_start_tick = tick;
 }
-void set_animation(AnimationController* controller, const char* animation_name, u32 tick)
+bool set_animation(AnimationController* controller, const char* animation_name, u32 tick)
 {
   AnimationData* data = controller->animation_data;
   for (u32 i = 0; i < data->animation_count; i++)
@@ -199,11 +200,12 @@ void set_animation(AnimationController* controller, const char* animation_name, 
         controller->next_animation_index         = -1;
         controller->current_animation_start_tick = tick;
       }
-      return;
+      return true;
     }
   }
+  controller->current_animation = -1;
   logger.error("Can't set animation of name '%s', couldn't find it!", animation_name);
-  return;
+  return false;
 }
 
 bool is_walking_animation(const char* name)
@@ -260,10 +262,27 @@ void update_animations(u32 tick)
 {
   for (u32 i = 0; i < game_state.animation_controller_count; i++)
   {
-    AnimationController* controller        = &game_state.animation_controllers[i];
-    Animation*           current_animation = &controller->animation_data->animations[controller->current_animation];
+    AnimationController* controller = &game_state.animation_controllers[i];
+    if (controller->current_animation == -1)
+    {
+      if (!set_animation(controller, "idle", tick))
+      {
+        for (u32 j = 0; j < controller->animation_data->skeleton.joint_count; j++)
+        {
+          controller->transforms[j].identity();
+        }
+      }
+      continue;
+    }
 
-    assert(tick >= controller->current_animation_start_tick && "How did you manage this");
+    Animation* current_animation = &controller->animation_data->animations[controller->current_animation];
+
+    if (tick < controller->current_animation_start_tick)
+    {
+
+      logger.error("%d < %d", tick, controller->current_animation_start_tick);
+      assert(tick >= controller->current_animation_start_tick && "How did you manage this");
+    }
     if (current_animation->scaling * current_animation->duration * 1000 < tick - controller->current_animation_start_tick)
     {
       if (controller->next_animation_index == -1)
@@ -1245,10 +1264,7 @@ void spawn(Wave* wave, u32 enemy_index)
   entity->hp                    = enemy->initial_hp;
   logger.info("Spawning enemy %d at (%f, %f) %d %ld %ld", enemy_index, entity->position.x, entity->position.y, wave->enemies_alive, wave->spawn_times[enemy_index],
               wave->enemies[enemy_index].path.path);
-  if (enemy->type == ENEMY_RANGED)
-  {
-    enemy->cooldown = 1000;
-  }
+  enemy->cooldown                = 1000;
   CommandFindPathData* path_data = sta_allocate_struct(CommandFindPathData, 1);
   path_data->enemy               = enemy;
   path_data->tick                = wave->spawn_times[enemy_index];
@@ -1286,7 +1302,7 @@ void run_command_explode_pillar_of_flame(void* data)
   // iterate over the entities
   for (u32 i = 0; i < game_state.entity_count; i++)
   {
-    if (game_state.entities[i].type == ENTITY_ENEMY && game_state.entities[i].hp > 0)
+    if (game_state.entities[i].type == ENTITY_ENEMY && game_state.entities[i].visible)
     {
       Sphere enemy_sphere;
       enemy_sphere.position = game_state.entities[i].position;
@@ -1508,6 +1524,11 @@ bool use_ability_blink(Camera* camera, InputState* input, u32 ticks)
     }
   }
   game_state.entities[game_state.player.entity].position = position;
+  if (player_entity.render_data->animation_controller)
+  {
+    set_animation(player_entity.render_data->animation_controller, "blink", ticks);
+  }
+
   return true;
 }
 
@@ -1517,6 +1538,7 @@ bool use_ability_fireball(Camera* camera, InputState* input, u32 ticks)
 
   u32     entity_index = get_new_entity();
   Entity* e            = &game_state.entities[entity_index];
+  e->visible           = true;
   e->type              = ENTITY_PLAYER_PROJECTILE;
 
   f32    ms            = 0.02;
@@ -1528,6 +1550,11 @@ bool use_ability_fireball(Camera* camera, InputState* input, u32 ticks)
   e->r                 = 0.03f;
   e->render_data       = get_render_data_by_name("fireball");
   e->hp                = 1;
+  if (player_entity.render_data->animation_controller)
+  {
+    set_animation(player_entity.render_data->animation_controller, "fireball", ticks);
+  }
+
   return true;
 }
 
@@ -1639,7 +1666,7 @@ bool use_ability_coc(Camera* camera, InputState* input, u32 ticks)
   for (u32 i = 0; i < game_state.entity_count; i++)
   {
     Entity* entity = &game_state.entities[i];
-    if (entity->hp > 0 && entity->type == ENTITY_ENEMY)
+    if (entity->visible && entity->type == ENTITY_ENEMY)
     {
       for (u32 i = 0; i < model->index_count; i += 3)
       {
@@ -1697,6 +1724,10 @@ bool use_ability_pillar_of_flame(Camera* camera, InputState* input, u32 ticks)
 
   // position
   add_command(CMD_EXPLODE_PILLAR, (void*)data, effect.effect_ends_at);
+  if (entity.render_data->animation_controller)
+  {
+    set_animation(entity.render_data->animation_controller, "pillar_of_flame", ticks);
+  }
   return true;
 }
 
@@ -1739,7 +1770,7 @@ bool use_ability_melee(Camera* camera, InputState* input, u32 ticks)
   for (u32 i = 0; i < game_state.entity_count; i++)
   {
     Entity* entity = &game_state.entities[i];
-    if (entity->hp > 0 && entity->type == ENTITY_ENEMY)
+    if (entity->visible && entity->type == ENTITY_ENEMY)
     {
       for (u32 i = 0; i < model->index_count; i += 3)
       {
@@ -1815,7 +1846,7 @@ bool use_ability_thunderclap(Camera* camera, InputState* input, u32 ticks)
   for (u32 i = 0; i < game_state.entity_count; i++)
   {
     Entity* entity = &game_state.entities[i];
-    if (entity->hp > 0 && entity->type == ENTITY_ENEMY)
+    if (entity->visible && entity->type == ENTITY_ENEMY)
     {
       for (u32 i = 0; i < model->index_count; i += 3)
       {
@@ -1919,6 +1950,7 @@ void handle_enemy_movement(Enemy* enemy, Vector2 target_position)
     if (moved > movement_remaining)
     {
       Vector2 velocity(point.x - curr.x, point.y - curr.y);
+      curr = point;
       velocity.normalize();
       velocity.scale(movement_remaining);
       entity->velocity.x = velocity.x;
@@ -1995,7 +2027,7 @@ void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
   {
     Enemy*  enemy  = &wave->enemies[i];
     Entity* entity = &game_state.entities[enemy->entity];
-    if (entity->hp > 0)
+    if (entity->visible)
     {
       if (enemy->can_move)
       {
@@ -2014,15 +2046,20 @@ void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
       {
       case ENEMY_MELEE:
       {
-        if (sphere_sphere_collision(player_sphere, enemy_sphere))
+        if (tick >= enemy->cooldown_timer && sphere_sphere_collision(player_sphere, enemy_sphere))
         {
-          u32 tick = SDL_GetTicks();
+
           if (tick >= game_state.player.can_take_damage_tick && !game_state.god)
           {
             game_state.player.can_take_damage_tick = tick + game_state.player.damage_taken_cd;
             // entities[player->entity].hp -= 1;
             logger.info("Took damage, hp: %d %d %d", game_state.player.entity, enemy->entity, i);
           }
+          if (entity->render_data->animation_controller)
+          {
+            set_animation(entity->render_data->animation_controller, "melee", tick);
+          }
+          enemy->cooldown_timer = tick + enemy->cooldown;
         }
         break;
       }
@@ -2041,11 +2078,16 @@ void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
 
             CommandLetRangedMoveAfterShooting* arrow_data = sta_allocate_struct(CommandLetRangedMoveAfterShooting, 1);
             arrow_data->enemy                             = enemy;
+            if (entity->render_data->animation_controller)
+            {
+              set_animation(entity->render_data->animation_controller, "shoot", tick);
+            }
             add_command(CMD_LET_RANGED_MOVE_AFTER_SHOOTING, (void*)arrow_data, tick + 300);
             u32     entity_index  = get_new_entity();
             Entity* entity        = &game_state.entities[enemy->entity];
             Entity* e             = &game_state.entities[entity_index];
             e->type               = ENTITY_ENEMY_PROJECTILE;
+            e->visible            = true;
 
             f32 ms                = 0.01;
 
@@ -2097,6 +2139,14 @@ void handle_collision(Entity* e1, Entity* e2, Wave* wave)
   {
     e2->hp = 0;
   }
+  if (e1->hp == 0)
+  {
+    e1->visible = false;
+  }
+  if (e2->hp == 0)
+  {
+    e2->visible = false;
+  }
 }
 
 void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_difference)
@@ -2106,7 +2156,7 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
   {
 
     Entity* entity = &entities[i];
-    if (entity->hp > 0)
+    if (entity->visible)
     {
       f32 diff = (f32)tick_difference / 16.0f;
       entity->position.x += entity->velocity.x * diff;
@@ -2117,7 +2167,8 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
       {
         if (entity->type == ENTITY_PLAYER_PROJECTILE || entity->type == ENTITY_ENEMY_PROJECTILE)
         {
-          entity->hp = 0;
+          entity->hp      = 0;
+          entity->visible = false;
         }
         if (entity->type == ENTITY_PLAYER && !game_state.player.can_move)
         {
@@ -2132,7 +2183,8 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
       {
         if (entity->type == ENTITY_PLAYER_PROJECTILE || entity->type == ENTITY_ENEMY_PROJECTILE)
         {
-          entity->hp = 0;
+          entity->hp      = 0;
+          entity->visible = false;
         }
         if (entity->type == ENTITY_PLAYER && !game_state.player.can_move)
         {
@@ -2145,7 +2197,7 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
   for (u32 i = 0; i < entity_count - 1; i++)
   {
     Entity* e1 = &entities[i];
-    if (e1->hp == 0)
+    if (e1->visible == false)
     {
       continue;
     }
@@ -2155,7 +2207,7 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
     for (u32 j = i + 1; j < entity_count; j++)
     {
       Entity* e2 = &entities[j];
-      if (e2->hp == 0)
+      if (e2->visible == false)
       {
         continue;
       }
@@ -2165,7 +2217,7 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
       if (sphere_sphere_collision(e1_sphere, e2_sphere))
       {
         handle_collision(e1, e2, wave);
-        if (e1->hp == 0)
+        if (e1->visible == false)
         {
           break;
         }
@@ -2256,6 +2308,7 @@ bool load_wave_from_file(Wave* wave, const char* filename)
 
     Enemy* enemy                = &wave->enemies[i];
     enemy->can_move             = true;
+    enemy->cooldown_timer       = 0;
     enemy->type                 = (EnemyType)parse_int_from_string(lines.strings[string_index++]);
     EnemyData enemy_data        = get_enemy_data_from_type(enemy->type);
     enemy->initial_hp           = enemy_data.hp;
@@ -2265,6 +2318,8 @@ bool load_wave_from_file(Wave* wave, const char* filename)
     enemy->entity               = entity_idx;
 
     Entity* entity              = &game_state.entities[entity_idx];
+
+    entity->visible             = true;
     entity->render_data         = get_render_data_by_name(enemy_data.render_data_name);
     entity->type                = ENTITY_ENEMY;
     entity->angle               = 0.0f;
@@ -2408,8 +2463,7 @@ bool load_hero_from_file(const char* file_location)
     entity->velocity           = Vector2(0, 0);
     entity->r                  = hero_obj->lookup_value("radius")->number;
     entity->hp                 = hero_obj->lookup_value("hp")->number;
-    // ToDo we render uninitialized heroes if this isn't here
-    break;
+    entity->visible            = false;
   }
   return true;
 }
@@ -2521,9 +2575,10 @@ bool load_data()
 void init_player(Hero* player)
 {
 
-  *player             = get_hero_by_name("Warrior");
-  player->can_move    = true;
-  EntityRenderData rd = *game_state.entities[player->entity].render_data;
+  *player                                     = get_hero_by_name("Mage");
+  game_state.entities[player->entity].visible = true;
+  player->can_move                            = true;
+  EntityRenderData rd                         = *game_state.entities[player->entity].render_data;
   logger.info("Inited player %d", rd.texture);
 }
 
@@ -2634,20 +2689,16 @@ void render_entities(u32 game_running_ticks)
   for (u32 i = 0; i < game_state.entity_count; i++)
   {
     Entity* entity = &game_state.entities[i];
-    if (entity->hp > 0)
+    if (entity->visible)
     {
-      if (i != game_state.player.entity)
-      {
-        continue;
-      }
       EntityRenderData* render_data = entity->render_data;
       Shader*           shader      = game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("animation"));
 
       shader->use();
       Mat44 m = render_data->get_model_matrix();
 
-      m = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
-      m = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
+      m       = m.rotate_z(RADIANS_TO_DEGREES(entity->angle) + 90);
+      m       = m.translate(Vector3(entity->position.x, entity->position.y, 0.0f));
 
       game_state.renderer.bind_texture(*shader, "texture1", render_data->texture);
       game_state.renderer.bind_texture(*shader, "shadow_map", game_state.renderer.depth_texture);
@@ -2724,7 +2775,7 @@ void render_console(Hero* player, InputState* input_state, char* console_buf, u3
   ImGui::End();
 }
 
-void update(Wave* wave, Camera& camera, InputState* input_state, u32 game_running_ticks, u32 ticks, u32 tick_difference)
+void update(Wave* wave, Camera& camera, InputState* input_state, u32 game_running_ticks, u32 tick_difference)
 {
 
   handle_abilities(camera, input_state, game_running_ticks);
@@ -3037,7 +3088,7 @@ int main()
         assert(SDL_GetTicks() - ticks > 0 && "How is this possible?");
         game_running_ticks += SDL_GetTicks() - ticks;
 
-        update(&wave, game_state.camera, &input_state, game_running_ticks, ticks, tick_difference);
+        update(&wave, game_state.camera, &input_state, game_running_ticks, tick_difference);
 
         if (handle_wave_over(&wave))
         {

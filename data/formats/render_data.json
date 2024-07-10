@@ -1,15 +1,17 @@
 {
   "enemy_melee": {
+    "animation": "model_enemy_melee",
     "texture": "enemy_melee_diffuse_texture",
     "shader": "animation",
-    "scale": 0.0015,
+    "scale": 0.001,
     "rotation_x": 90,
     "buffer": "model_enemy_melee"
   },
   "enemy_ranged": {
+    "animation": "model_enemy_ranged",
     "texture": "enemy_ranged_diffuse_texture",
     "shader": "animation",
-    "scale": 0.0015,
+    "scale": 0.001,
     "rotation_x": 90,
     "buffer": "model_enemy_ranged"
   },
