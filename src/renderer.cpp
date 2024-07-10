@@ -33,16 +33,25 @@ void Renderer::push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms,
 void Renderer::render_to_depth_texture_cube(Vector3 light_position, u32 buffer)
 {
 
+  glDepthMask(GL_FALSE);
   Mat44 perspective = Mat44::identity();
   perspective.perspective(90.0f, 1, 1.0f, 25.0f);
 
+  light_position= Vector3(0, 0, 0);
   static Mat44 shadow_transforms[6];
-  shadow_transforms[0].look_at(light_position, light_position.add(Vector3(1, 0, 0)), Vector3(0, -1, 0));
-  shadow_transforms[1].look_at(light_position, light_position.add(Vector3(-1, 0, 0)), Vector3(0, -1, 0));
-  shadow_transforms[2].look_at(light_position, light_position.add(Vector3(0, 1, 0)), Vector3(0, 0, 1));
-  shadow_transforms[3].look_at(light_position, light_position.add(Vector3(0, -1, 0)), Vector3(0, 0, -1));
-  shadow_transforms[4].look_at(light_position, light_position.add(Vector3(0, 0, 1)), Vector3(0, -1, 0));
-  shadow_transforms[5].look_at(light_position, light_position.add(Vector3(0, 0, -1)), Vector3(0, -1, 0));
+  shadow_transforms[0] = shadow_transforms[0].look_at(light_position, light_position.add(Vector3(1, 0, 0)), Vector3(0, -1, 0)).mul(perspective);
+  shadow_transforms[0].debug();
+  shadow_transforms[1] = shadow_transforms[1].look_at(light_position, light_position.add(Vector3(-1, 0, 0)), Vector3(0, -1, 0)).mul(perspective);
+  shadow_transforms[1].debug();
+  shadow_transforms[2] = shadow_transforms[2].look_at(light_position, light_position.add(Vector3(0, 1, 0)), Vector3(0, 0, 1)).mul(perspective);
+  shadow_transforms[2].debug();
+  shadow_transforms[3] = shadow_transforms[3].look_at(light_position, light_position.add(Vector3(0, -1, 0)), Vector3(0, 0, -1)).mul(perspective);
+  shadow_transforms[3].debug();
+  shadow_transforms[4] = shadow_transforms[4].look_at(light_position, light_position.add(Vector3(0, 0, 1)), Vector3(0, -1, 0)).mul(perspective);
+  shadow_transforms[4].debug();
+  shadow_transforms[5] = shadow_transforms[5].look_at(light_position, light_position.add(Vector3(0, 0, -1)), Vector3(0, -1, 0)).mul(perspective);
+  shadow_transforms[5].debug();
+  exit(1);
 
   this->change_viewport(this->shadow_width, this->shadow_height);
   sta_glBindFramebuffer(GL_FRAMEBUFFER, buffer);
@@ -76,14 +85,14 @@ void Renderer::render_to_depth_texture_cube(Vector3 light_position, u32 buffer)
   }
 
   sta_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glDepthMask(GL_TRUE);
   this->reset_viewport_to_screen_size();
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-void Renderer::render_to_depth_texture()
+void Renderer::render_to_depth_texture_directional(Vector3 light_direction)
 {
 
-  Vector3 light_direction(0, -1, -0.1);
   glCullFace(GL_FRONT);
   this->change_viewport(this->shadow_width, this->shadow_height);
   sta_glBindFramebuffer(GL_FRAMEBUFFER, this->shadow_map_framebuffer);
@@ -122,10 +131,9 @@ void Renderer::render_to_depth_texture()
   glCullFace(GL_BACK);
 }
 
-void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection, Vector3 light_position, u32 cube_texture)
+void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection, Vector3 light_position, u32 cube_texture, Vector3 directional_light_direction)
 {
   Vector3 ambient_lighting(0.25, 0.25, 0.25);
-  Vector3 directional_light_direction(0, -1, -0.1);
 
   Shader* shader = this->get_shader_by_index(this->get_shader_by_name("model2"));
   shader->use();
@@ -659,5 +667,5 @@ void Renderer::render_buffer(u32 buffer_id)
 
 void Renderer::clear_framebuffer()
 {
-  sta_gl_clear_buffer(0, 0, 0, 1.0f);
+  sta_gl_clear_buffer(1, 1, 1, 1.0f);
 }

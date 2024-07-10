@@ -94,7 +94,11 @@ GLuint compile_shader(const char* path, GLint shader_type)
 {
 
   Buffer buffer = {};
-  sta_read_file(&buffer, path);
+  if (!sta_read_file(&buffer, path))
+  {
+    logger.error("Failed to read shader from '%s'\n", path, shader_type);
+    return -1;
+  }
   const char*  vertex_content = buffer.buffer;
   unsigned int vertex         = sta_glCreateShader(shader_type);
   sta_glShaderSource(vertex, 1, &vertex_content, 0);

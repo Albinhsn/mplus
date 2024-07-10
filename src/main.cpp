@@ -2,6 +2,7 @@
 #include <GL/glext.h>
 #include <SDL2/SDL_mouse.h>
 #include <SDL2/SDL_timer.h>
+#include <SDL2/SDL_video.h>
 #include <strings.h>
 
 #include <sys/time.h>
@@ -2670,12 +2671,12 @@ inline bool handle_wave_over(Wave* wave)
   return spawn_count == wave->enemy_count && wave->enemies_alive == 0;
 }
 
-void debug_render_depth_texture()
+void debug_render_depth_texture(u32 texture)
 {
   Shader q_shader = *game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("quad"));
   q_shader.use();
 
-  game_state.renderer.bind_texture(q_shader, "texture1", game_state.renderer.depth_texture);
+  game_state.renderer.bind_cube_texture(q_shader, "texture1", texture);
   game_state.renderer.enable_2d_rendering();
   static u32 vao = 0, vbo = 0, ebo = 0;
 
@@ -2686,10 +2687,10 @@ void debug_render_depth_texture()
     sta_glGenBuffers(1, &ebo);
     sta_glBindVertexArray(vao);
     f32 tot[20] = {
-        1.0f,  1.0f,  0, 1.0f, 1.0f, //
-        1.0f,  -1.0,  0, 1.0f, 0.0f, //
-        -1.0f, -1.0f, 0, 0.0f, 0.0f, //
-        -1.0f, 1.0,   0, 0.0f, 1.0f, //
+        0.8f, .8f,  0, 1.0f, 1.0f, //
+        .8f,  -.8,  0, 1.0f, 0.0f, //
+        -.8f, -.8f, 0, 0.0f, 0.0f, //
+        -.8f, .8,   0, 0.0f, 1.0f, //
     };
     u32 indices[6] = {1, 3, 0, 1, 2, 3};
     sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -2921,6 +2922,104 @@ void push_render_items(u32 map_buffer, u32 ticks, u32 map_texture)
   }
 }
 
+u32 load_cubemap()
+{
+  u32 texture_id;
+  glGenTextures(1, &texture_id);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, texture_id);
+
+  const char* image_names[6] = {
+      "./data/textures/red.tga", "./data/textures/dirt01.tga", "./data/textures/green.tga", "./data/textures/black.tga", "./data/textures/white.tga", "./data/textures/blue.tga",
+  };
+
+  TargaImage image = {};
+
+  for (unsigned int i = 0; i < 6; i++)
+  {
+    if (!sta_targa_read_from_file_rgba(&image, image_names[i]))
+    {
+      exit(1);
+    }
+    printf("%s: %d %d %d\n", image_names[0], image.width, image.height, image.bpp);
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
+  }
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+  return texture_id;
+}
+
+void test_cubemap(InputState input_state)
+{
+
+  float skyboxVertices[] = {// positions
+                            -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, 1.0f, -1.0f,
+                            -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f, 1.0f,
+                            1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f, 1.0f,
+                            1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  1.0f, -1.0f,
+                            1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f};
+
+
+  // skybox VAO
+  unsigned int skyboxVAO, skyboxVBO;
+  glGenVertexArrays(1, &skyboxVAO);
+  glGenBuffers(1, &skyboxVBO);
+  glBindVertexArray(skyboxVAO);
+  glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+
+  u32         cubemapTexture = load_cubemap();
+  ShaderType  types[2]       = {SHADER_TYPE_VERT, SHADER_TYPE_FRAG};
+  const char* locations[2]   = {
+      "./shaders/skybox.vert",
+      "./shaders/skybox.frag",
+  };
+  Shader shader(types, locations, 2, "skybox");
+
+  shader.use();
+  GLuint location = sta_glGetUniformLocation(shader.id, "skybox");
+  sta_glUniform1i(location, 0);
+  glActiveTexture(GL_TEXTURE0);
+  sta_glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+
+  while (true)
+  {
+    input_state.update();
+    if (input_state.should_quit())
+    {
+      exit(1);
+    }
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+
+    // draw skybox as last
+    glDepthFunc(GL_LEQUAL); // change depth function so depth test passes when values are equal to depth buffer's content
+    shader.use();
+    Mat44 view = Mat44::identity(); // remove translation from the view matrix
+    shader.set_mat4("view", view);
+    shader.set_mat4("projection", view);
+    // skybox cube
+    glBindVertexArray(skyboxVAO);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+    glDepthFunc(GL_LESS); // set depth function back to default
+
+    // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
+    // -------------------------------------------------------------------------------
+    SDL_GL_SwapWindow(game_state.renderer.window);
+  }
+
+  exit(1);
+}
+
 int main()
 {
 
@@ -2949,12 +3048,13 @@ int main()
   game_state.projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
 
   init_imgui(game_state.renderer.window, game_state.renderer.context);
+  test_cubemap(input_state);
 
   u32     map_shader  = game_state.renderer.get_shader_by_name("model2");
   u32     map_buffer  = get_buffer_by_name("model_map_with_pillar");
   u32     map_texture = game_state.renderer.get_texture("dirt_texture");
 
-  Vector3 light_position;
+  Vector3 point_light_position;
   init_player(&game_state.player);
 
   Wave wave = {};
@@ -2979,9 +3079,8 @@ int main()
   bool debug_render = false;
   logger.info("Inited player %d", game_state.entities[game_state.player.entity].render_data->texture);
 
-  Vector3 point_light_pos     = Vector3();
-  Mat44   point_light_m       = Mat44::identity();
-  light_position              = Vector3(-0.5f, 0.5f, 0.5);
+  Mat44 point_light_m         = Mat44::identity();
+  point_light_position        = Vector3(-0.5f, 0.5f, 0.5);
   u32     point_light_texture = game_state.renderer.get_texture("white_texture");
   Shader* point_light_shader  = game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("light_source"));
   u32     sphere_buffer       = get_buffer_by_name("model_fireball");
@@ -3006,10 +3105,18 @@ int main()
   u32 depthMapFBO;
   glGenFramebuffers(1, &depthMapFBO);
   glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-  sta_glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_cubemap, 0);
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_cubemap, 0);
   glDrawBuffer(GL_NONE);
   glReadBuffer(GL_NONE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  // Figure out where you want to place both lights, one directional and one point light
+  Vector3 directional_light(0, -0.1, 0.5);
+
+  // figure out what calculations you need for each, i.e.
+  //    you need standard shadow mapping for directional
+  //    you need cube for point light
+  // walkthrough again what you actually need to render each and just do it :)
 
   while (true)
   {
@@ -3053,11 +3160,11 @@ int main()
       }
       if (input_state.is_key_pressed('h'))
       {
-        light_position.y -= 0.01f;
+        point_light_position.y -= 0.01f;
       }
       if (input_state.is_key_pressed('y'))
       {
-        light_position.y += 0.01f;
+        point_light_position.y += 0.01f;
       }
       if (input_state.is_key_released('x'))
       {
@@ -3079,12 +3186,6 @@ int main()
       if (ui_state == UI_STATE_GAME_RUNNING)
       {
 
-        if (p < -PI)
-        {
-          p = PI;
-        }
-        // light_position = Vector3(cosf(p) * 2, sinf(p) * 2, 1);
-
         assert(SDL_GetTicks() - ticks > 0 && "How is this possible?");
         game_running_ticks += SDL_GetTicks() - ticks;
 
@@ -3102,18 +3203,18 @@ int main()
 
         Vector3 view_position = Vector3(-game_state.camera.translation.x, -game_state.camera.translation.y, -game_state.camera.z);
         push_render_items(map_buffer, game_running_ticks, map_texture);
-        game_state.renderer.render_to_depth_texture();
-        game_state.renderer.render_to_depth_texture_cube(light_position, depthMapFBO);
+        game_state.renderer.render_to_depth_texture_directional(directional_light);
+        game_state.renderer.render_to_depth_texture_cube(point_light_position, depthMapFBO);
 
         point_light_shader->use();
-        point_light_m = Mat44::identity().scale(0.1f).translate(light_position);
+        point_light_m = Mat44::identity().scale(0.1f).translate(point_light_position);
         point_light_shader->set_mat4("model", point_light_m);
         point_light_shader->set_mat4("view", game_state.camera.get_view_matrix());
         point_light_shader->set_mat4("projection", game_state.projection);
         game_state.renderer.bind_texture(*point_light_shader, "texture1", point_light_texture);
         game_state.renderer.render_buffer(sphere_buffer);
 
-        game_state.renderer.render_queues(game_state.camera.get_view_matrix(), view_position, game_state.projection, light_position, depth_cubemap);
+        game_state.renderer.render_queues(game_state.camera.get_view_matrix(), view_position, game_state.projection, point_light_position, depth_cubemap, directional_light);
 
         if (render_circle_on_mouse)
         {
@@ -3128,7 +3229,7 @@ int main()
         }
         if (debug_render)
         {
-          debug_render_depth_texture();
+          debug_render_depth_texture(depth_cubemap);
         }
       }
 

@@ -16,14 +16,17 @@ uniform vec3      viewPos;
 uniform vec3      directional_light_direction;
 uniform float far_plane;
 
-float shadow_calc_directional_light(vec4 pos){
-  vec3 proj_coords = pos.xyz / pos.w;
+float shadow_calc_directional_light(vec4 fragPosLightSpace){
+  vec3 proj_coords = fragPosLightSpace.xyz / fragPosLightSpace.w;
 
   proj_coords = proj_coords * 0.5 + 0.5;
+
   float closest_depth = texture(shadow_map, proj_coords.xy).r;
   float current_depth = proj_coords.z;
 
-  float bias = max(0.005 * (1.0 - dot(normal, -directional_light_direction * 100)), 0.005);
+  vec3 normal = normalize(normal);
+  vec3 lightDir = normalize(directional_light_direction);
+  float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.005);
 
   float shadow = 0.0;
   vec2 texelSize = 1.0 / textureSize(shadow_map, 0);
@@ -50,12 +53,12 @@ float shadow_calc_point_light(vec3 pos){
 
   float bias = 0.05;
   float shadow = current_depth - bias > closest_depth ? 1.0 : 0.0;
-  return shadow * 0.001;
+  return shadow;
 }
 
 vec3 calculate_point_light(vec3 norm, vec3 viewDir){
   vec3 lightDir = normalize(light_position - FragPos);
-  float diff = max(dot(normal, lightDir), 0.0);
+  float diff = max(dot(norm, lightDir), 0.0);
   vec3 diffuse = diff * vec3(1.0, 1.0, 1.0);
 
   float specularStrength = 0.5;
@@ -71,15 +74,16 @@ vec3 calculate_point_light(vec3 norm, vec3 viewDir){
 }
 
 vec3 calculate_directional_light(vec3 norm, vec3 viewDir){
-  vec3 lightDir = normalize(-directional_light_direction);
 
-  float diff = max(dot(normal, lightDir), 0.0);
+  vec3 lightDir = normalize(directional_light_direction);
+  float diff = max(dot(norm, lightDir), 0.0);
+  vec3 diffuse = diff * vec3(1.0, 1.0, 1.0);
 
   vec3 reflectDir = reflect(-lightDir, norm);
-  float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+  vec3 halfwayDir = normalize(lightDir + viewDir);
+  float spec = pow(max(dot(norm, halfwayDir), 0.0), 32);
 
 
-  vec3 diffuse = diff * vec3(1.0, 1.0, 1.0);
   float specular_strength = 0.5;
   vec3 specular = specular_strength * spec * vec3(1.0, 1.0, 1.0);
 
@@ -97,7 +101,7 @@ void main()
   vec3 viewDir = normalize(viewPos - FragPos);
 
   vec3 point_light        = calculate_point_light(norm, viewDir);
-  vec3 directional_light  = calculate_directional_light(norm, viewDir);
+  vec3 directional_light  = calculate_directional_light(norm, viewDir) * 0.001;
 
   FragColor = vec4(point_light + directional_light, 1.0);
 
