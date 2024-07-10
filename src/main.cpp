@@ -1402,10 +1402,6 @@ void handle_player_movement(Camera& camera, InputState* input, u32 tick)
       entity->velocity.x += MS;
     }
 
-    // split the "circle" around the player in 4 pieces, one for each movement, up,down,left,right
-
-    // The angle difference is the actual angle as you'd think it'd be
-
     if (controller)
     {
       if (entity->velocity.x == 0 && entity->velocity.y == 0)
@@ -1416,6 +1412,9 @@ void handle_player_movement(Camera& camera, InputState* input, u32 tick)
       {
 
         f32 angle_difference = entity->angle - atan2f(entity->velocity.y, entity->velocity.x);
+        // Uncheck for animation test bed
+        // angle_difference     = atan2f(entity->velocity.y, entity->velocity.x) + DEGREES_TO_RADIANS(-90);
+
         if (ABS(angle_difference) < PI / 4)
         {
           update_animation_to_walking(controller, tick, "walking");
@@ -2025,7 +2024,7 @@ void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
           {
             game_state.player.can_take_damage_tick = tick + game_state.player.damage_taken_cd;
             // entities[player->entity].hp -= 1;
-            logger.info("Took damage, hp: %d %d %d", game_state.player.entity, enemy->entity, i);
+            // logger.info("Took damage, hp: %d %d %d", game_state.player.entity, enemy->entity, i);
           }
           if (entity->render_data->animation_controller)
           {
@@ -2831,6 +2830,42 @@ void debug_render_everything(Wave* wave)
   game_state.renderer.draw_circle(game_state.entities[game_state.player.entity].position, game_state.entities[game_state.player.entity].r, 1, YELLOW, m, m);
 }
 
+void animation_test_bed(InputState input_state)
+{
+  Renderer*         renderer    = &game_state.renderer;
+  EntityRenderData* render_data = game_state.entities[game_state.player.entity].render_data;
+  u32               joint_count = render_data->animation_controller->animation_data->skeleton.joint_count;
+  u32               buffer      = render_data->buffer_id;
+  Shader*           shader      = renderer->get_shader_by_index(renderer->get_shader_by_name("animation2"));
+  shader->use();
+  renderer->bind_texture(*shader, "texture1", render_data->texture);
+  Mat44 jointTransforms[joint_count];
+  for (u32 i = 0; i < joint_count; i++)
+  {
+    jointTransforms[i] = Mat44::identity();
+  }
+
+  while (true)
+  {
+
+    u32 ticks = SDL_GetTicks();
+    input_state.update();
+    if (input_state.should_quit())
+    {
+      exit(1);
+    }
+    handle_abilities(game_state.camera, &input_state, ticks);
+    handle_player_movement(game_state.camera, &input_state, ticks);
+    update_animations(ticks);
+
+    renderer->clear_framebuffer();
+    shader->set_mat4("jointTransforms", render_data->animation_controller->transforms, joint_count);
+    shader->set_mat4("model", Mat44::identity().scale(0.004f).rotate_y(180));
+    renderer->render_buffer(buffer);
+    renderer->swap_buffers();
+  }
+}
+
 void push_render_items(u32 map_buffer, u32 ticks, u32 map_texture)
 {
 
@@ -2944,6 +2979,8 @@ int main()
 
   bool debug_render = false;
   logger.info("Inited player %d", game_state.entities[game_state.player.entity].render_data->texture);
+
+  // animation_test_bed(input_state);
 
   while (true)
   {

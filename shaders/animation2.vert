@@ -6,7 +6,7 @@ layout (location = 2) in vec3 aNormal;
 layout (location = 3) in vec4 weight;
 layout (location = 4) in ivec4 indices;
 
-const int MAX_JOINTS = 50;
+const int MAX_JOINTS = 100;
 
 out vec2 TexCoord;
 
@@ -24,7 +24,7 @@ void main()
     local_pos            += pose_position * weight[i];
   }
 
-  gl_Position = vec4(aPos, 1.0) * model + local_pos * 0.001;
+  gl_Position = local_pos * model;
 
   TexCoord          = aTexCoord;
 }
