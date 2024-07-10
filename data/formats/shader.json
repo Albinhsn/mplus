@@ -1,4 +1,14 @@
 {
+  "light_source": [
+    {
+      "type": 0,
+      "location": "./shaders/light_source.vert"
+    },
+    {
+      "type": 1,
+      "location": "./shaders/light_source.frag"
+    }
+  ],
   "model": [
     {
       "type": 0,

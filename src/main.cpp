@@ -2925,7 +2925,6 @@ int main()
 {
 
   game_state.camera                     = Camera(Vector3(0, 0, 0), -30, -3);
-
   game_state.animation_controller_count = 0;
 
   effects.pool.init(sta_allocate(sizeof(EffectNode) * 25), sizeof(EffectNode), 25);
@@ -2980,6 +2979,13 @@ int main()
   bool debug_render = false;
   logger.info("Inited player %d", game_state.entities[game_state.player.entity].render_data->texture);
 
+  Vector3 point_light_pos     = Vector3();
+  Mat44   point_light_m       = Mat44::identity();
+  light_position              = Vector3(-0.5f, 0.5f, 0.5);
+  u32     point_light_texture = game_state.renderer.get_texture("white_texture");
+  Shader* point_light_shader  = game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("light_source"));
+  u32     sphere_buffer       = get_buffer_by_name("model_fireball");
+
   // animation_test_bed(input_state);
 
   while (true)
@@ -3025,6 +3031,14 @@ int main()
         game_state.camera.rotation -= 1;
         logger.info("New rotation %f", game_state.camera.rotation);
       }
+      if (input_state.is_key_pressed('h'))
+      {
+        light_position.y -= 0.01f;
+      }
+      if (input_state.is_key_pressed('y'))
+      {
+        light_position.y += 0.01f;
+      }
       if (input_state.is_key_released('x'))
       {
         render_circle_on_mouse = !render_circle_on_mouse;
@@ -3049,8 +3063,7 @@ int main()
         {
           p = PI;
         }
-        p -= 0.01f;
-        light_position = Vector3(cosf(p) * 2, sinf(p) * 2, 1);
+        // light_position = Vector3(cosf(p) * 2, sinf(p) * 2, 1);
 
         assert(SDL_GetTicks() - ticks > 0 && "How is this possible?");
         game_running_ticks += SDL_GetTicks() - ticks;
@@ -3070,6 +3083,14 @@ int main()
         Vector3 view_position = Vector3(-game_state.camera.translation.x, -game_state.camera.translation.y, -game_state.camera.z);
         push_render_items(map_buffer, game_running_ticks, map_texture);
         game_state.renderer.render_to_depth_texture(light_position);
+
+        point_light_shader->use();
+        point_light_m = Mat44::identity().scale(0.1f).translate(light_position);
+        point_light_shader->set_mat4("model", point_light_m);
+        point_light_shader->set_mat4("view", game_state.camera.get_view_matrix());
+        point_light_shader->set_mat4("projection", game_state.projection);
+        game_state.renderer.bind_texture(*point_light_shader, "texture1", point_light_texture);
+        game_state.renderer.render_buffer(sphere_buffer);
         game_state.renderer.render_queues(game_state.camera.get_view_matrix(), view_position, game_state.projection, light_position);
 
         if (render_circle_on_mouse)
