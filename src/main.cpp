@@ -2621,6 +2621,37 @@ void render_console(Hero* player, InputState* input_state, char* console_buf, u3
   ImGui::End();
 }
 
+void update_effects(u32 ticks)
+{
+  EffectNode* node = effects.head;
+  EffectNode* prev = 0;
+  while (node)
+  {
+
+    Effect effect = node->effect;
+    if (ticks > effect.effect_ends_at)
+    {
+      if (prev)
+      {
+        prev->next = node->next;
+      }
+      else
+      {
+        effects.head = 0;
+      }
+      EffectNode* next = node->next;
+      effects.pool.free((u64)node);
+      node = next;
+      if (!node)
+      {
+        break;
+      }
+    }
+
+    node = node->next;
+  }
+}
+
 void update(Wave* wave, Camera& camera, InputState* input_state, u32 game_running_ticks, u32 tick_difference)
 {
 
@@ -2628,6 +2659,7 @@ void update(Wave* wave, Camera& camera, InputState* input_state, u32 game_runnin
   handle_player_movement(camera, input_state, game_running_ticks);
   run_commands(game_running_ticks);
   update_entities(game_state.entities, game_state.entity_count, wave, tick_difference);
+  update_effects(game_running_ticks);
   update_enemies(wave, tick_difference, game_running_ticks);
 
   update_animations(game_running_ticks);
@@ -2838,31 +2870,12 @@ void push_render_items(u32 map_buffer, u32 ticks, u32 map_texture)
       }
     }
   }
-
   EffectNode* node = effects.head;
   EffectNode* prev = 0;
   while (node)
   {
 
-    Effect effect = node->effect;
-    if (ticks > effect.effect_ends_at)
-    {
-      if (prev)
-      {
-        prev->next = node->next;
-      }
-      else
-      {
-        effects.head = 0;
-      }
-      EffectNode* next = node->next;
-      effects.pool.free((u64)node);
-      node = next;
-      if (!node)
-      {
-        break;
-      }
-    }
+    Effect            effect      = node->effect;
     EntityRenderData* render_data = &effect.render_data;
     Mat44             m           = render_data->get_model_matrix();
     m                             = m.rotate_z(RADIANS_TO_DEGREES(effect.angle) + 90);
