@@ -3,6 +3,7 @@
 #include "common.h"
 #include "files.h"
 #include <GL/gl.h>
+#include <GL/glext.h>
 #include <SDL2/SDL.h>
 
 typedef GLuint(APIENTRY* PFNGLCREATESHADERPROC)(GLenum type);
@@ -45,7 +46,6 @@ typedef void(APIENTRY* PFNGLUNIFORM1FPROC)(GLint location, GLfloat v0);
 typedef void(APIENTRY* PFNGLGENFRAMEBUFFERSPROC)(GLsizei n, GLuint* framebuffers);
 typedef void(APIENTRY* PFNGLDELETEFRAMEBUFFERSPROC)(GLsizei n, const GLuint* framebuffers);
 typedef void(APIENTRY* PFNGLBINDFRAMEBUFFERPROC)(GLenum target, GLuint framebuffer);
-typedef void(APIENTRY* PFNGLFRAMEBUFFERTEXTURE2DPROC)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
 typedef void(APIENTRY* PFNGLGENRENDERBUFFERSPROC)(GLsizei n, GLuint* renderbuffers);
 typedef void(APIENTRY* PFNGLBINDRENDERBUFFERPROC)(GLenum target, GLuint renderbuffer);
 typedef void(APIENTRY* PFNGLRENDERBUFFERSTORAGEPROC)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
@@ -65,6 +65,8 @@ typedef void(APIENTRY* PFNGLVERTEXARRAYVERTEXBUFFERPROC)(GLuint vaobj, GLuint bi
 typedef void(APIENTRY* PFNGLENABLEVERTEXARRAYATTRIBPROC)(GLuint vaobj, GLuint index);
 typedef void(APIENTRY* PFNGLVERTEXARRAYATTRIBFORMATPROC)(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset);
 typedef void(APIENTRY* PFNGLVERTEXARRAYATTRIBBINDINGPROC)(GLuint vaobj, GLuint attribindex, GLuint bindingindex);
+typedef void(APIENTRY* PFNGLFRAMEBUFFERTEXTUREPROC)(GLenum target, GLenum attachment, GLuint texture, GLint level);
+
 
 inline void sta_gl_clear_buffer(f32 r, f32 g, f32 b, f32 a)
 {
@@ -85,7 +87,7 @@ void      sta_glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, c
 void      sta_updateWindowSizeSDL(SDL_Window* window, i32 width, i32 height);
 void      sta_gl_draw_lines(GLuint vertex_array, u32 vertex_count, u32 width, Color color);
 void      sta_gl_render(SDL_Window* window);
-void sta_init_sdl_gl(SDL_Window** window, SDL_GLContext* context, int screenWidth, int screenHeight, bool vsync);
+void      sta_init_sdl_gl(SDL_Window** window, SDL_GLContext* context, int screenWidth, int screenHeight, bool vsync);
 void      sta_init_sdl_window(u8** buffer, SDL_Window** window, u64 screenWidth, u64 screenHeight);
 GLuint    sta_glCreateShader(GLenum type);
 void      sta_glCompileShader(GLuint shader);
@@ -129,6 +131,7 @@ void      sta_glGenFramebuffers(GLsizei n, GLuint* framebuffers);
 void      sta_glDeleteFramebuffers(GLsizei n, const GLuint* framebuffers);
 void      sta_glBindFramebuffer(GLenum target, GLuint framebuffer);
 void      sta_glFramebufferTexture2D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
+void      sta_glFramebufferTexture(GLenum target, GLenum attachment, GLuint texture, GLint level);
 void      sta_glGenRenderbuffers(GLsizei n, GLuint* renderbuffers);
 void      sta_glBindRenderbuffer(GLenum target, GLuint renderbuffer);
 void      sta_glRenderbufferStorage(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);

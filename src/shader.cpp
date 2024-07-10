@@ -124,6 +124,10 @@ inline GLuint get_gl_shader_type(ShaderType type)
   {
     return GL_TESS_CONTROL_SHADER;
   }
+  case SHADER_TYPE_GEOMETRY:
+  {
+    return GL_GEOMETRY_SHADER;
+  }
   case SHADER_TYPE_TESS_EVALUATION:
   {
     return GL_TESS_EVALUATION_SHADER;

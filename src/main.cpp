@@ -2990,6 +2990,26 @@ int main()
 
   // light direction
   //
+  u32 depth_cubemap;
+  glGenTextures(1, &depth_cubemap);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, depth_cubemap);
+  for (u32 i = 0; i < 6; ++i)
+  {
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+  }
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+  u32 depthMapFBO;
+  glGenFramebuffers(1, &depthMapFBO);
+  glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+  sta_glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_cubemap, 0);
+  glDrawBuffer(GL_NONE);
+  glReadBuffer(GL_NONE);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   while (true)
   {
@@ -3023,6 +3043,7 @@ int main()
       }
       if (input_state.is_key_released('b'))
       {
+
         debug_render = !debug_render;
       }
       if (input_state.is_key_pressed('l'))
@@ -3081,7 +3102,8 @@ int main()
 
         Vector3 view_position = Vector3(-game_state.camera.translation.x, -game_state.camera.translation.y, -game_state.camera.z);
         push_render_items(map_buffer, game_running_ticks, map_texture);
-        game_state.renderer.render_to_depth_texture(light_position);
+        game_state.renderer.render_to_depth_texture();
+        game_state.renderer.render_to_depth_texture_cube(light_position, depthMapFBO);
 
         point_light_shader->use();
         point_light_m = Mat44::identity().scale(0.1f).translate(light_position);
@@ -3091,7 +3113,7 @@ int main()
         game_state.renderer.bind_texture(*point_light_shader, "texture1", point_light_texture);
         game_state.renderer.render_buffer(sphere_buffer);
 
-        game_state.renderer.render_queues(game_state.camera.get_view_matrix(), view_position, game_state.projection, light_position);
+        game_state.renderer.render_queues(game_state.camera.get_view_matrix(), view_position, game_state.projection, light_position, depth_cubemap);
 
         if (render_circle_on_mouse)
         {

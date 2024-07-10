@@ -109,8 +109,9 @@ public:
 
   void                     push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms, u32 joint_count, u32 texture);
   void                     push_render_item_static(u32 buffer, Mat44 m, u32 texture);
-  void                     render_to_depth_texture(Vector3 light_position);
-  void                     render_queues(Mat44 view, Vector3 view_position, Mat44 projection, Vector3 light_position);
+  void                     render_to_depth_texture();
+  void                     render_to_depth_texture_cube(Vector3 light_position, u32 buffer);
+  void                     render_queues(Mat44 view, Vector3 view_position, Mat44 projection, Vector3 light_position, u32 cube_map);
 
   u32                      line_vao, line_vbo;
   u32                      shadow_width, shadow_height;
@@ -169,6 +170,7 @@ public:
   u32     create_buffer(u64 buffer_size, void* buffer_data, BufferAttributes* attributes, u64 attribute_count);
   u32     create_texture(u32 width, u32 height, void* data);
   void    bind_texture(Shader shader, const char* uniform_name, u32 texture_index);
+  void    bind_cube_texture(Shader shader, const char* uniform_name, u32 texture_index);
   u32     create_buffer_from_model(Model* model, BufferAttributes* attributes, u32 attribute_count);
   bool    load_shaders_from_files(const char* file_location);
   bool    load_textures_from_files(const char* file_location);

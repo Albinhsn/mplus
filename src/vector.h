@@ -125,8 +125,14 @@ public:
   {
     printf("%f %f %f\n", x, y, z);
   }
-  float          len();
-  float          dot(Vector3 v);
+  float   len();
+  float   dot(Vector3 v);
+  Vector3 add(Vector3 v)
+  {
+    Vector3 out(this->x + v.x, this->y + v.y, this->z + v.z);
+
+    return out;
+  }
   Vector3        cross(Vector3 v);
   void           scale(float s);
   void           normalize();

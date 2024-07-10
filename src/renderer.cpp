@@ -1,5 +1,7 @@
 #include "renderer.h"
 #include "common.h"
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include "files.h"
 #include "platform.h"
 #include "sdl.h"
@@ -28,16 +30,66 @@ void Renderer::push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms,
   RESIZE_ARRAY(this->render_queue_animated_buffers, RenderQueueItemAnimated, this->render_queue_animated_count, this->render_queue_animated_capacity);
   this->render_queue_animated_buffers[this->render_queue_animated_count++] = item;
 }
-
-void Renderer::render_to_depth_texture(Vector3 light_position)
+void Renderer::render_to_depth_texture_cube(Vector3 light_position, u32 buffer)
 {
 
+  Mat44 perspective = Mat44::identity();
+  perspective.perspective(90.0f, 1, 1.0f, 25.0f);
+
+  static Mat44 shadow_transforms[6];
+  shadow_transforms[0].look_at(light_position, light_position.add(Vector3(1, 0, 0)), Vector3(0, -1, 0));
+  shadow_transforms[1].look_at(light_position, light_position.add(Vector3(-1, 0, 0)), Vector3(0, -1, 0));
+  shadow_transforms[2].look_at(light_position, light_position.add(Vector3(0, 1, 0)), Vector3(0, 0, 1));
+  shadow_transforms[3].look_at(light_position, light_position.add(Vector3(0, -1, 0)), Vector3(0, 0, -1));
+  shadow_transforms[4].look_at(light_position, light_position.add(Vector3(0, 0, 1)), Vector3(0, -1, 0));
+  shadow_transforms[5].look_at(light_position, light_position.add(Vector3(0, 0, -1)), Vector3(0, -1, 0));
+
+  this->change_viewport(this->shadow_width, this->shadow_height);
+  sta_glBindFramebuffer(GL_FRAMEBUFFER, buffer);
+  glClear(GL_DEPTH_BUFFER_BIT);
+
+  Shader depth_shader = *this->get_shader_by_index(this->get_shader_by_name("depth_cube"));
+  depth_shader.use();
+  depth_shader.set_vec3("lightPos", light_position);
+  depth_shader.set_mat4("shadowMatrices", shadow_transforms, 6);
+  depth_shader.set_float("far_plane", 25.0f);
+
+  for (u32 i = 0; i < this->render_queue_static_count; i++)
+  {
+    RenderQueueItemStatic item = this->render_queue_static_buffers[i];
+    depth_shader.set_mat4("model", item.m);
+    this->render_buffer(item.buffer);
+  }
+
+  Shader depth_animation_shader = *this->get_shader_by_index(this->get_shader_by_name("depth_animation_cube"));
+  depth_animation_shader.use();
+  depth_shader.set_vec3("lightPos", light_position);
+  depth_shader.set_mat4("shadowMatrices", shadow_transforms, 6);
+  depth_shader.set_float("far_plane", 25.0f);
+  for (u32 i = 0; i < this->render_queue_animated_count; i++)
+  {
+    RenderQueueItemAnimated item = this->render_queue_animated_buffers[i];
+    depth_animation_shader.set_mat4("model", item.m);
+    depth_animation_shader.set_mat4("jointTransforms", item.transforms, item.joint_count);
+
+    this->render_buffer(item.buffer);
+  }
+
+  sta_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  this->reset_viewport_to_screen_size();
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void Renderer::render_to_depth_texture()
+{
+
+  Vector3 light_direction(0, -1, -0.1);
   glCullFace(GL_FRONT);
   this->change_viewport(this->shadow_width, this->shadow_height);
   sta_glBindFramebuffer(GL_FRAMEBUFFER, this->shadow_map_framebuffer);
   glClear(GL_DEPTH_BUFFER_BIT);
 
-  Mat44 l                  = Mat44::look_at(light_position, Vector3(0, 0, 0), Vector3(0, 1, 0));
+  Mat44 l                  = Mat44::look_at(light_direction, Vector3(0, 0, 0), Vector3(0, 1, 0));
   Mat44 o                  = Mat44::orthographic(-5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 7.5f);
   this->light_space_matrix = l.mul(o);
 
@@ -70,14 +122,16 @@ void Renderer::render_to_depth_texture(Vector3 light_position)
   glCullFace(GL_BACK);
 }
 
-void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection, Vector3 light_position)
+void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection, Vector3 light_position, u32 cube_texture)
 {
   Vector3 ambient_lighting(0.25, 0.25, 0.25);
-  Vector3 directional_light_direction(0, 1, -0.1);
+  Vector3 directional_light_direction(0, -1, -0.1);
 
   Shader* shader = this->get_shader_by_index(this->get_shader_by_name("model2"));
   shader->use();
+  this->bind_cube_texture(*shader, "shadow_map_cube", cube_texture);
   this->bind_texture(*shader, "shadow_map", this->depth_texture);
+  shader->set_float("far_plane", 25.0f);
   shader->set_vec3("ambient_lighting", ambient_lighting);
   shader->set_vec3("light_position", light_position);
   shader->set_mat4("view", view);
@@ -95,7 +149,9 @@ void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection
 
   shader = this->get_shader_by_index(this->get_shader_by_name("animation"));
   shader->use();
-  // this->bind_texture(*shader, "shadow_map", this->depth_texture);
+  this->bind_texture(*shader, "shadow_map", this->depth_texture);
+  // this->bind_cube_texture(*shader, "shadow_map_cube", cube_texture);
+  // shader->set_float("far_plane", 25.0f);
   shader->set_vec3("ambient_lighting", ambient_lighting);
   shader->set_mat4("view", view);
   shader->set_vec3("viewPos", view_position);
@@ -266,6 +322,20 @@ void Renderer::draw_circle(Vector2 position, f32 radius, f32 thickness, Color co
 
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
   this->disable_2d_rendering();
+}
+void Renderer::bind_cube_texture(Shader shader, const char* uniform_name, u32 texture_index)
+{
+  Texture texture = this->textures[texture_index];
+  if (texture.unit == -1)
+  {
+    texture.unit = this->get_free_texture_unit();
+  }
+
+  shader.use();
+  GLuint location = sta_glGetUniformLocation(shader.id, uniform_name);
+  sta_glUniform1i(location, texture.unit);
+  glActiveTexture(GL_TEXTURE0 + texture.unit);
+  sta_glBindTexture(GL_TEXTURE_CUBE_MAP, texture.id);
 }
 
 void Renderer::bind_texture(Shader shader, const char* uniform_name, u32 texture_index)

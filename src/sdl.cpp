@@ -1,4 +1,5 @@
 #include "sdl.h"
+#include <GL/glext.h>
 
 PFNGLCREATESHADERPROC             glCreateShader             = NULL;
 PFNGLCOMPILESHADERPROC            glCompileShader            = NULL;
@@ -65,9 +66,11 @@ PFNGLBLENDEQUATIONSEPARATEPROC    glBlendEquationSeparate    = NULL;
 PFNGLGETATTRIBLOCATIONPROC        glGetAttribLocation        = NULL;
 PFNGLISPROGRAMPROC                glIsProgram                = NULL;
 PFNGLDRAWELEMENTSBASEVERTEXPROC   glDrawElementsBaseVertex   = NULL;
+PFNGLFRAMEBUFFERTEXTUREPROC       glFramebufferTexture       = NULL;
 
 void                              loadExtensions()
 {
+  glFramebufferTexture       = (PFNGLFRAMEBUFFERTEXTUREPROC)SDL_GL_GetProcAddress("glFramebufferTexture");
   glDrawElementsBaseVertex   = (PFNGLDRAWELEMENTSBASEVERTEXPROC)SDL_GL_GetProcAddress("glDrawElementsBaseVertex");
   glIsProgram                = (PFNGLISPROGRAMPROC)SDL_GL_GetProcAddress("glIsProgram");
   glGetAttribLocation        = (PFNGLGETATTRIBLOCATIONPROC)SDL_GL_GetProcAddress("glGetAttribLocation");
@@ -328,6 +331,10 @@ void sta_glDeleteFramebuffers(GLsizei n, const GLuint* framebuffers)
 void sta_glBindFramebuffer(GLenum target, GLuint framebuffer)
 {
   glBindFramebuffer(target, framebuffer);
+}
+void sta_glFramebufferTexture(GLenum target, GLenum attachment, GLuint texture, GLint level)
+{
+  glFramebufferTexture(target, attachment, texture, level);
 }
 void sta_glFramebufferTexture2D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)
 {

@@ -10,6 +10,7 @@ enum ShaderType
   SHADER_TYPE_TESS_CONTROL,
   SHADER_TYPE_TESS_EVALUATION,
   SHADER_TYPE_COMPUTE,
+  SHADER_TYPE_GEOMETRY,
   SHADER_TYPE_COUNT
 };
 
@@ -36,6 +37,6 @@ public:
   void set_mat4(const char* name, float* v, int count);
   void set_mat4(const char* name, Mat44* v, int count);
 };
-bool recompile_shader(Shader * shader);
+bool recompile_shader(Shader* shader);
 
 #endif

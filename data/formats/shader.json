@@ -59,6 +59,34 @@
       "location": "./shaders/depth.frag"
     }
   ],
+  "depth_animation_cube": [
+    {
+      "type": 0,
+      "location": "./shaders/depth_animation_cube.vert"
+    },
+    {
+      "type": 1,
+      "location": "./shaders/depth_cube.frag"
+    },
+    {
+      "type": 5,
+      "location": "./shaders/depth_cube.geo"
+    }
+  ],
+  "depth_cube": [
+    {
+      "type": 0,
+      "location": "./shaders/depth_cube.vert"
+    },
+    {
+      "type": 1,
+      "location": "./shaders/depth_cube.frag"
+    },
+    {
+      "type": 5,
+      "location": "./shaders/depth_cube.geo"
+    }
+  ],
   "depth": [
     {
       "type": 0,
