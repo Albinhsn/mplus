@@ -30,6 +30,38 @@ void Renderer::push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms,
   RESIZE_ARRAY(this->render_queue_animated_buffers, RenderQueueItemAnimated, this->render_queue_animated_count, this->render_queue_animated_capacity);
   this->render_queue_animated_buffers[this->render_queue_animated_count++] = item;
 }
+
+u32 load_cubemap2()
+{
+  u32 texture_id;
+  glGenTextures(1, &texture_id);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, texture_id);
+
+  const char* image_names[6] = {
+      "./data/textures/red.tga", "./data/textures/dirt01.tga", "./data/textures/green.tga", "./data/textures/black.tga", "./data/textures/white.tga", "./data/textures/blue.tga",
+  };
+
+  TargaImage image = {};
+
+  for (unsigned int i = 0; i < 6; i++)
+  {
+    if (!sta_targa_read_from_file_rgba(&image, image_names[1]))
+    {
+      exit(1);
+    }
+    printf("%s: %d %d %d\n", image_names[0], image.width, image.height, image.bpp);
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
+  }
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+  return texture_id;
+}
+
 void Renderer::render_to_depth_texture_cube(Vector3 light_position, u32 buffer)
 {
 
@@ -37,21 +69,14 @@ void Renderer::render_to_depth_texture_cube(Vector3 light_position, u32 buffer)
   Mat44 perspective = Mat44::identity();
   perspective.perspective(90.0f, 1, 1.0f, 25.0f);
 
-  light_position= Vector3(0, 0, 0);
+  light_position = Vector3(0, 0, 0);
   static Mat44 shadow_transforms[6];
   shadow_transforms[0] = shadow_transforms[0].look_at(light_position, light_position.add(Vector3(1, 0, 0)), Vector3(0, -1, 0)).mul(perspective);
-  shadow_transforms[0].debug();
   shadow_transforms[1] = shadow_transforms[1].look_at(light_position, light_position.add(Vector3(-1, 0, 0)), Vector3(0, -1, 0)).mul(perspective);
-  shadow_transforms[1].debug();
   shadow_transforms[2] = shadow_transforms[2].look_at(light_position, light_position.add(Vector3(0, 1, 0)), Vector3(0, 0, 1)).mul(perspective);
-  shadow_transforms[2].debug();
   shadow_transforms[3] = shadow_transforms[3].look_at(light_position, light_position.add(Vector3(0, -1, 0)), Vector3(0, 0, -1)).mul(perspective);
-  shadow_transforms[3].debug();
   shadow_transforms[4] = shadow_transforms[4].look_at(light_position, light_position.add(Vector3(0, 0, 1)), Vector3(0, -1, 0)).mul(perspective);
-  shadow_transforms[4].debug();
   shadow_transforms[5] = shadow_transforms[5].look_at(light_position, light_position.add(Vector3(0, 0, -1)), Vector3(0, -1, 0)).mul(perspective);
-  shadow_transforms[5].debug();
-  exit(1);
 
   this->change_viewport(this->shadow_width, this->shadow_height);
   sta_glBindFramebuffer(GL_FRAMEBUFFER, buffer);

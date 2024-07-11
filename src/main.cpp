@@ -2671,13 +2671,56 @@ inline bool handle_wave_over(Wave* wave)
   return spawn_count == wave->enemy_count && wave->enemies_alive == 0;
 }
 
+void debug_render_depth_texture_cube(u32 texture)
+{
+
+  static u32    vao = 0, vbo = 0;
+  static f32    x = 0;
+  static Shader q_shader;
+
+  game_state.renderer.bind_cube_texture(q_shader, "skybox", texture);
+  if (vao == 0)
+  {
+    ShaderType  types[2]     = {SHADER_TYPE_VERT, SHADER_TYPE_FRAG};
+    const char* locations[2] = {
+        "./shaders/skybox.vert",
+        "./shaders/skybox.frag",
+    };
+    q_shader               = Shader(types, locations, 2, "skybox");
+    float skyboxVertices[] = {// positions
+                              -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, 1.0f, -1.0f,
+                              -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f, 1.0f,
+                              1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f, 1.0f,
+                              1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  1.0f, -1.0f,
+                              1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f};
+
+    sta_glGenVertexArrays(1, &vao);
+    sta_glGenBuffers(1, &vbo);
+    sta_glBindVertexArray(vao);
+    sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    sta_glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * ArrayCount(skyboxVertices), skyboxVertices, GL_DYNAMIC_DRAW);
+
+    sta_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(f32) * 3, (void*)(sizeof(f32) * 0));
+    sta_glEnableVertexAttribArray(0);
+
+    sta_glBindVertexArray(0);
+  }
+  q_shader.use();
+  x -= 0.1;
+
+  Mat44 model = Mat44::identity();
+  model       = model.scale(0.5f).rotate_x(x).rotate_y(x).rotate_z(x);
+  q_shader.set_mat4("view", model);
+  q_shader.set_mat4("projection", Mat44::identity());
+  sta_glBindVertexArray(vao);
+  glDrawArrays(GL_TRIANGLES, 0, 36);
+}
 void debug_render_depth_texture(u32 texture)
 {
   Shader q_shader = *game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("quad"));
   q_shader.use();
 
   game_state.renderer.bind_cube_texture(q_shader, "texture1", texture);
-  game_state.renderer.enable_2d_rendering();
   static u32 vao = 0, vbo = 0, ebo = 0;
 
   if (vao == 0)
@@ -2706,9 +2749,11 @@ void debug_render_depth_texture(u32 texture)
     sta_glBindVertexArray(0);
   }
 
+  Mat44 model = Mat44::identity();
+  model       = model.scale(0.1f);
+  q_shader.set_mat4("model", model);
   sta_glBindVertexArray(vao);
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-  game_state.renderer.disable_2d_rendering();
 }
 
 void render_effects(u32 ticks)
@@ -2926,22 +2971,23 @@ u32 load_cubemap()
 {
   u32 texture_id;
   glGenTextures(1, &texture_id);
+  glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_CUBE_MAP, texture_id);
 
   const char* image_names[6] = {
-      "./data/textures/red.tga", "./data/textures/dirt01.tga", "./data/textures/green.tga", "./data/textures/black.tga", "./data/textures/white.tga", "./data/textures/blue.tga",
+      "./data/textures/red.tga", "./data/textures/green.tga", "./data/textures/black.tga", "./data/textures/white.tga", "./data/textures/blue.tga",
   };
-
-  TargaImage image = {};
 
   for (unsigned int i = 0; i < 6; i++)
   {
-    if (!sta_targa_read_from_file_rgba(&image, image_names[i]))
+    TargaImage image = {};
+    if (!sta_targa_read_from_file_rgba(&image, image_names[i % 5]))
     {
       exit(1);
     }
-    printf("%s: %d %d %d\n", image_names[0], image.width, image.height, image.bpp);
     glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
+    GLenum error = glGetError();
+    printf("%s: %d %d %d %ld %d %d\n", image_names[i], image.width, image.height, image.bpp, image.data, error, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i);
   }
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -2961,7 +3007,6 @@ void test_cubemap(InputState input_state)
                             1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f, 1.0f,
                             1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  1.0f, -1.0f,
                             1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f};
-
 
   // skybox VAO
   unsigned int skyboxVAO, skyboxVBO;
@@ -2987,6 +3032,7 @@ void test_cubemap(InputState input_state)
   glActiveTexture(GL_TEXTURE0);
   sta_glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
 
+  f32 x = 0;
   while (true)
   {
     input_state.update();
@@ -2997,14 +3043,14 @@ void test_cubemap(InputState input_state)
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-
-    // draw skybox as last
-    glDepthFunc(GL_LEQUAL); // change depth function so depth test passes when values are equal to depth buffer's content
+    glDepthFunc(GL_LEQUAL);
     shader.use();
-    Mat44 view = Mat44::identity(); // remove translation from the view matrix
+    x -= 0.1f;
+    Mat44 view = Mat44::identity().scale(0.2f).rotate_x(x).rotate_y(x).rotate_z(x);
+
     shader.set_mat4("view", view);
-    shader.set_mat4("projection", view);
-    // skybox cube
+    shader.set_mat4("projection", Mat44::identity());
+
     glBindVertexArray(skyboxVAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
@@ -3012,8 +3058,6 @@ void test_cubemap(InputState input_state)
     glBindVertexArray(0);
     glDepthFunc(GL_LESS); // set depth function back to default
 
-    // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-    // -------------------------------------------------------------------------------
     SDL_GL_SwapWindow(game_state.renderer.window);
   }
 
@@ -3048,7 +3092,7 @@ int main()
   game_state.projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
 
   init_imgui(game_state.renderer.window, game_state.renderer.context);
-  test_cubemap(input_state);
+  // test_cubemap(input_state);
 
   u32     map_shader  = game_state.renderer.get_shader_by_name("model2");
   u32     map_buffer  = get_buffer_by_name("model_map_with_pillar");
@@ -3091,6 +3135,7 @@ int main()
   //
   u32 depth_cubemap;
   glGenTextures(1, &depth_cubemap);
+  glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_CUBE_MAP, depth_cubemap);
   for (u32 i = 0; i < 6; ++i)
   {
@@ -3198,23 +3243,26 @@ int main()
           // return 0;
         }
 
-        update_ticks          = SDL_GetTicks() - start_tick;
-        prior_render_ticks    = SDL_GetTicks();
+        update_ticks       = SDL_GetTicks() - start_tick;
+        prior_render_ticks = SDL_GetTicks();
 
-        Vector3 view_position = Vector3(-game_state.camera.translation.x, -game_state.camera.translation.y, -game_state.camera.z);
-        push_render_items(map_buffer, game_running_ticks, map_texture);
-        game_state.renderer.render_to_depth_texture_directional(directional_light);
-        game_state.renderer.render_to_depth_texture_cube(point_light_position, depthMapFBO);
+        if (!debug_render)
+        {
+          Vector3 view_position = Vector3(-game_state.camera.translation.x, -game_state.camera.translation.y, -game_state.camera.z);
+          push_render_items(map_buffer, game_running_ticks, map_texture);
+          game_state.renderer.render_to_depth_texture_directional(directional_light);
+          game_state.renderer.render_to_depth_texture_cube(point_light_position, depthMapFBO);
 
-        point_light_shader->use();
-        point_light_m = Mat44::identity().scale(0.1f).translate(point_light_position);
-        point_light_shader->set_mat4("model", point_light_m);
-        point_light_shader->set_mat4("view", game_state.camera.get_view_matrix());
-        point_light_shader->set_mat4("projection", game_state.projection);
-        game_state.renderer.bind_texture(*point_light_shader, "texture1", point_light_texture);
-        game_state.renderer.render_buffer(sphere_buffer);
+          point_light_shader->use();
+          point_light_m = Mat44::identity().scale(0.1f).translate(point_light_position);
+          point_light_shader->set_mat4("model", point_light_m);
+          point_light_shader->set_mat4("view", game_state.camera.get_view_matrix());
+          point_light_shader->set_mat4("projection", game_state.projection);
+          game_state.renderer.bind_texture(*point_light_shader, "texture1", point_light_texture);
+          game_state.renderer.render_buffer(sphere_buffer);
 
-        game_state.renderer.render_queues(game_state.camera.get_view_matrix(), view_position, game_state.projection, point_light_position, depth_cubemap, directional_light);
+          game_state.renderer.render_queues(game_state.camera.get_view_matrix(), view_position, game_state.projection, point_light_position, depth_cubemap, directional_light);
+        }
 
         if (render_circle_on_mouse)
         {
@@ -3229,7 +3277,8 @@ int main()
         }
         if (debug_render)
         {
-          debug_render_depth_texture(depth_cubemap);
+          // debug_render_depth_texture(depth_cubemap);
+          debug_render_depth_texture_cube(depth_cubemap);
         }
       }
 

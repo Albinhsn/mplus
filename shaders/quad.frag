@@ -8,6 +8,6 @@ out vec4 FragColor;
 
 void main()
 {
-  FragColor = texture(texture1, pos) + vec4(0.1, 0, 0, 1);
+  FragColor = texture(texture1, pos);
 
 }
