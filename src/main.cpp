@@ -3109,7 +3109,7 @@ int main()
   }
 
   u32      ticks        = 0;
-  u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0;
+  u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0, clear_tick = 0, render_ui_tick = 0;
   f32      fps      = 0.0f;
 
   UI_State ui_state = UI_STATE_GAME_RUNNING;
@@ -3158,8 +3158,7 @@ int main()
   depth_cubemap = game_state.renderer.add_texture(depth_cubemap);
 
   // Figure out where you want to place both lights, one directional and one point light
-  Vector3 directional_light(0, -0.1, 0.5);
-
+  Vector3 directional_light(0, 0.5, -0.5);
 
   while (true)
   {
@@ -3223,7 +3222,9 @@ int main()
       }
 
       game_state.renderer.clear_framebuffer();
-      ui_state               = render_ui(ui_state, &game_state.player, ms, fps, update_ticks, render_ticks, game_running_ticks, screen_height);
+      clear_tick             = SDL_GetTicks() - start_tick;
+      ui_state               = render_ui(ui_state, &game_state.player, ms, fps, update_ticks, render_ticks, game_running_ticks, screen_height, clear_tick, render_ui_tick);
+      render_ui_tick         = SDL_GetTicks() - start_tick - clear_tick;
 
       u32 prior_render_ticks = 0;
       if (ui_state == UI_STATE_GAME_RUNNING)

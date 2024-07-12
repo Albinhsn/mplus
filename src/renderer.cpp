@@ -29,11 +29,9 @@ void Renderer::push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms,
   this->render_queue_animated_buffers[this->render_queue_animated_count++] = item;
 }
 
-
 void Renderer::render_to_depth_texture_cube(Vector3 light_position, u32 buffer)
 {
 
-  glDepthMask(GL_FALSE);
   Mat44 perspective = Mat44::identity();
   perspective.perspective(90.0f, 1, 1.0f, 25.0f);
 
@@ -77,7 +75,6 @@ void Renderer::render_to_depth_texture_cube(Vector3 light_position, u32 buffer)
   }
 
   sta_glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glDepthMask(GL_TRUE);
   this->reset_viewport_to_screen_size();
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }

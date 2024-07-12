@@ -16,12 +16,14 @@ void init_imgui(SDL_Window* window, SDL_GLContext context)
   ImGui_ImplOpenGL3_Init();
 }
 
-void render_game_running_ui(Hero* player, u32 ms, f32 fps, u32 update_ticks, u32 render_ticks, u32 game_running_ticks, u32 screen_height)
+void render_game_running_ui(Hero* player, u32 ms, f32 fps, u32 update_ticks, u32 render_ticks, u32 game_running_ticks, u32 screen_height, u32 clear_ticks, u32 render_ui_ticks)
 {
 
   ImGui::Begin("Frame times");
   ImGui::Text("Update:     %d", update_ticks);
   ImGui::Text("Rendering : %d", render_ticks);
+  ImGui::Text("Clear: %d", clear_ticks);
+  ImGui::Text("Render ui: %d", render_ui_ticks);
   ImGui::Text("MS: %d", ms);
   ImGui::Text("FPS: %f", fps * 1000);
   ImGui::End();
@@ -62,14 +64,14 @@ void render_game_running_ui(Hero* player, u32 ms, f32 fps, u32 update_ticks, u32
   ImGui::End();
 }
 
-UI_State render_ui(UI_State state, Hero* player, u32 ms, f32 fps, u32 update_ticks, u32 render_ticks, u32 game_running_ticks, u32 screen_height)
+UI_State render_ui(UI_State state, Hero* player, u32 ms, f32 fps, u32 update_ticks, u32 render_ticks, u32 game_running_ticks, u32 screen_height, u32 clear_ticks, u32 render_ui_ticks)
 {
   init_new_ui_frame();
   switch (state)
   {
   case UI_STATE_GAME_RUNNING:
   {
-    render_game_running_ui(player, ms, fps, update_ticks, render_ticks, game_running_ticks, screen_height);
+    render_game_running_ui(player, ms, fps, update_ticks, render_ticks, game_running_ticks, screen_height, clear_ticks, render_ui_ticks);
     return UI_STATE_GAME_RUNNING;
   }
   case UI_STATE_MAIN_MENU:
