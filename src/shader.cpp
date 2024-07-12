@@ -174,7 +174,13 @@ bool recompile_shader(Shader* shader)
     return false;
   }
 
-  // ToDo detach shaders?
+  // ToDo why does this increase :)
+  for (u32 i = 0; i < ArrayCount(shader->locations) && shader->locations[i] != 0; i++)
+  {
+    sta_glDetachShader(get_gl_shader_type(shader->types[i]), shader->shader_ids[i]);
+    sta_glDeleteShader(shader->shader_ids[i]);
+  }
+
   sta_glDeleteProgram(shader->id);
 
   *shader = s;
@@ -189,16 +195,17 @@ Shader::Shader(ShaderType* types, const char** names, u32 count, const char* nam
 
   for (u32 i = 0; i < count; i++)
   {
-    this->types[i]     = types[i];
-    this->locations[i] = names[i];
+    this->types[i]      = types[i];
+    this->locations[i]  = names[i];
 
-    GLuint shader_id   = compile_shader(names[i], get_gl_shader_type(types[i]));
+    GLuint shader_id    = compile_shader(names[i], get_gl_shader_type(types[i]));
+    this->shader_ids[i] = shader_id;
     if ((i32)shader_id == -1)
     {
       logger.error("Failed to compile shader '%s'", names[i]);
       assert(!"Failed to compile shader!");
-      return;
     }
+    logger.info("Compiled shader '%s' of type %d -> %d", names[i], types[i], get_gl_shader_type(types[i]));
     sta_glAttachShader(this->id, shader_id);
   }
   sta_glLinkProgram(this->id);

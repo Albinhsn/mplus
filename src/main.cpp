@@ -5,6 +5,7 @@
 #include <SDL2/SDL_video.h>
 #include <strings.h>
 
+#include <x86intrin.h>
 #include <sys/time.h>
 #include <sys/mman.h>
 #include <assert.h>
@@ -90,9 +91,9 @@ struct Hero;
 struct Ability
 {
   const char* name;
-  bool (*use_ability)(Camera* camera, InputState* input, u32 ticks);
-  u32 cooldown_ticks;
-  u32 cooldown;
+  bool        (*use_ability)(Camera* camera, InputState* input, u32 ticks);
+  u32         cooldown_ticks;
+  u32         cooldown;
 };
 
 struct Hero
@@ -1531,7 +1532,7 @@ struct Effect
   Vector2          position;
   f32              angle;
   u32              effect_ends_at;
-  void (*update_effect)(Effect* effect, u32 tick);
+  void             (*update_effect)(Effect* effect, u32 tick);
 };
 
 struct EffectNode
@@ -2678,7 +2679,6 @@ void debug_render_depth_texture_cube(u32 texture)
   static f32    x = 0;
   static Shader q_shader;
 
-  game_state.renderer.bind_cube_texture(q_shader, "skybox", texture);
   if (vao == 0)
   {
     ShaderType  types[2]     = {SHADER_TYPE_VERT, SHADER_TYPE_FRAG};
@@ -2706,7 +2706,8 @@ void debug_render_depth_texture_cube(u32 texture)
     sta_glBindVertexArray(0);
   }
   q_shader.use();
-  x -= 0.1;
+  game_state.renderer.bind_cube_texture(q_shader, "skybox", texture);
+  x -= 0.5;
 
   Mat44 model = Mat44::identity();
   model       = model.scale(0.5f).rotate_x(x).rotate_y(x).rotate_z(x);
@@ -2987,7 +2988,6 @@ u32 load_cubemap()
     }
     glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
     GLenum error = glGetError();
-    printf("%s: %d %d %d %ld %d %d\n", image_names[i], image.width, image.height, image.bpp, image.data, error, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i);
   }
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -3155,13 +3155,11 @@ int main()
   glReadBuffer(GL_NONE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+  depth_cubemap = game_state.renderer.add_texture(depth_cubemap);
+
   // Figure out where you want to place both lights, one directional and one point light
   Vector3 directional_light(0, -0.1, 0.5);
 
-  // figure out what calculations you need for each, i.e.
-  //    you need standard shadow mapping for directional
-  //    you need cube for point light
-  // walkthrough again what you actually need to render each and just do it :)
 
   while (true)
   {
@@ -3278,7 +3276,7 @@ int main()
         if (debug_render)
         {
           // debug_render_depth_texture(depth_cubemap);
-          debug_render_depth_texture_cube(depth_cubemap);
+          // debug_render_depth_texture_cube(depth_cubemap);
         }
       }
 

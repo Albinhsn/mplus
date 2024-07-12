@@ -202,6 +202,10 @@ void sta_glGetProgramInfoLog(GLuint program, GLsizei bufSize, GLsizei* length, c
 {
   glGetProgramInfoLog(program, bufSize, length, infoLog);
 }
+void sta_glDeleteShader(GLuint shader)
+{
+  glDeleteShader(shader);
+}
 void sta_glDetachShader(GLuint program, GLuint shader)
 {
   glDetachShader(program, shader);

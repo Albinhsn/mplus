@@ -100,6 +100,7 @@ void      sta_glLinkProgram(GLuint program);
 void      sta_glGetProgramiv(GLuint program, GLenum pname, GLint* params);
 void      sta_glGetProgramInfoLog(GLuint program, GLsizei bufSize, GLsizei* length, char* infoLog);
 void      sta_glDetachShader(GLuint program, GLuint shader);
+void      sta_glDeleteShader(GLuint shader);
 void      sta_glDeleteProgram(GLuint program);
 void      sta_glUseProgram(GLuint program);
 GLint     sta_glGetUniformLocation(GLuint program, const char* name);

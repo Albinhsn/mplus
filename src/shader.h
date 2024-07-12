@@ -21,6 +21,7 @@ public:
   const char*  name;
   const char*  locations[SHADER_TYPE_COUNT];
   ShaderType   types[SHADER_TYPE_COUNT];
+  GLuint shader_ids[SHADER_TYPE_COUNT];
 
   Shader()
   {
