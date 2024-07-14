@@ -33,7 +33,8 @@ void Renderer::render_to_depth_texture_cube(Vector3 light_position, u32 buffer)
 {
 
   Mat44 perspective = Mat44::identity();
-  perspective.perspective(90.0f, 1, 1.0f, 25.0f);
+  float far_plane = 25.0f;
+  perspective.perspective(90.0f, 1, 0.1f, far_plane);
 
   static Mat44 shadow_transforms[6];
   shadow_transforms[0] = shadow_transforms[0].look_at(light_position, light_position.add(Vector3(1, 0, 0)), Vector3(0, -1, 0)).mul(perspective);
@@ -51,7 +52,7 @@ void Renderer::render_to_depth_texture_cube(Vector3 light_position, u32 buffer)
   depth_shader.use();
   depth_shader.set_vec3("lightPos", light_position);
   depth_shader.set_mat4("shadowMatrices", shadow_transforms, 6);
-  depth_shader.set_float("far_plane", 25.0f);
+  depth_shader.set_float("far_plane", far_plane);
 
   for (u32 i = 0; i < this->render_queue_static_count; i++)
   {
@@ -64,7 +65,7 @@ void Renderer::render_to_depth_texture_cube(Vector3 light_position, u32 buffer)
   depth_animation_shader.use();
   depth_shader.set_vec3("lightPos", light_position);
   depth_shader.set_mat4("shadowMatrices", shadow_transforms, 6);
-  depth_shader.set_float("far_plane", 25.0f);
+  depth_shader.set_float("far_plane", far_plane);
   for (u32 i = 0; i < this->render_queue_animated_count; i++)
   {
     RenderQueueItemAnimated item = this->render_queue_animated_buffers[i];
@@ -87,6 +88,7 @@ void Renderer::render_to_depth_texture_directional(Vector3 light_direction)
   sta_glBindFramebuffer(GL_FRAMEBUFFER, this->shadow_map_framebuffer);
   glClear(GL_DEPTH_BUFFER_BIT);
 
+  light_direction.scale(-10);
   Mat44 l                  = Mat44::look_at(light_direction, Vector3(0, 0, 0), Vector3(0, 1, 0));
   Mat44 o                  = Mat44::orthographic(-5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 7.5f);
   this->light_space_matrix = l.mul(o);

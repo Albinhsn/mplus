@@ -91,9 +91,9 @@ struct Hero;
 struct Ability
 {
   const char* name;
-  bool        (*use_ability)(Camera* camera, InputState* input, u32 ticks);
-  u32         cooldown_ticks;
-  u32         cooldown;
+  bool (*use_ability)(Camera* camera, InputState* input, u32 ticks);
+  u32 cooldown_ticks;
+  u32 cooldown;
 };
 
 struct Hero
@@ -1532,7 +1532,7 @@ struct Effect
   Vector2          position;
   f32              angle;
   u32              effect_ends_at;
-  void             (*update_effect)(Effect* effect, u32 tick);
+  void (*update_effect)(Effect* effect, u32 tick);
 };
 
 struct EffectNode
@@ -2716,12 +2716,13 @@ void debug_render_depth_texture_cube(u32 texture)
   sta_glBindVertexArray(vao);
   glDrawArrays(GL_TRIANGLES, 0, 36);
 }
-void debug_render_depth_texture(u32 texture)
+void debug_render_depth_texture()
 {
   Shader q_shader = *game_state.renderer.get_shader_by_index(game_state.renderer.get_shader_by_name("quad"));
   q_shader.use();
 
-  game_state.renderer.bind_cube_texture(q_shader, "texture1", texture);
+  game_state.renderer.bind_texture(q_shader, "texture1", game_state.renderer.depth_texture);
+  game_state.renderer.enable_2d_rendering();
   static u32 vao = 0, vbo = 0, ebo = 0;
 
   if (vao == 0)
@@ -2731,10 +2732,10 @@ void debug_render_depth_texture(u32 texture)
     sta_glGenBuffers(1, &ebo);
     sta_glBindVertexArray(vao);
     f32 tot[20] = {
-        0.8f, .8f,  0, 1.0f, 1.0f, //
-        .8f,  -.8,  0, 1.0f, 0.0f, //
-        -.8f, -.8f, 0, 0.0f, 0.0f, //
-        -.8f, .8,   0, 0.0f, 1.0f, //
+        1.0f,  1.0f,  0, 1.0f, 1.0f, //
+        1.0f,  -1.0,  0, 1.0f, 0.0f, //
+        -1.0f, -1.0f, 0, 0.0f, 0.0f, //
+        -1.0f, 1.0,   0, 0.0f, 1.0f, //
     };
     u32 indices[6] = {1, 3, 0, 1, 2, 3};
     sta_glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -2750,11 +2751,13 @@ void debug_render_depth_texture(u32 texture)
     sta_glBindVertexArray(0);
   }
 
+  static f32 x = 0.0;
+  x -= 0.2f;
   Mat44 model = Mat44::identity();
-  model       = model.scale(0.1f);
   q_shader.set_mat4("model", model);
   sta_glBindVertexArray(vao);
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+  game_state.renderer.disable_2d_rendering();
 }
 
 void render_effects(u32 ticks)
@@ -3067,7 +3070,7 @@ void test_cubemap(InputState input_state)
 int main()
 {
 
-  game_state.camera                     = Camera(Vector3(0, 0, 0), -30, -3);
+  game_state.camera                     = Camera(Vector3(0, 0, 0), 0, -3);
   game_state.animation_controller_count = 0;
 
   effects.pool.init(sta_allocate(sizeof(EffectNode) * 25), sizeof(EffectNode), 25);
@@ -3088,7 +3091,6 @@ int main()
   }
 
   game_state.renderer.init_depth_texture();
-
   game_state.projection.perspective(45.0f, screen_width / (f32)screen_height, 0.01f, 100.0f);
 
   init_imgui(game_state.renderer.window, game_state.renderer.context);
@@ -3158,7 +3160,7 @@ int main()
   depth_cubemap = game_state.renderer.add_texture(depth_cubemap);
 
   // Figure out where you want to place both lights, one directional and one point light
-  Vector3 directional_light(0.5, 0.5, 0.5);
+  Vector3 directional_light(-0.5, 0, -0.5);
 
   while (true)
   {
@@ -3228,26 +3230,24 @@ int main()
           // return 0;
         }
 
-        update_ticks       = SDL_GetTicks() - start_tick;
-        prior_render_ticks = SDL_GetTicks();
+        update_ticks          = SDL_GetTicks() - start_tick;
+        prior_render_ticks    = SDL_GetTicks();
 
-        if (!debug_render)
-        {
-          Vector3 view_position = Vector3(-game_state.camera.translation.x, -game_state.camera.translation.y, -game_state.camera.z);
-          push_render_items(map_buffer, game_running_ticks, map_texture);
-          game_state.renderer.render_to_depth_texture_directional(directional_light);
-          game_state.renderer.render_to_depth_texture_cube(point_light_position, depthMapFBO);
 
-          point_light_shader->use();
-          point_light_m = Mat44::identity().scale(0.1f).translate(point_light_position);
-          point_light_shader->set_mat4("model", point_light_m);
-          point_light_shader->set_mat4("view", game_state.camera.get_view_matrix());
-          point_light_shader->set_mat4("projection", game_state.projection);
-          game_state.renderer.bind_texture(*point_light_shader, "texture1", point_light_texture);
-          game_state.renderer.render_buffer(sphere_buffer);
+        Vector3 view_position = Vector3(-game_state.camera.translation.x, -game_state.camera.translation.y, -game_state.camera.z);
+        push_render_items(map_buffer, game_running_ticks, map_texture);
+        game_state.renderer.render_to_depth_texture_directional(directional_light);
+        game_state.renderer.render_to_depth_texture_cube(point_light_position, depthMapFBO);
 
-          game_state.renderer.render_queues(game_state.camera.get_view_matrix(), view_position, game_state.projection, point_light_position, depth_cubemap, directional_light);
-        }
+        point_light_shader->use();
+        point_light_m = Mat44::identity().scale(0.1f).translate(point_light_position);
+        point_light_shader->set_mat4("model", point_light_m);
+        point_light_shader->set_mat4("view", game_state.camera.get_view_matrix());
+        point_light_shader->set_mat4("projection", game_state.projection);
+        game_state.renderer.bind_texture(*point_light_shader, "texture1", point_light_texture);
+        game_state.renderer.render_buffer(sphere_buffer);
+
+        game_state.renderer.render_queues(game_state.camera.get_view_matrix(), view_position, game_state.projection, point_light_position, depth_cubemap, directional_light);
 
         if (render_circle_on_mouse)
         {
@@ -3262,8 +3262,8 @@ int main()
         }
         if (debug_render)
         {
-          debug_render_depth_texture(depth_cubemap);
-          // debug_render_depth_texture_cube(depth_cubemap);
+          // debug_render_depth_texture();
+          debug_render_depth_texture_cube(depth_cubemap);
         }
       }
 
