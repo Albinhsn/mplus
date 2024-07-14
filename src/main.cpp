@@ -1147,6 +1147,7 @@ enum EnemyType
 {
   ENEMY_MELEE,
   ENEMY_RANGED,
+  ENEMY_BRUTE,
 };
 
 struct Enemy
@@ -1155,6 +1156,7 @@ struct Enemy
   u32       initial_hp;
   u32       cooldown;
   u32       cooldown_timer;
+  f32       ms;
   Path      path;
   EnemyType type;
   bool      can_move;
@@ -1890,9 +1892,8 @@ void read_abilities(Ability* abilities)
 
 void handle_enemy_movement(Enemy* enemy, Vector2 target_position)
 {
-  const static f32 ms         = 0.005f;
-  Entity*          entity     = &game_state.entities[enemy->entity];
-  u32              tile_count = get_tile_count_per_row();
+  Entity* entity     = &game_state.entities[enemy->entity];
+  u32     tile_count = get_tile_count_per_row();
 
   // enemy->path.path_count = 0;
   // find_path(&enemy->path, target_position, entity->position);
@@ -1906,7 +1907,7 @@ void handle_enemy_movement(Enemy* enemy, Vector2 target_position)
   u32     path_idx           = 1;
   Vector2 prev_position      = entity->position;
   Vector2 curr               = entity->position;
-  f32     movement_remaining = ms;
+  f32     movement_remaining = enemy->ms;
   while (true)
   {
     f32 x = tile_position_to_game(path.path[path_idx] >> 8);
@@ -2017,6 +2018,7 @@ void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
 
       switch (enemy->type)
       {
+      case ENEMY_BRUTE:
       case ENEMY_MELEE:
       {
         if (tick >= enemy->cooldown_timer && sphere_sphere_collision(player_sphere, enemy_sphere))
@@ -2203,6 +2205,7 @@ struct EnemyData
 {
   EnemyType   type;
   u32         hp;
+  f32         ms;
   f32         radius;
   u32         cooldown;
   const char* render_data_name;
@@ -2253,6 +2256,7 @@ bool load_enemies_from_file(const char* filename)
     data->hp               = json_data->lookup_value("hp")->number;
     data->radius           = json_data->lookup_value("radius")->number;
     data->cooldown         = json_data->lookup_value("cooldown")->number;
+    data->ms               = json_data->lookup_value("movement_speed")->number;
 
     data->render_data_name = head->keys[i];
     logger.info("Found enemy %d: %d %f %s", data->type, data->hp, data->radius, data->render_data_name);
@@ -2298,6 +2302,7 @@ bool load_wave_from_file(Wave* wave, const char* filename)
     enemy->initial_hp           = enemy_data.hp;
     enemy->cooldown             = enemy_data.cooldown;
     enemy->cooldown_timer       = 0;
+    enemy->ms                   = enemy_data.ms;
 
     wave->spawn_times[i]        = parse_int_from_string(lines.strings[string_index++]);
     u32 entity_idx              = get_new_entity();

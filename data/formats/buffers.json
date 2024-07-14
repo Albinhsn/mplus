@@ -1,4 +1,36 @@
 {
+  "model_enemy_brute": {
+    "attributes": [
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 2,
+        "type": 0
+      },
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 4,
+        "type": 0
+      },
+      {
+        "count": 4,
+        "type": 1
+      },
+      {
+        "count": 3,
+        "type": 0
+      },
+      {
+        "count": 3,
+        "type": 0
+      }
+    ]
+  },
   "model_enemy_melee": {
     "attributes": [
       {

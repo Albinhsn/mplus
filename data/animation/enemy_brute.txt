@@ -1,0 +1,3 @@
+idle          Enemy.Brute.Running 1
+walking       Enemy.Brute.Running 1
+melee         Enemy.Brute.Attack 0.25

@@ -2,13 +2,22 @@
   "enemy_melee": {
     "type": 0,
     "hp": 1,
+    "movement_speed": 0.005,
     "radius": 0.05,
     "cooldown": 1000
   },
   "enemy_ranged": {
     "type": 1,
     "hp": 1,
+    "movement_speed": 0.005,
     "radius": 0.05,
     "cooldown": 1000
-  }
+  },
+  "enemy_brute": {
+    "type": 2,
+    "hp": 1,
+    "movement_speed": 0.003,
+    "radius": 0.08,
+    "cooldown": 1000
+  },
 }

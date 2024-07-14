@@ -2,6 +2,10 @@
   "model_map_with_hole": {
     "location": "./data/models/map_with_hole.obj"
   },
+  "model_enemy_brute": {
+    "location": "./data/models/enemy_brute.anim"
+    "mapping": "./data/animation/enemy_brute.txt"
+  },
   "model_enemy_melee": {
     "location": "./data/models/enemy_melee.anim"
     "mapping": "./data/animation/enemy_melee.txt"

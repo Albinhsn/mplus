@@ -23,6 +23,12 @@
   "enemy_melee_normal_texture": {
     "location": "./data/textures/enemy_melee_normal.tga"
   },
+  "enemy_brute_diffuse_texture": {
+    "location": "./data/textures/enemy_brute_diffuse.tga"
+  },
+  "enemy_brute_normal_texture": {
+    "location": "./data/textures/enemy_brute_normal.tga"
+  },
   "blizzard_texture": {
     "location": "./data/textures/blizzard.tga"
   },
@@ -50,7 +56,4 @@
   "stone_normal": {
     "location": "./data/textures/normal01.tga"
   },
-  "unarmed_man": {
-    "location": "./data/textures/Peasant_Man_diffuse.tga"
-  }
 }
