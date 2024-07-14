@@ -3158,7 +3158,7 @@ int main()
   depth_cubemap = game_state.renderer.add_texture(depth_cubemap);
 
   // Figure out where you want to place both lights, one directional and one point light
-  Vector3 directional_light(0, 0.5, -0.5);
+  Vector3 directional_light(0.5, 0.5, 0.5);
 
   while (true)
   {
@@ -3186,19 +3186,10 @@ int main()
         logger.info("Game over player died");
         return 1;
       }
-      if (input_state.is_key_pressed('c'))
-      {
-        console = true;
-      }
       if (input_state.is_key_released('b'))
       {
 
         debug_render = !debug_render;
-      }
-      if (input_state.is_key_pressed('l'))
-      {
-        game_state.camera.rotation -= 1;
-        logger.info("New rotation %f", game_state.camera.rotation);
       }
       if (input_state.is_key_pressed('h'))
       {
@@ -3207,11 +3198,6 @@ int main()
       if (input_state.is_key_pressed('y'))
       {
         point_light_position.y += 0.01f;
-      }
-      if (input_state.is_key_released('x'))
-      {
-        render_circle_on_mouse = !render_circle_on_mouse;
-        logger.info("Rendering circle on mouse");
       }
 
       u32 start_tick = SDL_GetTicks();
@@ -3276,7 +3262,7 @@ int main()
         }
         if (debug_render)
         {
-          // debug_render_depth_texture(depth_cubemap);
+          debug_render_depth_texture(depth_cubemap);
           // debug_render_depth_texture_cube(depth_cubemap);
         }
       }

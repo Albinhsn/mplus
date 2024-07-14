@@ -17,7 +17,9 @@ uniform vec3      directional_light_direction;
 uniform float far_plane;
 
 float shadow_calc_directional_light(vec4 fragPosLightSpace){
+
   vec3 proj_coords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+
 
   proj_coords = proj_coords * 0.5 + 0.5;
 
@@ -25,8 +27,8 @@ float shadow_calc_directional_light(vec4 fragPosLightSpace){
   float current_depth = proj_coords.z;
 
   vec3 normal = normalize(normal);
-  vec3 lightDir = normalize(directional_light_direction - FragPos);
-  float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.005);
+  vec3 lightDir = normalize(light_position - FragPos);
+  float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
 
   float shadow = 0.0;
   vec2 texelSize = 1.0 / textureSize(shadow_map, 0);
