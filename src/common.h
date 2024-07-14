@@ -2,6 +2,7 @@
 #define COMMON_H
 
 #include "platform.h"
+#include <cstdlib>
 #include <cstring>
 #include <stdbool.h>
 #include <stdint.h>
@@ -227,5 +228,9 @@ inline bool compare_strings(const char* s1, const char* s2)
   return strlen(s1) == strlen(s2) && strncmp(s1, s2, strlen(s1)) == 0;
 }
 u32 sta_hash_string_fnv(String* s);
+
+
+double random_double();
+double random_double_range(double min, double max);;
 
 #endif

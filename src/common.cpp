@@ -1,5 +1,6 @@
 #include "common.h"
 #include <cstdarg>
+#include <cstdlib>
 /*
  =========================================
  =========================================
@@ -390,4 +391,13 @@ u32 sta_hash_string_fnv(String* s)
   }
 
   return hash;
+}
+
+double random_double()
+{
+  return rand() / (RAND_MAX + 1.0);
+}
+double random_double_range(double min, double max)
+{
+  return min + (max - min) * random_double();
 }

@@ -111,6 +111,12 @@ struct Hero
 // and just let the thing run until we hit something or some time/distance has passed? i.e just a command queue thing?
 
 struct AnimationController;
+enum EnemyType
+{
+  ENEMY_MELEE,
+  ENEMY_RANGED,
+  ENEMY_BRUTE,
+};
 
 enum EntityType
 {
@@ -154,10 +160,38 @@ struct GameState
   Entity*             entities;
   u32                 entity_capacity;
   u32                 entity_count;
+  bool                no_spawn;
   bool                god;
   AnimationController animation_controllers[50];
   u32                 animation_controller_count;
 };
+
+struct EnemyData
+{
+  EnemyType   type;
+  u32         hp;
+  f32         ms;
+  f32         radius;
+  u32         cooldown;
+  const char* render_data_name;
+};
+
+EnemyData* enemy_data;
+u32        enemy_data_count;
+
+EnemyData  get_enemy_data_from_type(EnemyType type)
+{
+  for (u32 i = 0; i < enemy_data_count; i++)
+  {
+    if (enemy_data[i].type == type)
+    {
+      return enemy_data[i];
+    }
+  }
+  logger.error("Couldn't find enemy with this type! %d", type);
+  assert(!"Couldn't find enemy with this type!");
+}
+
 GameState game_state;
 
 void      set_animation(AnimationController* controller, u32 animation_index, u32 tick)
@@ -1110,7 +1144,7 @@ bool       is_valid_position(Vector2 position, f32 r)
   return !(is_out_of_map_bounds(closest, position, r) || collides_with_static_geometry(closest, position, r));
 }
 
-Vector2 get_random_position(u32 tick, u32 enemy_counter, f32 r)
+Vector2 get_random_position(f32 r)
 {
   u32     SEED_X             = 1234;
   u32     SEED_Y             = 2345;
@@ -1125,16 +1159,11 @@ Vector2 get_random_position(u32 tick, u32 enemy_counter, f32 r)
   Vector2 p;
   do
   {
-    // ToDo check vs player
-    u32 offset_x = ((tick + enemy_counter) * SEED_X) % (noise.width * noise.height);
-    u32 offset_y = ((tick + enemy_counter) * SEED_Y) % (noise.width * noise.height);
 
-    u8  x        = noise.data[4 * offset_x];
-    u8  y        = noise.data[4 * offset_y];
+    f32 x              = random_double_range(-1.0, 1.0);
+    f32 y              = random_double_range(-1.0, 1.0);
 
-    tick *= 3;
-
-    position           = Vector2((x / 255.0f) * 2.0f - 1.0f, (y / 255.0f) * 2.0f - 1.0f);
+    position           = Vector2(x, y);
 
     distance_to_player = position.sub(player_position).len();
 
@@ -1142,13 +1171,6 @@ Vector2 get_random_position(u32 tick, u32 enemy_counter, f32 r)
 
   return position;
 }
-
-enum EnemyType
-{
-  ENEMY_MELEE,
-  ENEMY_RANGED,
-  ENEMY_BRUTE,
-};
 
 struct Enemy
 {
@@ -1172,8 +1194,8 @@ struct Wave
 
 struct CommandFindPathData
 {
-  Enemy* enemy;
-  u32    tick;
+  u32 enemy_idx;
+  u32 tick;
 };
 
 enum CommandType
@@ -1182,7 +1204,8 @@ enum CommandType
   CMD_LET_RANGED_MOVE_AFTER_SHOOTING,
   CMD_EXPLODE_PILLAR,
   CMD_FIND_PATH,
-  CMD_STOP_CHARGE
+  CMD_STOP_CHARGE,
+  CMD_UPDATE_WAVE
 };
 
 struct Command
@@ -1208,8 +1231,12 @@ struct CommandQueue
 };
 struct CommandSpawnEnemyData
 {
-  Wave* wave;
-  u32   enemy_index;
+  EnemyType type;
+};
+
+struct CommandUpdateWave
+{
+  u32 number_of_enemies;
 };
 
 struct CommandLetRangedMoveAfterShooting
@@ -1223,22 +1250,86 @@ struct CommandExplodePillarOfFlameData
   Vector2 position;
 };
 
-void add_command(CommandType type, void* data, u32 tick);
-void spawn(Wave* wave, u32 enemy_index)
+void   add_command(CommandType type, void* data, u32 tick);
+
+Enemy* enemies;
+u32    enemy_count;
+u32    enemy_capacity;
+
+i32    get_new_enemy()
 {
-  Enemy*  enemy  = &wave->enemies[enemy_index];
-  Entity* entity = &game_state.entities[enemy->entity];
-  wave->spawn_count |= enemy_index == 0 ? 1 : ((u64)1 << (u64)enemy_index);
-  wave->enemies_alive++;
+  for (u32 i = 0; i < enemy_count; i++)
+  {
+    if (game_state.entities[enemies[i].entity].hp <= 0)
+    {
+      return i;
+    }
+  }
+
+  RESIZE_ARRAY(enemies, Enemy, enemy_count, enemy_capacity);
+  return enemy_count++;
+}
+
+void spawn(EnemyType type, u32 tick)
+{
+  u32 enemy_idx = get_new_enemy();
+  Enemy* enemy                  = &enemies[enemy_idx];
+  enemy->entity                 = get_new_entity();
+
+  Entity*           entity      = &game_state.entities[enemy->entity];
   EntityRenderData* render_data = entity->render_data;
-  entity->position              = get_random_position(wave->spawn_times[enemy_index], enemy_index, entity->r);
-  entity->hp                    = enemy->initial_hp;
-  logger.info("Spawning enemy %d at (%f, %f)", enemy_index, entity->position.x, entity->position.y);
+
+  EnemyData         data        = get_enemy_data_from_type(type);
+  enemy->type                   = type;
+  enemy->ms                     = data.ms;
+  enemy->initial_hp             = data.hp;
+  enemy->can_move               = true;
+  enemy->cooldown               = data.cooldown;
+  enemy->cooldown_timer         = 0;
+  if (!enemy->path.path)
+  {
+    u32 tile_count         = get_tile_count_per_row();
+    enemy->path.path       = sta_allocate_struct(u16, tile_count * tile_count);
+    enemy->path.path_count = 0;
+    CommandNode* cmd       = command_queue.head;
+    CommandNode* prev      = 0;
+    while (cmd)
+    {
+      if (cmd->command.type == CMD_FIND_PATH)
+      {
+        CommandFindPathData* find_data = (CommandFindPathData*)cmd->command.data;
+        if (find_data->enemy_idx == enemy_idx)
+        {
+          if (prev == 0)
+          {
+            command_queue.head = cmd->next;
+          }
+          else
+          {
+            prev->next = cmd->next;
+          }
+          command_queue.pool.free((u64)cmd);
+          break;
+        }
+      }
+      prev = cmd;
+      cmd  = cmd->next;
+    }
+  }
+  entity->visible     = true;
+  entity->render_data = get_render_data_by_name(data.render_data_name);
+  entity->type        = ENTITY_ENEMY;
+  entity->angle       = 0.0f;
+  entity->hp          = 0;
+  entity->r           = data.radius;
+  entity->velocity    = Vector2(0, 0);
+  entity->position    = get_random_position(entity->r);
+  entity->hp          = enemy->initial_hp;
+  logger.info("Spawning enemy at (%f, %f) %d", entity->position.x, entity->position.y, tick);
 
   CommandFindPathData* path_data = sta_allocate_struct(CommandFindPathData, 1);
-  path_data->enemy               = enemy;
-  path_data->tick                = wave->spawn_times[enemy_index];
-  entity->visible                = true;
+  path_data->enemy_idx           = enemy_idx;
+  path_data->tick                = tick;
 
   add_command(CMD_FIND_PATH, (void*)path_data, path_data->tick);
 }
@@ -1286,11 +1377,31 @@ void run_command_explode_pillar_of_flame(void* data)
     }
   }
 }
+void run_command_update_wave(void* data, u32 tick)
+{
+  CommandUpdateWave* update_data = (CommandUpdateWave*)data;
+  for (u32 i = 0; i < update_data->number_of_enemies; i++)
+  {
+    // get the spawn time between 0 - 10 sec
+    u32                    spawn_time = tick + random_double_range(0, 10) * 1000;
+    CommandSpawnEnemyData* data       = sta_allocate_struct(CommandSpawnEnemyData, 1);
+    data->type                        = (EnemyType)(u32)random_double_range(0, 2.99);
+    add_command(CMD_SPAWN_ENEMY, data, spawn_time);
+  }
+  const f32 update_enemy_factor = 1.5;
+  update_data->number_of_enemies *= update_enemy_factor;
+  if (!game_state.no_spawn)
+  {
 
-void run_command_spawn_enemy(void* data)
+    add_command(CMD_UPDATE_WAVE, (void*)update_data, tick + 10000);
+  }
+}
+
+void run_command_spawn_enemy(void* data, u32 tick)
 {
   CommandSpawnEnemyData* enemy_data = (CommandSpawnEnemyData*)data;
-  spawn(enemy_data->wave, enemy_data->enemy_index);
+  spawn(enemy_data->type, tick);
+  sta_deallocate(enemy_data, sizeof(CommandSpawnEnemyData));
 }
 
 void run_command_shoot_arrow(void* data)
@@ -1302,10 +1413,11 @@ void run_command_shoot_arrow(void* data)
 
 void run_command_find_path(void* data)
 {
-  const u32            next_tick    = 75;
-  CommandFindPathData* path_data    = (CommandFindPathData*)data;
-  path_data->enemy->path.path_count = 0;
-  find_path(&path_data->enemy->path, game_state.entities[game_state.player.entity].position, game_state.entities[path_data->enemy->entity].position, game_state.entities[path_data->enemy->entity].r);
+  const u32            next_tick = 75;
+  CommandFindPathData* path_data = (CommandFindPathData*)data;
+  Enemy*               enemy     = &enemies[path_data->enemy_idx];
+  enemy->path.path_count         = 0;
+  find_path(&enemy->path, game_state.entities[game_state.player.entity].position, game_state.entities[enemy->entity].position, game_state.entities[enemy->entity].r);
   path_data->tick += next_tick;
   add_command(CMD_FIND_PATH, (void*)path_data, path_data->tick);
 }
@@ -1333,7 +1445,7 @@ void run_commands(u32 ticks)
       }
       case CMD_SPAWN_ENEMY:
       {
-        run_command_spawn_enemy(node->command.data);
+        run_command_spawn_enemy(node->command.data, ticks);
         break;
       }
       case CMD_LET_RANGED_MOVE_AFTER_SHOOTING:
@@ -1350,6 +1462,10 @@ void run_commands(u32 ticks)
       {
         run_command_stop_charge();
         break;
+      }
+      case CMD_UPDATE_WAVE:
+      {
+        run_command_update_wave(node->command.data, node->command.execute_tick);
       }
       }
 
@@ -1984,7 +2100,7 @@ bool player_is_visible(f32& angle, Vector2 position)
   return true;
 }
 
-void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
+void update_enemies(u32 tick_difference, u32 tick)
 {
 
   Sphere player_sphere;
@@ -1995,13 +2111,11 @@ void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
   // check if we spawn
 
   Vector2 player_position = game_state.entities[game_state.player.entity].position;
-  u32     spawn_count     = __builtin_popcountll(wave->spawn_count);
-  assert(spawn_count <= wave->enemy_count && "More spawning then enemies?");
-  for (u32 i = 0; i < spawn_count; i++)
+  for (u32 i = 0; i < enemy_count; i++)
   {
-    Enemy*  enemy  = &wave->enemies[i];
+    Enemy*  enemy  = &enemies[i];
     Entity* entity = &game_state.entities[enemy->entity];
-    if (entity->visible)
+    if (entity->visible && entity->hp > 0)
     {
       if (enemy->can_move)
       {
@@ -2082,14 +2196,13 @@ void update_enemies(Wave* wave, u32 tick_difference, u32 tick)
   }
 }
 
-void handle_collision(Entity* e1, Entity* e2, Wave* wave)
+void handle_collision(Entity* e1, Entity* e2)
 {
   if ((e1->type == ENTITY_ENEMY && e2->type == ENTITY_PLAYER_PROJECTILE) || (e1->type == ENTITY_PLAYER_PROJECTILE && e2->type == ENTITY_ENEMY))
   {
     game_state.score += 100;
     e1->hp = 0;
     e2->hp = 0;
-    wave->enemies_alive -= 1;
   }
   // ToDo physics sim?
   if (e1->type == ENTITY_ENEMY && e2->type == ENTITY_ENEMY)
@@ -2124,7 +2237,7 @@ void handle_collision(Entity* e1, Entity* e2, Wave* wave)
   }
 }
 
-void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_difference)
+void update_entities(Entity* entities, u32 entity_count, u32 tick_difference)
 {
 
   for (u32 i = 0; i < entity_count; i++)
@@ -2191,7 +2304,7 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
       e2_sphere.position = e2->position;
       if (sphere_sphere_collision(e1_sphere, e2_sphere))
       {
-        handle_collision(e1, e2, wave);
+        handle_collision(e1, e2);
         if (e1->visible == false)
         {
           break;
@@ -2199,32 +2312,6 @@ void update_entities(Entity* entities, u32 entity_count, Wave* wave, u32 tick_di
       }
     }
   }
-}
-
-struct EnemyData
-{
-  EnemyType   type;
-  u32         hp;
-  f32         ms;
-  f32         radius;
-  u32         cooldown;
-  const char* render_data_name;
-};
-
-EnemyData* enemy_data;
-u32        enemy_data_count;
-
-EnemyData  get_enemy_data_from_type(EnemyType type)
-{
-  for (u32 i = 0; i < enemy_data_count; i++)
-  {
-    if (enemy_data[i].type == type)
-    {
-      return enemy_data[i];
-    }
-  }
-  logger.error("Couldn't find enemy with this type! %d", type);
-  assert(!"Couldn't find enemy with this type!");
 }
 
 bool load_enemies_from_file(const char* filename)
@@ -2322,9 +2409,9 @@ bool load_wave_from_file(Wave* wave, const char* filename)
     enemy->path.path            = sta_allocate_struct(u16, tile_count * tile_count);
 
     CommandSpawnEnemyData* data = sta_allocate_struct(CommandSpawnEnemyData, 1);
-    data->enemy_index           = i;
-    data->wave                  = wave;
-    add_command(CMD_SPAWN_ENEMY, (void*)data, wave->spawn_times[i]);
+    // data->enemy_index           = i;
+    // data->wave                  = wave;
+    // add_command(CMD_SPAWN_ENEMY, (void*)data, wave->spawn_times[i]);
   }
   logger.info("Read wave from '%s', got %d enemies", filename, wave->enemy_count);
 
@@ -2575,24 +2662,17 @@ void init_player(Hero* player)
   logger.info("Inited player %d", rd.texture);
 }
 
-void render_console(Hero* player, InputState* input_state, char* console_buf, u32 console_buf_size, Wave* wave, u32& game_running_ticks)
+void render_console(Hero* player, InputState* input_state, char* console_buf, u32 console_buf_size, u32& game_running_ticks)
 {
 
   if (input_state->is_key_released(ASCII_RETURN))
   {
     logger.info("Released buffer: %s", console_buf);
-    if (compare_strings("restart", console_buf))
+    if (compare_strings("stop", console_buf))
     {
-      logger.info("Restarting wave");
-      wave->enemies_alive = 0;
-      u32 spawn_count     = __builtin_popcountll(wave->spawn_count);
-      for (u32 i = 0; i < spawn_count; i++)
-      {
-        Entity* e = &game_state.entities[wave->enemies[i].entity];
-        e->hp     = 0;
-      }
-      wave->spawn_count                      = 0;
+      logger.info("Stopping wave");
       game_running_ticks                     = 0;
+      game_state.no_spawn                    = true;
       game_state.entities[player->entity].hp = 3;
       game_state.score                       = 0;
     }
@@ -2660,15 +2740,15 @@ void update_effects(u32 ticks)
   }
 }
 
-void update(Wave* wave, Camera& camera, InputState* input_state, u32 game_running_ticks, u32 tick_difference)
+void update(Camera& camera, InputState* input_state, u32 game_running_ticks, u32 tick_difference)
 {
 
   handle_abilities(camera, input_state, game_running_ticks);
   handle_player_movement(camera, input_state, game_running_ticks);
   run_commands(game_running_ticks);
-  update_entities(game_state.entities, game_state.entity_count, wave, tick_difference);
+  update_entities(game_state.entities, game_state.entity_count, tick_difference);
   update_effects(game_running_ticks);
-  update_enemies(wave, tick_difference, game_running_ticks);
+  update_enemies(tick_difference, game_running_ticks);
 
   update_animations(game_running_ticks);
 }
@@ -3077,6 +3157,7 @@ void test_cubemap(InputState input_state)
 int main()
 {
 
+  game_state.no_spawn                   = false;
   game_state.camera                     = Camera(Vector3(0, 0, 0), 0, -3);
   game_state.animation_controller_count = 0;
 
@@ -3110,12 +3191,12 @@ int main()
   Vector3 point_light_position;
   init_player(&game_state.player);
 
-  Wave wave = {};
-  if (!load_wave_from_file(&wave, "./data/waves/wave01.txt"))
-  {
-    logger.error("Failed to parse wave!");
-    return 1;
-  }
+  // Wave wave = {};
+  // if (!load_wave_from_file(&wave, "./data/waves/wave01.txt"))
+  // {
+  //   logger.error("Failed to parse wave!");
+  //   return 1;
+  // }
 
   u32      ticks        = 0;
   u32      render_ticks = 0, update_ticks = 0, build_ui_ticks = 0, ms = 0, game_running_ticks = 0, clear_tick = 0, render_ui_tick = 0;
@@ -3168,6 +3249,13 @@ int main()
 
   // Figure out where you want to place both lights, one directional and one point light
   Vector3 directional_light(-0.5, 0, -0.5);
+
+  enemy_capacity                      = 16;
+  enemies                             = sta_allocate_struct(Enemy, enemy_capacity);
+  enemy_count                         = 0;
+  CommandUpdateWave* update_wave_data = sta_allocate_struct(CommandUpdateWave, 1);
+  update_wave_data->number_of_enemies = 4;
+  add_command(CMD_UPDATE_WAVE, (void*)update_wave_data, 0);
 
   while (true)
   {
@@ -3228,14 +3316,7 @@ int main()
         assert(SDL_GetTicks() - ticks > 0 && "How is this possible?");
         game_running_ticks += SDL_GetTicks() - ticks;
 
-        update(&wave, game_state.camera, &input_state, game_running_ticks, tick_difference);
-
-        if (handle_wave_over(&wave))
-        {
-          // ToDo this should get you back to main menu or game over screen or smth
-          // logger.info("Wave is over!");
-          // return 0;
-        }
+        update(game_state.camera, &input_state, game_running_ticks, tick_difference);
 
         update_ticks          = SDL_GetTicks() - start_tick;
         prior_render_ticks    = SDL_GetTicks();
@@ -3275,7 +3356,7 @@ int main()
 
       if (console)
       {
-        render_console(&game_state.player, &input_state, console_buf, ArrayCount(console_buf), &wave, game_running_ticks);
+        render_console(&game_state.player, &input_state, console_buf, ArrayCount(console_buf), game_running_ticks);
       }
 
       render_ui_frame();
