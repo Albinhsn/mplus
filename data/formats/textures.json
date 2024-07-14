@@ -2,14 +2,26 @@
   "mutant_diffuse_texture": {
     "location": "./data/textures/mutant_diffuse.tga"
   },
+  "mutant_normal_texture": {
+    "location": "./data/textures/mutant_normal.tga"
+  },
   "mage_diffuse_texture": {
     "location": "./data/textures/mage_diffuse.tga"
+  },
+  "mage_normal_texture": {
+    "location": "./data/textures/mage_normal.tga"
   },
   "enemy_ranged_diffuse_texture": {
     "location": "./data/textures/enemy_ranged_diffuse.tga"
   },
+  "enemy_ranged_normal_texture": {
+    "location": "./data/textures/enemy_ranged_normal.tga"
+  },
   "enemy_melee_diffuse_texture": {
     "location": "./data/textures/enemy_melee_diffuse.tga"
+  },
+  "enemy_melee_normal_texture": {
+    "location": "./data/textures/enemy_melee_normal.tga"
   },
   "blizzard_texture": {
     "location": "./data/textures/blizzard.tga"

@@ -26,6 +26,7 @@ public:
   char*                name;
   AnimationController* animation_controller;
   u32                  texture;
+  i32                  normal_map;
   u32                  shader;
   f32                  scale;
   f32                  rotation_x;
@@ -86,6 +87,7 @@ struct RenderQueueItemAnimated
   Mat44* transforms;
   u32    joint_count;
   u32 texture;
+    i32 normal_map;
 };
 struct RenderQueueItemStatic
 {
@@ -107,7 +109,7 @@ public:
 
   Mat44                    light_space_matrix;
 
-  void                     push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms, u32 joint_count, u32 texture);
+  void                     push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms, u32 joint_count, u32 texture, u32 normal_map);
   void                     push_render_item_static(u32 buffer, Mat44 m, u32 texture);
   void                     render_to_depth_texture_directional(Vector3 light_direction);
   void                     render_to_depth_texture_cube(Vector3 light_position, u32 buffer);

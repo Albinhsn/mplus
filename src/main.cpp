@@ -2353,9 +2353,11 @@ bool load_entity_render_data_from_file(const char* file_location)
     JsonObject* render_data_obj = head->values[i].obj;
     if (render_data_obj->lookup_value("animation"))
     {
-      Model* model = get_model_by_name(render_data_obj->lookup_value("animation")->string);
+      Model*      model      = get_model_by_name(render_data_obj->lookup_value("animation")->string);
+      const char* normal_map = render_data_obj->lookup_value("normal_map")->string;
       assert(model->animation_data && "No animation data for the model!");
       data->animation_controller = animation_controller_create(model->animation_data);
+      data->normal_map           = game_state.renderer.get_texture(normal_map);
     }
     else
     {
@@ -2947,7 +2949,7 @@ void push_render_items(u32 map_buffer, u32 ticks, u32 map_texture)
       if (render_data->animation_controller)
       {
         renderer->push_render_item_animated(render_data->buffer_id, m, render_data->animation_controller->transforms, render_data->animation_controller->animation_data->skeleton.joint_count,
-                                            render_data->texture);
+                                            render_data->texture, render_data->normal_map);
       }
       else
       {
@@ -3232,7 +3234,6 @@ int main()
 
         update_ticks          = SDL_GetTicks() - start_tick;
         prior_render_ticks    = SDL_GetTicks();
-
 
         Vector3 view_position = Vector3(-game_state.camera.translation.x, -game_state.camera.translation.y, -game_state.camera.z);
         push_render_items(map_buffer, game_running_ticks, map_texture);

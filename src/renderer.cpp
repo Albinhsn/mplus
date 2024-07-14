@@ -17,7 +17,7 @@ void Renderer::push_render_item_static(u32 buffer, Mat44 m, u32 texture)
   RESIZE_ARRAY(this->render_queue_static_buffers, RenderQueueItemStatic, this->render_queue_static_count, this->render_queue_static_capacity);
   this->render_queue_static_buffers[this->render_queue_static_count++] = item;
 }
-void Renderer::push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms, u32 joint_count, u32 texture)
+void Renderer::push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms, u32 joint_count, u32 texture, u32 normal_map)
 {
   RenderQueueItemAnimated item;
   item.m           = m;
@@ -25,6 +25,7 @@ void Renderer::push_render_item_animated(u32 buffer, Mat44 m, Mat44* transforms,
   item.transforms  = transforms;
   item.joint_count = joint_count;
   item.texture     = texture;
+  item.normal_map  = normal_map;
   RESIZE_ARRAY(this->render_queue_animated_buffers, RenderQueueItemAnimated, this->render_queue_animated_count, this->render_queue_animated_capacity);
   this->render_queue_animated_buffers[this->render_queue_animated_count++] = item;
 }
@@ -33,7 +34,7 @@ void Renderer::render_to_depth_texture_cube(Vector3 light_position, u32 buffer)
 {
 
   Mat44 perspective = Mat44::identity();
-  float far_plane = 25.0f;
+  float far_plane   = 25.0f;
   perspective.perspective(90.0f, 1, 0.1f, far_plane);
 
   static Mat44 shadow_transforms[6];
@@ -149,8 +150,6 @@ void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection
   shader = this->get_shader_by_index(this->get_shader_by_name("animation"));
   shader->use();
   this->bind_texture(*shader, "shadow_map", this->depth_texture);
-  // this->bind_cube_texture(*shader, "shadow_map_cube", cube_texture);
-  // shader->set_float("far_plane", 25.0f);
   shader->set_vec3("ambient_lighting", ambient_lighting);
   shader->set_mat4("view", view);
   shader->set_vec3("viewPos", view_position);
@@ -161,6 +160,7 @@ void Renderer::render_queues(Mat44 view, Vector3 view_position, Mat44 projection
   {
     RenderQueueItemAnimated item = this->render_queue_animated_buffers[i];
     this->bind_texture(*shader, "texture1", item.texture);
+    this->bind_texture(*shader, "normal_map", item.normal_map);
     shader->set_mat4("model", item.m);
     shader->set_mat4("jointTransforms", item.transforms, item.joint_count);
     this->render_buffer(item.buffer);

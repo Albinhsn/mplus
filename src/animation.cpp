@@ -77,7 +77,7 @@ void update_animation(Skeleton* skeleton, Animation* animation, Mat44* transform
 
     Mat44  current_local    = current_poses[i];
     Mat44  parent_transform = {};
-    parent_transform = Mat44::identity();
+    parent_transform        = Mat44::identity();
     if (joint->m_iParent != -1)
     {
       parent_transform = parent_transforms[joint->m_iParent];
@@ -110,6 +110,35 @@ static u8 get_joint_index_from_id(Skeleton* skeleton, char* name, u64 length)
     }
   }
   assert(0 && "Couldn't find joint by this name?");
+}
+
+void calculate_tangent_bitangent(SkinnedVertex* v1, SkinnedVertex* v2, SkinnedVertex* v3)
+{
+
+  Vector3 t;
+  Vector3 bt;
+
+  Vector3 e1    = v2->position.sub(v1->position);
+  Vector3 e2    = v3->position.sub(v1->position);
+  Vector2 uv1   = v2->uv.sub(v1->uv);
+  Vector2 uv2   = v2->uv.sub(v1->uv);
+
+  float   f     = 1.0f / (uv1.x * uv2.x - uv2.x * uv1.y);
+
+  t.x           = f * (uv2.y * e1.x - uv1.y * e2.x);
+  t.y           = f * (uv2.y * e1.y - uv1.y * e2.y);
+  t.z           = f * (uv2.y * e1.z - uv1.y * e2.z);
+
+  bt.x          = f * (-uv2.x * e1.x - uv1.x * e2.x);
+  bt.y          = f * (-uv2.x * e1.y - uv1.x * e2.y);
+  bt.z          = f * (-uv2.x * e1.z - uv1.x * e2.z);
+
+  v1->tangent   = t;
+  v1->bitangent = bt;
+  v2->tangent   = t;
+  v2->bitangent = bt;
+  v3->tangent   = t;
+  v3->bitangent = bt;
 }
 
 bool parse_animation_file(AnimationModel* model, const char* filename, const char* animation_mapping_location)
@@ -203,6 +232,7 @@ bool parse_animation_file(AnimationModel* model, const char* filename, const cha
       vertex->joint_weight[i] = buffer.parse_float();
       buffer.skip_whitespace();
     }
+
   }
 
   // index count
@@ -214,6 +244,11 @@ bool parse_animation_file(AnimationModel* model, const char* filename, const cha
   {
     model->indices[i] = buffer.parse_int();
     buffer.skip_whitespace();
+  }
+
+  for (u32 i = 0; i < model->index_count; i += 3)
+  {
+    calculate_tangent_bitangent(&model->vertices[model->indices[i + 0]], &model->vertices[model->indices[i + 1]], &model->vertices[model->indices[i + 2]]);
   }
 
   // animation count

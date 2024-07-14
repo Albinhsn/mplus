@@ -2,6 +2,7 @@
   "enemy_melee": {
     "animation": "model_enemy_melee",
     "texture": "enemy_melee_diffuse_texture",
+    "normal_map": "enemy_melee_normal_texture",
     "shader": "animation",
     "scale": 0.001,
     "rotation_x": 90,
@@ -10,6 +11,7 @@
   "enemy_ranged": {
     "animation": "model_enemy_ranged",
     "texture": "enemy_ranged_diffuse_texture",
+    "normal_map": "enemy_ranged_normal_texture",
     "shader": "animation",
     "scale": 0.001,
     "rotation_x": 90,
@@ -24,6 +26,7 @@
   "player": {
     "animation": "mage",
     "texture": "mage_diffuse_texture",
+    "normal_map": "mage_normal_texture",
     "shader": "animation",
     "scale": 0.0015,
     "rotation_x": 90,

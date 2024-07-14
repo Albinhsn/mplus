@@ -35,6 +35,8 @@ struct SkinnedVertex
   Vector3 normal;
   float   joint_weight[4];
   u32     joint_index[4];
+  Vector3 tangent;
+  Vector3 bitangent;
   void    debug()
   {
     position.debug();

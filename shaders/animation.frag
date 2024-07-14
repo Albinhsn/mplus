@@ -3,18 +3,20 @@
 out vec4 FragColor;
 
 in vec2 TexCoord;
-in vec3 normal;
 in vec3 FragPos;
+in vec3 TangentLightPos;
+in vec3 TangentViewPos;
+in vec3 TangentFragPos;
 in vec4 FragPosLightSpace;
-in vec4 color;
 
+uniform sampler2D normal_map;
 uniform sampler2D shadow_map;
 uniform sampler2D texture1;
 uniform vec3      light_position;
-uniform vec3      ambient_lighting;
 uniform vec3      viewPos;
+uniform vec3      ambient_lighting;
 
-float shadow_calc(vec4 pos){
+float shadow_calc(vec4 pos, vec3 normal){
   vec3 proj_coords = pos.xyz / pos.w;
 
   proj_coords = proj_coords * 0.5 + 0.5;
@@ -32,18 +34,22 @@ float shadow_calc(vec4 pos){
 void main()
 {
 
-  vec3 norm     = normalize(normal);
-  vec3 lightDir = normalize(light_position - FragPos);
+  vec3 norm     = texture(normal_map, TexCoord).rgb;
+
+  norm = normalize(norm * 2.0 - 1.0);
+
+
+  vec3 lightDir = normalize(TangentLightPos - TangentFragPos);
   float diff    = max(dot(norm, lightDir), 0.0);
   vec3 diffuse  = vec3(diff, diff, diff);
 
   float specularStrength = 0.5;
-  vec3 viewDir = normalize(viewPos - FragPos);
+  vec3 viewDir = normalize(TangentViewPos - TangentFragPos);
   vec3 reflectDir = reflect(-lightDir, norm);
   float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
   vec3 specular = specularStrength * spec * vec3(1.0, 1.0, 1.0);
 
-  float shadow = shadow_calc(FragPosLightSpace);
+  float shadow = shadow_calc(FragPosLightSpace, norm);
 
   vec3 c = (ambient_lighting + (1.0 - shadow) * (diffuse + specular));
   FragColor = vec4(c, 1.0) * texture(texture1, TexCoord);
